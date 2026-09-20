@@ -85,7 +85,7 @@ export class GameEngine {
   private character = createCharacter()
   private world = createWorld()
   private inputs = new Set<GameInput>()
-  private yaw = 3.03
+  private yaw = 3.42
   private pitch = 0.08
   private draggingCamera = false
   private verticalVelocity = 0

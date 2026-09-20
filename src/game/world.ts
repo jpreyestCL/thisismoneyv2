@@ -516,7 +516,7 @@ export function createWorld(): WorldData {
 
   const carColors = ['#e44c35', '#e6bd42', '#2a72a5', '#e8e7df', '#262b31']
   const carPositions: [number, number, number, number][] = [
-    [242, 6, 235, 0],
+    [233, 6, 235, 0],
     [-98, 6, -18, Math.PI / 2],
     [178, 6, -95, 0],
     [-178, 6, 180, Math.PI / 2],
