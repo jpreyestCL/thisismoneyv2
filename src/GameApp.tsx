@@ -21,6 +21,10 @@ function ControlButton({ input, label, onInput }: {
       onPointerUp={() => onInput(input, false)}
       onPointerCancel={() => onInput(input, false)}
       onPointerLeave={() => onInput(input, false)}
+      onClick={() => {
+        onInput(input, true)
+        window.setTimeout(() => onInput(input, false), input === 'jump' ? 80 : 240)
+      }}
       aria-label={label}
     >{label}</button>
   )

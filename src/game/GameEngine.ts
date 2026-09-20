@@ -104,6 +104,7 @@ export class GameEngine {
   private yaw = 3.42
   private pitch = 0.08
   private draggingCamera = false
+  private lastPointer = new THREE.Vector2()
   private verticalVelocity = 0
   private grounded = true
   private activeCar: THREE.Group | null = null
@@ -148,7 +149,7 @@ export class GameEngine {
     canvas.addEventListener('dblclick', this.requestPointerLock)
     canvas.addEventListener('pointerdown', this.startCameraDrag)
     window.addEventListener('pointerup', this.stopCameraDrag)
-    document.addEventListener('mousemove', this.handleMouseMove)
+    window.addEventListener('pointermove', this.handlePointerMove)
     this.resizeObserver = new ResizeObserver(this.resize)
     this.resizeObserver.observe(canvas)
     this.timer.connect(document)
@@ -209,19 +210,24 @@ export class GameEngine {
     if (document.pointerLockElement !== this.canvas) this.canvas.requestPointerLock().catch(() => undefined)
   }
 
-  private startCameraDrag = () => {
+  private startCameraDrag = (event: PointerEvent) => {
     this.canvas.focus({ preventScroll: true })
     this.draggingCamera = true
+    this.lastPointer.set(event.clientX, event.clientY)
+    this.canvas.setPointerCapture?.(event.pointerId)
   }
 
   private stopCameraDrag = () => {
     this.draggingCamera = false
   }
 
-  private handleMouseMove = (event: MouseEvent) => {
+  private handlePointerMove = (event: PointerEvent) => {
     if (document.pointerLockElement !== this.canvas && !this.draggingCamera) return
-    this.yaw -= event.movementX * 0.0024
-    this.pitch = THREE.MathUtils.clamp(this.pitch + event.movementY * 0.0018, -0.12, 0.82)
+    const deltaX = document.pointerLockElement === this.canvas ? event.movementX : event.clientX - this.lastPointer.x
+    const deltaY = document.pointerLockElement === this.canvas ? event.movementY : event.clientY - this.lastPointer.y
+    this.lastPointer.set(event.clientX, event.clientY)
+    this.yaw -= deltaX * 0.004
+    this.pitch = THREE.MathUtils.clamp(this.pitch + deltaY * 0.003, -0.12, 0.82)
   }
 
   private resize = () => {
@@ -446,7 +452,7 @@ export class GameEngine {
     this.canvas.removeEventListener('dblclick', this.requestPointerLock)
     this.canvas.removeEventListener('pointerdown', this.startCameraDrag)
     window.removeEventListener('pointerup', this.stopCameraDrag)
-    document.removeEventListener('mousemove', this.handleMouseMove)
+    window.removeEventListener('pointermove', this.handlePointerMove)
     this.resizeObserver.disconnect()
     this.timer.dispose()
     this.renderer.dispose()
