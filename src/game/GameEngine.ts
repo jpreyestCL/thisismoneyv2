@@ -341,7 +341,7 @@ export class GameEngine {
     const strafeInput = (this.inputs.has('right') ? 1 : 0) - (this.inputs.has('left') ? 1 : 0)
     const moving = forwardInput !== 0 || strafeInput !== 0
     const sprinting = moving && this.inputs.has('sprint') && this.stamina > 3
-    const speed = sprinting ? 20 : 11
+    const speed = sprinting ? 24 : 14
     if (sprinting) this.stamina = Math.max(0, this.stamina - delta * 22)
     else this.stamina = Math.min(100, this.stamina + delta * 13)
 
@@ -483,7 +483,7 @@ export class GameEngine {
 
   private animate = (timestamp?: number) => {
     this.timer.update(timestamp)
-    const delta = Math.min(this.timer.getDelta(), 0.05)
+    const delta = Math.min(this.timer.getDelta(), 0.1)
     this.elapsed += delta
     if (!this.paused) {
       this.updateCharacter(delta)
