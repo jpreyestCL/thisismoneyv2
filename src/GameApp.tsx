@@ -99,7 +99,13 @@ export default function GameApp() {
 
   return (
     <main className="game-shell">
-      <canvas ref={canvasRef} className="game-canvas" aria-label="Mundo abierto 3D de Nueva Esperanza" />
+      <canvas
+        ref={canvasRef}
+        className="game-canvas"
+        aria-label="Mundo abierto 3D de Nueva Esperanza"
+        tabIndex={0}
+        title="Haz clic para activar los controles; arrastra para girar la cámara"
+      />
       <div className="top-hud">
         <div className="game-brand"><span>THIS IS</span><strong>MONEY</strong></div>
         <div className="location-chip"><Compass size={15} /><span>{snapshot.district}</span></div>
@@ -135,7 +141,7 @@ export default function GameApp() {
       </div>
       <div className="desktop-help">
         <span><kbd>WASD</kbd> Moverse</span><span><kbd>SHIFT</kbd> Correr / turbo</span>
-        <span><kbd>F</kbd> Vehículo</span><span><kbd>E</kbd> Interactuar</span>
+        <span><kbd>CLIC + ARRASTRAR</kbd> Cámara</span><span><kbd>F</kbd> Vehículo</span><span><kbd>E</kbd> Interactuar</span>
       </div>
       <div className="touch-controls">
         <div className="touch-pad">

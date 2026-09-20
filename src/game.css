@@ -78,7 +78,16 @@ button { font: inherit; }
 .minimap > span { position: absolute; top: 5px; left: 74px; font: 800 9px Inter; text-shadow: 0 1px 2px black; }
 .desktop-help { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; color: rgba(255,255,255,.66); font-size: 8px; }
 kbd { border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.45); padding: 3px 5px; color: white; font: 700 8px Inter; }
-.touch-controls { display: none; }
+.touch-controls { position: absolute; inset: auto 0 83px; display: flex; justify-content: space-between; padding: 0 25px; pointer-events: none; opacity: .72; transition: opacity .2s; }
+.touch-controls:hover { opacity: 1; }
+.touch-controls button { pointer-events: auto; touch-action: none; border: 1px solid rgba(255,255,255,.3); color: white; background: rgba(5,14,10,.58); backdrop-filter: blur(5px); cursor: pointer; }
+.touch-pad { width: 105px; height: 105px; position: relative; }
+.touch-key { position: absolute; width: 36px; height: 36px; border-radius: 7px; }
+.touch-forward { left: 35px; top: 0; }.touch-left { left: 0; top: 35px; }
+.touch-backward { left: 35px; top: 70px; }.touch-right { right: 0; top: 35px; }
+.touch-actions { display: flex; align-items: flex-end; gap: 8px; margin-right: 180px; }
+.touch-actions button { position: static; width: 52px; height: 52px; border-radius: 50%; font-size: 7px; display: flex; flex-direction: column; gap: 3px; align-items: center; justify-content: center; }
+.touch-actions .touch-jump { width: 58px; height: 58px; }
 .error-screen { display: grid; place-content: center; justify-items: center; gap: 15px; padding: 30px; text-align: center; color: white; background: #102219; font-family: Inter; }
 .error-screen h1 { font: 700 38px 'Barlow Condensed'; margin: 0; }
 .error-screen p { max-width: 490px; color: #aebbb3; }
@@ -106,7 +115,7 @@ kbd { border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.45); padd
   .touch-key { position: absolute; width: 43px; height: 43px; border-radius: 8px; }
   .touch-forward { left: 42px; top: 0; }.touch-left { left: 0; top: 42px; }
   .touch-backward { left: 42px; top: 84px; }.touch-right { right: 0; top: 42px; }
-  .touch-actions { display: flex; align-items: flex-end; gap: 9px; }
+  .touch-actions { display: flex; align-items: flex-end; gap: 9px; margin-right: 0; }
   .touch-actions button { position: static; width: 62px; height: 62px; border-radius: 50%; font-size: 8px; display: flex; flex-direction: column; gap: 3px; align-items: center; justify-content: center; }
   .touch-actions .touch-jump { width: 70px; height: 70px; }
 }

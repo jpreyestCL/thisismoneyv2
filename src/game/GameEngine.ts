@@ -145,7 +145,7 @@ export class GameEngine {
 
     window.addEventListener('keydown', this.handleKeyDown)
     window.addEventListener('keyup', this.handleKeyUp)
-    canvas.addEventListener('click', this.requestPointerLock)
+    canvas.addEventListener('dblclick', this.requestPointerLock)
     canvas.addEventListener('pointerdown', this.startCameraDrag)
     window.addEventListener('pointerup', this.stopCameraDrag)
     document.addEventListener('mousemove', this.handleMouseMove)
@@ -210,6 +210,7 @@ export class GameEngine {
   }
 
   private startCameraDrag = () => {
+    this.canvas.focus({ preventScroll: true })
     this.draggingCamera = true
   }
 
@@ -280,21 +281,23 @@ export class GameEngine {
 
   private updateCharacter(delta: number) {
     if (this.activeCar) return
-    const moving = this.inputs.has('forward') || this.inputs.has('backward')
+    const forwardInput = (this.inputs.has('forward') ? 1 : 0) - (this.inputs.has('backward') ? 0.68 : 0)
+    const strafeInput = (this.inputs.has('right') ? 1 : 0) - (this.inputs.has('left') ? 1 : 0)
+    const moving = forwardInput !== 0 || strafeInput !== 0
     const sprinting = moving && this.inputs.has('sprint') && this.stamina > 3
     const speed = sprinting ? 20 : 11
     if (sprinting) this.stamina = Math.max(0, this.stamina - delta * 22)
     else this.stamina = Math.min(100, this.stamina + delta * 13)
 
-    if (this.inputs.has('left')) this.yaw += delta * 1.8
-    if (this.inputs.has('right')) this.yaw -= delta * 1.8
-    let direction = 0
-    if (this.inputs.has('forward')) direction += 1
-    if (this.inputs.has('backward')) direction -= 0.65
-    if (direction) {
-      this.character.rotation.y = this.yaw
-      this.character.position.x += Math.sin(this.yaw) * speed * direction * delta
-      this.character.position.z += Math.cos(this.yaw) * speed * direction * delta
+    if (moving) {
+      const movement = new THREE.Vector2(
+        Math.sin(this.yaw) * forwardInput + Math.cos(this.yaw) * strafeInput,
+        Math.cos(this.yaw) * forwardInput - Math.sin(this.yaw) * strafeInput,
+      )
+      if (movement.lengthSq() > 1) movement.normalize()
+      this.character.rotation.y = Math.atan2(movement.x, movement.y)
+      this.character.position.x += movement.x * speed * delta
+      this.character.position.z += movement.y * speed * delta
     }
 
     if (this.inputs.has('jump') && this.grounded) {
@@ -440,7 +443,7 @@ export class GameEngine {
     cancelAnimationFrame(this.animationFrame)
     window.removeEventListener('keydown', this.handleKeyDown)
     window.removeEventListener('keyup', this.handleKeyUp)
-    this.canvas.removeEventListener('click', this.requestPointerLock)
+    this.canvas.removeEventListener('dblclick', this.requestPointerLock)
     this.canvas.removeEventListener('pointerdown', this.startCameraDrag)
     window.removeEventListener('pointerup', this.stopCameraDrag)
     document.removeEventListener('mousemove', this.handleMouseMove)
