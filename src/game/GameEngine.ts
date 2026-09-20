@@ -85,7 +85,7 @@ export class GameEngine {
   private character = createCharacter()
   private world = createWorld()
   private inputs = new Set<GameInput>()
-  private yaw = Math.PI
+  private yaw = 3.03
   private pitch = 0.08
   private draggingCamera = false
   private verticalVelocity = 0
@@ -123,7 +123,7 @@ export class GameEngine {
     this.scene.background = new THREE.Color('#7ec4df')
     this.scene.fog = new THREE.FogExp2('#9bc4c7', 0.00115)
     this.scene.add(this.hemi, this.sun, this.world.group, this.character)
-    this.character.position.set(28, terrainHeight(28, 58), 58)
+    this.character.position.set(240, terrainHeight(240, 260), 260)
     this.configureLights()
     this.createMissionMarker()
 
