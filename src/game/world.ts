@@ -102,7 +102,8 @@ function terrainColor(height: number, x: number, z: number) {
 const shadow = (object: THREE.Object3D, cast = true, receive = true) => {
   object.traverse((child) => {
     if (child instanceof THREE.Mesh) {
-      child.castShadow = cast
+      const material = Array.isArray(child.material) ? child.material[0] : child.material
+      child.castShadow = cast && !(material instanceof THREE.MeshStandardMaterial && material.emissiveIntensity > 0)
       child.receiveShadow = receive
     }
   })
@@ -221,23 +222,44 @@ function createBuilding(x: number, z: number, index: number) {
   group.add(body)
 
   const warmWindows = index % 4 === 0
-  const glassMaterial = new THREE.MeshStandardMaterial({
-    color: warmWindows ? '#ffd58a' : '#8fc9d5',
-    emissive: warmWindows ? '#b25a19' : '#174557',
-    emissiveIntensity: 1.25,
-    roughness: 0.25,
-    metalness: 0.32,
-  })
+  const windowCanvas = document.createElement('canvas')
+  windowCanvas.width = 96
+  windowCanvas.height = 256
+  const context = windowCanvas.getContext('2d')
+  context?.clearRect(0, 0, windowCanvas.width, windowCanvas.height)
   const floors = Math.max(2, Math.floor(height / 9))
   for (let floor = 0; floor < floors; floor++) {
-    for (const side of [-1, 1]) {
-      const windowRow = box([width * 0.64, 2.7, 0.25], '#8ab5bc', [0, 6 + floor * 8, side * (depth / 2 + 0.14)])
-      windowRow.material = glassMaterial
-      group.add(windowRow)
-      const sideWindowRow = box([0.25, 2.7, depth * 0.57], '#8ab5bc', [side * (width / 2 + 0.14), 6 + floor * 8, 0])
-      sideWindowRow.material = glassMaterial
-      group.add(sideWindowRow)
+    for (let column = 0; column < 4; column++) {
+      const lit = seeded(index * 31 + floor, column + 240) > 0.27
+      if (context) {
+        context.fillStyle = lit ? (warmWindows ? '#ffd47a' : '#83d4e5') : '#19313b'
+        context.fillRect(7 + column * 23, 238 - floor * (220 / floors), 15, Math.max(5, 120 / floors))
+      }
     }
+  }
+  const windowTexture = new THREE.CanvasTexture(windowCanvas)
+  windowTexture.colorSpace = THREE.SRGBColorSpace
+  const glassMaterial = new THREE.MeshStandardMaterial({
+    color: '#ffffff',
+    map: windowTexture,
+    emissive: warmWindows ? '#c66f25' : '#27738a',
+    emissiveMap: windowTexture,
+    emissiveIntensity: 1.1,
+    roughness: 0.25,
+    metalness: 0.32,
+    transparent: true,
+    alphaTest: 0.12,
+  })
+  const panelHeight = Math.max(10, height - 9)
+  for (const side of [-1, 1]) {
+    const front = new THREE.Mesh(new THREE.PlaneGeometry(width * 0.7, panelHeight), glassMaterial)
+    front.position.set(0, height / 2 + 1, side * (depth / 2 + 0.03))
+    front.rotation.y = side < 0 ? Math.PI : 0
+    group.add(front)
+    const sidePanel = new THREE.Mesh(new THREE.PlaneGeometry(depth * 0.66, panelHeight), glassMaterial)
+    sidePanel.position.set(side * (width / 2 + 0.03), height / 2 + 1, 0)
+    sidePanel.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2
+    group.add(sidePanel)
   }
   const entrance = box([width * 0.28, 4.8, 0.35], '#83c8d7', [0, 2.5, depth / 2 + 0.2])
   entrance.material = glassMaterial
