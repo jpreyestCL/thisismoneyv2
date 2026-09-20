@@ -3,6 +3,8 @@ import { Car, CircleDollarSign, Clock3, Compass, Crosshair, Gauge, MapPin, Menu,
 import './game.css'
 import { GameEngine, type GameInput, type GameSnapshot } from './game/GameEngine'
 
+const SESSION_KEY = 'this-is-money-active-session'
+
 const initialSnapshot: GameSnapshot = {
   speed: 0, district: 'Ciudad Nueva Esperanza', time: '08:00', health: 100,
   stamina: 100, money: 1250, inVehicle: false, nearbyAction: null,
@@ -33,10 +35,13 @@ function ControlButton({ input, label, onInput }: {
 export default function GameApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const engineRef = useRef<GameEngine | null>(null)
-  const [phase, setPhase] = useState<'menu' | 'loading' | 'playing' | 'error'>('menu')
+  const [phase, setPhase] = useState<'menu' | 'loading' | 'playing' | 'error'>(() =>
+    localStorage.getItem(SESSION_KEY) === 'true' ? 'playing' : 'menu',
+  )
   const [snapshot, setSnapshot] = useState(initialSnapshot)
   const [message, setMessage] = useState('')
   const [muted, setMuted] = useState(false)
+  const [paused, setPaused] = useState(false)
 
   useEffect(() => {
     if (phase !== 'playing' || !canvasRef.current) return
@@ -53,9 +58,21 @@ export default function GameApp() {
     }
   }, [phase])
 
+  useEffect(() => {
+    engineRef.current?.setPaused(paused)
+  }, [paused])
+
   const startGame = () => {
+    localStorage.setItem(SESSION_KEY, 'true')
     setPhase('loading')
     window.setTimeout(() => setPhase('playing'), 850)
+  }
+
+  const saveAndExit = () => {
+    engineRef.current?.saveGame()
+    localStorage.setItem(SESSION_KEY, 'false')
+    setPaused(false)
+    setPhase('menu')
   }
   const setInput = (input: GameInput, pressed: boolean) => engineRef.current?.setInput(input, pressed)
 
@@ -116,9 +133,20 @@ export default function GameApp() {
         <div className="hud-actions">
           <span><Clock3 size={16} /> {snapshot.time}</span>
           <button onClick={() => setMuted(!muted)} aria-label={muted ? 'Activar sonido' : 'Silenciar'}>{muted ? <VolumeX size={18} /> : <Volume2 size={18} />}</button>
-          <button aria-label="Menú"><Menu size={19} /></button>
+          <button aria-label="Pausar y abrir menú" onClick={() => setPaused(true)}><Menu size={19} /></button>
         </div>
       </div>
+      {paused && (
+        <div className="pause-backdrop" role="dialog" aria-modal="true" aria-label="Partida pausada">
+          <div className="pause-panel">
+            <span className="pause-eyebrow">PARTIDA PAUSADA</span>
+            <h2>Nueva Esperanza</h2>
+            <p>Tu ubicación y progreso se guardan automáticamente.</p>
+            <button className="continue-button" onClick={() => setPaused(false)}>Continuar partida</button>
+            <button className="exit-button" onClick={saveAndExit}>Guardar y salir</button>
+          </div>
+        </div>
+      )}
       <div className="mission-card">
         <div className="mission-icon"><MapPin size={19} /></div>
         <div>

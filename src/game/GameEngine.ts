@@ -16,6 +16,16 @@ export interface GameSnapshot {
 
 export type GameInput = 'forward' | 'backward' | 'left' | 'right' | 'sprint' | 'jump'
 
+interface SavedGame {
+  x: number
+  y: number
+  z: number
+  yaw: number
+  missionComplete: boolean
+}
+
+const SAVE_KEY = 'this-is-money-save-v1'
+
 const keys: Record<string, GameInput> = {
   KeyW: 'forward',
   ArrowUp: 'forward',
@@ -112,8 +122,10 @@ export class GameEngine {
   private animationFrame = 0
   private elapsed = 0
   private lastSnapshot = 0
+  private lastAutosave = 0
   private stamina = 100
   private missionComplete = false
+  private paused = false
   private missionMarker = new THREE.Group()
   private sun = new THREE.DirectionalLight('#fff1d2', 2.2)
   private hemi = new THREE.HemisphereLight('#9fd7ff', '#31532a', 1.35)
@@ -130,7 +142,7 @@ export class GameEngine {
     this.onSnapshot = onSnapshot
     this.onMessage = onMessage
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75))
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.2))
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -141,6 +153,7 @@ export class GameEngine {
     this.scene.fog = new THREE.FogExp2('#9bc4c7', 0.00115)
     this.scene.add(this.hemi, this.sun, this.world.group, this.character)
     this.character.position.set(240, terrainHeight(240, 260), 260)
+    this.restoreGame()
     this.configureLights()
     this.createMissionMarker()
 
@@ -160,7 +173,7 @@ export class GameEngine {
   private configureLights() {
     this.sun.position.set(-240, 420, 180)
     this.sun.castShadow = true
-    this.sun.shadow.mapSize.set(2048, 2048)
+    this.sun.shadow.mapSize.set(1024, 1024)
     this.sun.shadow.camera.left = -420
     this.sun.shadow.camera.right = 420
     this.sun.shadow.camera.top = 420
@@ -240,8 +253,46 @@ export class GameEngine {
   }
 
   setInput(input: GameInput, pressed: boolean) {
+    if (this.paused) return
     if (pressed) this.inputs.add(input)
     else this.inputs.delete(input)
+  }
+
+  setPaused(paused: boolean) {
+    this.paused = paused
+    this.inputs.clear()
+  }
+
+  private restoreGame() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SAVE_KEY) ?? '') as SavedGame
+      if (
+        Number.isFinite(saved.x) &&
+        Number.isFinite(saved.y) &&
+        Number.isFinite(saved.z) &&
+        Math.abs(saved.x) <= WORLD_SIZE / 2 &&
+        Math.abs(saved.z) <= WORLD_SIZE / 2
+      ) {
+        this.character.position.set(saved.x, saved.y, saved.z)
+        this.yaw = Number.isFinite(saved.yaw) ? saved.yaw : this.yaw
+        this.missionComplete = Boolean(saved.missionComplete)
+        this.missionMarker.visible = !this.missionComplete
+      }
+    } catch {
+      // A missing or invalid save starts a fresh game.
+    }
+  }
+
+  saveGame = () => {
+    const actor = this.activeCar ?? this.character
+    const save: SavedGame = {
+      x: actor.position.x,
+      y: Math.max(terrainHeight(actor.position.x, actor.position.z), actor.position.y),
+      z: actor.position.z,
+      yaw: this.yaw,
+      missionComplete: this.missionComplete,
+    }
+    localStorage.setItem(SAVE_KEY, JSON.stringify(save))
   }
 
   toggleVehicle = () => {
@@ -409,7 +460,7 @@ export class GameEngine {
   }
 
   private emitSnapshot() {
-    if (this.elapsed - this.lastSnapshot < 0.12) return
+    if (this.elapsed - this.lastSnapshot < 0.28) return
     this.lastSnapshot = this.elapsed
     const actor = this.activeCar ?? this.character
     const totalMinutes = Math.floor(((this.elapsed * 0.15 + 8) % 24) * 60)
@@ -435,17 +486,24 @@ export class GameEngine {
     this.timer.update(timestamp)
     const delta = Math.min(this.timer.getDelta(), 0.05)
     this.elapsed += delta
-    this.updateCharacter(delta)
-    this.updateVehicle(delta)
-    this.updateCamera(delta)
-    this.updateEnvironment()
-    this.updateMission()
-    this.emitSnapshot()
+    if (!this.paused) {
+      this.updateCharacter(delta)
+      this.updateVehicle(delta)
+      this.updateCamera(delta)
+      this.updateEnvironment()
+      this.updateMission()
+      this.emitSnapshot()
+      if (this.elapsed - this.lastAutosave > 2) {
+        this.lastAutosave = this.elapsed
+        this.saveGame()
+      }
+    }
     this.renderer.render(this.scene, this.camera)
     this.animationFrame = requestAnimationFrame(this.animate)
   }
 
   destroy() {
+    this.saveGame()
     cancelAnimationFrame(this.animationFrame)
     window.removeEventListener('keydown', this.handleKeyDown)
     window.removeEventListener('keyup', this.handleKeyUp)

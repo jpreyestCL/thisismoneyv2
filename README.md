@@ -13,6 +13,8 @@ Prototipo jugable de mundo abierto 3D ambientado en **Nueva Esperanza**, una ciu
 - Cinco vehículos conducibles con aceleración, frenado, dirección y turbo.
 - Ciclo dinámico de día y noche, iluminación, sombras, niebla atmosférica y agua.
 - Primera misión, lugares interactivos, HUD, minimapa, economía inicial y velocímetro.
+- Guardado automático local de posición y progreso; las recargas continúan la sesión activa.
+- Menú de pausa con salida explícita mediante **Guardar y salir**.
 - Controles adaptados para teclado/ratón y pantallas táctiles.
 - Pantallas de inicio, carga y error WebGL.
 

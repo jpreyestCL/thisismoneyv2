@@ -88,6 +88,14 @@ kbd { border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.45); padd
 .touch-actions { display: flex; align-items: flex-end; gap: 8px; margin-right: 180px; }
 .touch-actions button { position: static; width: 52px; height: 52px; border-radius: 50%; font-size: 7px; display: flex; flex-direction: column; gap: 3px; align-items: center; justify-content: center; }
 .touch-actions .touch-jump { width: 58px; height: 58px; }
+.pause-backdrop { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(3,9,6,.68); backdrop-filter: blur(9px); }
+.pause-panel { width: min(390px, calc(100vw - 36px)); padding: 34px; border: 1px solid rgba(255,255,255,.14); border-top: 3px solid #edc936; background: linear-gradient(145deg, rgba(11,27,19,.98), rgba(5,13,9,.98)); box-shadow: 0 24px 80px rgba(0,0,0,.52); text-align: center; }
+.pause-eyebrow { color: #edca3a; font-size: 9px; font-weight: 800; letter-spacing: .18em; }
+.pause-panel h2 { margin: 8px 0 6px; color: white; font: 800 36px 'Barlow Condensed'; text-transform: uppercase; }
+.pause-panel p { margin: 0 0 24px; color: rgba(255,255,255,.55); font-size: 11px; }
+.pause-panel button { width: 100%; padding: 13px 16px; border: 0; cursor: pointer; font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.continue-button { color: #182116; background: #edca3a; margin-bottom: 9px; }
+.exit-button { color: white; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14) !important; }
 .error-screen { display: grid; place-content: center; justify-items: center; gap: 15px; padding: 30px; text-align: center; color: white; background: #102219; font-family: Inter; }
 .error-screen h1 { font: 700 38px 'Barlow Condensed'; margin: 0; }
 .error-screen p { max-width: 490px; color: #aebbb3; }

@@ -117,7 +117,7 @@ export interface WorldData {
 }
 
 function createTerrain() {
-  const geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 170, 170)
+  const geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 140, 140)
   geometry.rotateX(-Math.PI / 2)
   const positions = geometry.attributes.position
   const colors: number[] = []
@@ -325,7 +325,7 @@ function createVegetation() {
     material: THREE.Material,
     verticalOffset: number,
     scaleMultiplier: THREE.Vector3,
-    castShadow = true,
+    castShadow = false,
   ) => {
     const mesh = new THREE.InstancedMesh(geometry, material, points.length)
     points.forEach((point, index) => {
@@ -400,9 +400,7 @@ function createStreetLight(x: number, z: number, rotation: number) {
   const lamp = box([2.4, 0.35, 0.7], '#e8dba6', [0.9, 8.7, 0])
   ;(lamp.material as THREE.MeshStandardMaterial).emissive.set('#5d5128')
   ;(lamp.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.2
-  const light = new THREE.PointLight('#ffe1a3', 38, 26, 2)
-  light.position.set(0.9, 8.25, 0)
-  group.add(pole, lamp, light)
+  group.add(pole, lamp)
   group.position.set(x, 5.8, z)
   group.rotation.y = rotation
   return group
