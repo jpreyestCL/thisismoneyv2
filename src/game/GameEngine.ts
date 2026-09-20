@@ -141,9 +141,9 @@ export class GameEngine {
     this.canvas = canvas
     this.onSnapshot = onSnapshot
     this.onMessage = onMessage
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.2))
-    this.renderer.shadowMap.enabled = true
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' })
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1))
+    this.renderer.shadowMap.enabled = false
     this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -172,8 +172,7 @@ export class GameEngine {
 
   private configureLights() {
     this.sun.position.set(-240, 420, 180)
-    this.sun.castShadow = true
-    this.sun.shadow.mapSize.set(1024, 1024)
+    this.sun.castShadow = false
     this.sun.shadow.camera.left = -420
     this.sun.shadow.camera.right = 420
     this.sun.shadow.camera.top = 420

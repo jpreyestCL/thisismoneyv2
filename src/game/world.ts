@@ -118,7 +118,7 @@ export interface WorldData {
 }
 
 function createTerrain() {
-  const geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 140, 140)
+  const geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 104, 104)
   geometry.rotateX(-Math.PI / 2)
   const positions = geometry.attributes.position
   const colors: number[] = []
@@ -315,7 +315,7 @@ function createVegetation() {
   const conifers: PlantPoint[] = []
   const cacti: PlantPoint[] = []
 
-  for (let i = 0; i < 1650; i++) {
+  for (let i = 0; i < 1200; i++) {
     const x = (seeded(i, 91) * 2 - 1) * 655
     const z = (seeded(i, 117) * 2 - 1) * 655
     if (Math.max(Math.abs(x), Math.abs(z)) < 315) continue
