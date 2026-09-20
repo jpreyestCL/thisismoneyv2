@@ -45,7 +45,7 @@ export default function GameApp() {
       return () => { engine.destroy(); engineRef.current = null }
     } catch (error) {
       console.error(error)
-      setPhase('error')
+      window.setTimeout(() => setPhase('error'), 0)
     }
   }, [phase])
 

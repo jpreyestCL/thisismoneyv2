@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import { Car, CircleDollarSign, Clock3, Compass, Crosshair, Gauge, MapPin, Menu, Mountain, Play, Volume2, VolumeX } from 'lucide-react'
+import { useState } from 'react'
 import heroImg from './assets/hero.png'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import './App.css'
-import { GameEngine, type GameInput, type GameSnapshot } from './game/GameEngine'
 
 export function ScaffoldPreview() {
   const [count, setCount] = useState(0)
