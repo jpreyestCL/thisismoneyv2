@@ -47,7 +47,23 @@ function createCharacter() {
   rightLeg.position.set(0.36, 0.8, 0)
   leftLeg.name = 'leftLeg'
   rightLeg.name = 'rightLeg'
-  character.add(torso, head, hair, leftLeg, rightLeg)
+
+  const createArm = (side: 'left' | 'right') => {
+    const direction = side === 'left' ? -1 : 1
+    const arm = new THREE.Group()
+    arm.name = `${side}Arm`
+    arm.position.set(direction * 0.82, 3, 0)
+    arm.rotation.z = direction * 0.12
+    const sleeve = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.72, 4, 8), clothes)
+    sleeve.position.y = -0.5
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.23, 10, 8), skin)
+    hand.position.y = -1.22
+    arm.add(sleeve, hand)
+    return arm
+  }
+  const leftArm = createArm('left')
+  const rightArm = createArm('right')
+  character.add(torso, head, hair, leftLeg, rightLeg, leftArm, rightArm)
   character.traverse((object) => {
     if (object instanceof THREE.Mesh) {
       object.castShadow = true
@@ -301,9 +317,13 @@ export class GameEngine {
     const legAmount = moving && this.grounded ? 0.62 : 0
     const leftLeg = this.character.getObjectByName('leftLeg')
     const rightLeg = this.character.getObjectByName('rightLeg')
-    if (leftLeg && rightLeg) {
+    const leftArm = this.character.getObjectByName('leftArm')
+    const rightArm = this.character.getObjectByName('rightArm')
+    if (leftLeg && rightLeg && leftArm && rightArm) {
       leftLeg.rotation.x = Math.sin(walkCycle) * legAmount
       rightLeg.rotation.x = -Math.sin(walkCycle) * legAmount
+      leftArm.rotation.x = -Math.sin(walkCycle) * legAmount * 0.85
+      rightArm.rotation.x = Math.sin(walkCycle) * legAmount * 0.85
     }
   }
 
