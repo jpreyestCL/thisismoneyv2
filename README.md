@@ -2,10 +2,13 @@
 
 Prototipo jugable de mundo abierto 3D ambientado en **Nueva Esperanza**, una ciudad ficticia entre la costa y la cordillera. Esta primera versión funciona completamente en el navegador y genera el escenario en tiempo real, sin descargar modelos externos.
 
-## Qué incluye la versión 0.1
+## Qué incluye la versión 0.2
 
-- Mundo procedural de 1,96 km² con costa, mar, lago, cerros, bosque, praderas y zona árida.
-- Ciudad con siete distritos, calles, edificios, plaza, monumento, luminarias y estación de servicio.
+- Isla procedural de 2,25 km² con costa irregular, bahías, playas y relieve continuo generado por ruido fractal.
+- Cordillera formada por varios macizos integrados al terreno, roca alpina y cumbres nevadas.
+- Biomas diferenciados: selva húmeda, bosque templado, bosque oscuro, praderas, desierto, costa y alta montaña.
+- Más de mil árboles, coníferas, árboles selváticos y cactus renderizados mediante instancias optimizadas.
+- Ciudad con calles, edificios con ventanas emisivas, plaza, monumento, alumbrado real y estación de servicio.
 - Personaje en tercera persona con movimiento, carrera, salto, energía y cámara libre.
 - Cinco vehículos conducibles con aceleración, frenado, dirección y turbo.
 - Ciclo dinámico de día y noche, iluminación, sombras, niebla atmosférica y agua.

@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { CITY_LIMIT, createWorld, SEA_LEVEL, terrainHeight, WORLD_SIZE } from './world'
+import { biomeAt, CITY_LIMIT, createWorld, SEA_LEVEL, terrainHeight, WORLD_SIZE } from './world'
 
 export interface GameSnapshot {
   speed: number
@@ -66,8 +66,12 @@ function districtName(x: number, z: number) {
     return 'Ciudad Nueva Esperanza'
   }
   if (Math.hypot(x + 355, z - 285) < 190) return 'Lago Espejo'
-  if (z < -300) return 'Bosque del Norte'
-  if (x > 280 && z < 100) return 'Sierra Alta'
+  const biome = biomeAt(x, z)
+  if (biome === 'snow' || biome === 'alpine') return 'Cordillera Blanca'
+  if (biome === 'jungle') return 'Selva Esmeralda'
+  if (biome === 'darkForest') return 'Bosque Umbrío'
+  if (biome === 'forest') return 'Bosque del Norte'
+  if (biome === 'desert') return 'Tierras Doradas'
   if (x < -280) return 'Costa Oeste'
   return 'Praderas del Sur'
 }

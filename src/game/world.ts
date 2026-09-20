@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-export const WORLD_SIZE = 1400
+export const WORLD_SIZE = 1500
 export const SEA_LEVEL = -3
 export const CITY_LIMIT = 270
 
@@ -9,25 +9,94 @@ const seeded = (x: number, z: number) => {
   return value - Math.floor(value)
 }
 
+const latticeNoise = (x: number, z: number) => {
+  const x0 = Math.floor(x)
+  const z0 = Math.floor(z)
+  const tx = x - x0
+  const tz = z - z0
+  const sx = tx * tx * (3 - 2 * tx)
+  const sz = tz * tz * (3 - 2 * tz)
+  const a = seeded(x0, z0)
+  const b = seeded(x0 + 1, z0)
+  const c = seeded(x0, z0 + 1)
+  const d = seeded(x0 + 1, z0 + 1)
+  return THREE.MathUtils.lerp(THREE.MathUtils.lerp(a, b, sx), THREE.MathUtils.lerp(c, d, sx), sz)
+}
+
+const fbm = (x: number, z: number, octaves = 5) => {
+  let value = 0
+  let amplitude = 0.5
+  let frequency = 1
+  for (let octave = 0; octave < octaves; octave++) {
+    value += (latticeNoise(x * frequency, z * frequency) * 2 - 1) * amplitude
+    amplitude *= 0.5
+    frequency *= 2.03
+  }
+  return value
+}
+
+const peak = (x: number, z: number, px: number, pz: number, radius: number, height: number) => {
+  const distance = Math.hypot(x - px, z - pz) / radius
+  if (distance >= 1) return 0
+  const ridge = 1 - distance
+  return ridge * ridge * (3 - 2 * ridge) * height
+}
+
+export type Biome = 'ocean' | 'beach' | 'plains' | 'forest' | 'darkForest' | 'jungle' | 'desert' | 'alpine' | 'snow'
+
+export function biomeAt(x: number, z: number, height = terrainHeight(x, z)): Biome {
+  if (height < SEA_LEVEL + 0.7) return 'ocean'
+  if (height < 3.2) return 'beach'
+  if (height > 112) return 'snow'
+  if (height > 72) return 'alpine'
+  if (x < -180 && z > 70) return 'jungle'
+  if (x < -110 && z < -170) return 'darkForest'
+  if (z < -180) return 'forest'
+  if (x > 250 && z > 80) return 'desert'
+  return 'plains'
+}
+
 export function terrainHeight(x: number, z: number) {
-  const cityBlend = THREE.MathUtils.smoothstep(Math.max(Math.abs(x), Math.abs(z)), 235, 360)
-  const rolling =
-    Math.sin(x * 0.018) * 7 +
-    Math.cos(z * 0.016) * 8 +
-    Math.sin((x + z) * 0.009) * 11
-  const mountainDistance = Math.hypot(x - 360, z + 330)
-  const mountain = Math.max(0, 1 - mountainDistance / 430) ** 2 * 185
-  const northRange = Math.max(0, (-z - 310) / 500) ** 1.5 * 90
-  return 4 + cityBlend * (rolling + mountain + northRange)
+  const angle = Math.atan2(z, x)
+  const coastVariation =
+    Math.sin(angle * 3 + 0.7) * 31 +
+    Math.sin(angle * 7 - 1.1) * 18 +
+    fbm(x * 0.006, z * 0.006, 4) * 66
+  const coastRadius = 620 + coastVariation
+  const radialDistance = Math.hypot(x * 0.96, z)
+  const island = 1 - THREE.MathUtils.smoothstep(radialDistance, coastRadius - 85, coastRadius + 22)
+
+  const broadHills = fbm(x * 0.006 + 21, z * 0.006 - 8, 5) * 34
+  const fineRelief = fbm(x * 0.019 - 14, z * 0.019 + 27, 4) * 8
+  const rolling = Math.sin(x * 0.011) * 5 + Math.sin((x + z) * 0.008) * 7
+  const mountains =
+    peak(x, z, 305, -355, 330, 158) +
+    peak(x, z, 455, -265, 250, 142) +
+    peak(x, z, 175, -485, 235, 126) +
+    peak(x, z, 410, -485, 190, 105)
+  const mountainDetail = mountains > 5 ? Math.abs(fbm(x * 0.025, z * 0.025, 4)) * mountains * 0.24 : 0
+  let height = SEA_LEVEL - 18 + island * (26 + broadHills + fineRelief + rolling + mountains + mountainDetail)
+
+  const cityInfluence = 1 - THREE.MathUtils.smoothstep(Math.max(Math.abs(x), Math.abs(z)), 220, 335)
+  height = THREE.MathUtils.lerp(height, 5, cityInfluence)
+
+  const lakeDistance = Math.hypot(x + 355, z - 285)
+  const lakeBasin = 1 - THREE.MathUtils.smoothstep(lakeDistance, 108, 151)
+  height = THREE.MathUtils.lerp(height, 6.4, lakeBasin)
+  return height
 }
 
 function terrainColor(height: number, x: number, z: number) {
-  if (height < 1) return new THREE.Color('#c7b77a')
-  if (height > 125) return new THREE.Color('#d7d8d1')
-  if (height > 75) return new THREE.Color('#66745b')
-  if (Math.hypot(x + 340, z - 280) < 190) return new THREE.Color('#b49658')
-  if (z < -280) return new THREE.Color('#315e38')
-  return new THREE.Color('#4f7b45')
+  const biome = biomeAt(x, z, height)
+  if (biome === 'ocean') return new THREE.Color('#b5a66a')
+  if (biome === 'beach') return new THREE.Color('#d5c184')
+  if (biome === 'snow') return new THREE.Color(height > 145 ? '#f6f7f4' : '#dce5e5')
+  if (biome === 'alpine') return new THREE.Color(height > 92 ? '#75807a' : '#596959')
+  if (biome === 'jungle') return new THREE.Color('#255f35')
+  if (biome === 'darkForest') return new THREE.Color('#1e452d')
+  if (biome === 'forest') return new THREE.Color('#37633a')
+  if (biome === 'desert') return new THREE.Color('#a8894f')
+  return new THREE.Color('#568249')
 }
 
 const shadow = (object: THREE.Object3D, cast = true, receive = true) => {
@@ -48,7 +117,7 @@ export interface WorldData {
 }
 
 function createTerrain() {
-  const geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 110, 110)
+  const geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 170, 170)
   geometry.rotateX(-Math.PI / 2)
   const positions = geometry.attributes.position
   const colors: number[] = []
@@ -97,7 +166,7 @@ function createWater() {
     }),
   )
   lake.rotation.x = -Math.PI / 2
-  lake.position.set(-355, terrainHeight(-355, 285) + 0.8, 285)
+  lake.position.set(-355, 7.05, 285)
   return [ocean, lake]
 }
 
@@ -151,10 +220,11 @@ function createBuilding(x: number, z: number, index: number) {
   const body = box([width, height, depth], colors[index % colors.length], [0, height / 2, 0])
   group.add(body)
 
+  const warmWindows = index % 4 === 0
   const glassMaterial = new THREE.MeshStandardMaterial({
-    color: '#9fd6de',
-    emissive: '#172b2e',
-    emissiveIntensity: 0.4,
+    color: warmWindows ? '#ffd58a' : '#8fc9d5',
+    emissive: warmWindows ? '#b25a19' : '#174557',
+    emissiveIntensity: 1.25,
     roughness: 0.25,
     metalness: 0.32,
   })
@@ -164,10 +234,22 @@ function createBuilding(x: number, z: number, index: number) {
       const windowRow = box([width * 0.64, 2.7, 0.25], '#8ab5bc', [0, 6 + floor * 8, side * (depth / 2 + 0.14)])
       windowRow.material = glassMaterial
       group.add(windowRow)
+      const sideWindowRow = box([0.25, 2.7, depth * 0.57], '#8ab5bc', [side * (width / 2 + 0.14), 6 + floor * 8, 0])
+      sideWindowRow.material = glassMaterial
+      group.add(sideWindowRow)
     }
   }
+  const entrance = box([width * 0.28, 4.8, 0.35], '#83c8d7', [0, 2.5, depth / 2 + 0.2])
+  entrance.material = glassMaterial
+  group.add(entrance)
   if (height > 70) {
     group.add(box([width * 0.45, 4, depth * 0.45], '#3f474c', [0, height + 2, 0]))
+    const beacon = new THREE.Mesh(
+      new THREE.SphereGeometry(0.7, 8, 6),
+      new THREE.MeshStandardMaterial({ color: '#ff3028', emissive: '#ff1810', emissiveIntensity: 4 }),
+    )
+    beacon.position.set(0, height + 5, 0)
+    group.add(beacon)
   }
   group.position.set(x, 5, z)
   shadow(group)
@@ -195,6 +277,119 @@ function createTree(x: number, z: number, scale = 1) {
   return group
 }
 
+interface PlantPoint {
+  x: number
+  y: number
+  z: number
+  scale: number
+  rotation: number
+}
+
+function createVegetation() {
+  const vegetation = new THREE.Group()
+  vegetation.name = 'vegetation'
+  const broadleaf: PlantPoint[] = []
+  const jungle: PlantPoint[] = []
+  const conifers: PlantPoint[] = []
+  const cacti: PlantPoint[] = []
+
+  for (let i = 0; i < 1650; i++) {
+    const x = (seeded(i, 91) * 2 - 1) * 655
+    const z = (seeded(i, 117) * 2 - 1) * 655
+    if (Math.max(Math.abs(x), Math.abs(z)) < 315) continue
+    if (Math.hypot(x + 355, z - 285) < 166) continue
+    const y = terrainHeight(x, z)
+    const biome = biomeAt(x, z, y)
+    const point = {
+      x,
+      y,
+      z,
+      scale: 0.65 + seeded(i, 141) * 1.05,
+      rotation: seeded(i, 163) * Math.PI * 2,
+    }
+    const densityRoll = seeded(i, 177)
+    if (biome === 'jungle' && densityRoll < 0.83) jungle.push(point)
+    else if (biome === 'darkForest' && densityRoll < 0.79) conifers.push(point)
+    else if (biome === 'forest' && densityRoll < 0.7) {
+      if (densityRoll < 0.33) conifers.push(point)
+      else broadleaf.push(point)
+    } else if (biome === 'alpine' && y < 108 && densityRoll < 0.42) conifers.push({ ...point, scale: point.scale * 0.8 })
+    else if (biome === 'plains' && densityRoll < 0.1) broadleaf.push({ ...point, scale: point.scale * 0.85 })
+    else if (biome === 'desert' && densityRoll < 0.13) cacti.push({ ...point, scale: point.scale * 0.7 })
+  }
+
+  const dummy = new THREE.Object3D()
+  const createPart = (
+    points: PlantPoint[],
+    geometry: THREE.BufferGeometry,
+    material: THREE.Material,
+    verticalOffset: number,
+    scaleMultiplier: THREE.Vector3,
+    castShadow = true,
+  ) => {
+    const mesh = new THREE.InstancedMesh(geometry, material, points.length)
+    points.forEach((point, index) => {
+      dummy.position.set(point.x, point.y + verticalOffset * point.scale, point.z)
+      dummy.rotation.set(0, point.rotation, 0)
+      dummy.scale.copy(scaleMultiplier).multiplyScalar(point.scale)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(index, dummy.matrix)
+    })
+    mesh.castShadow = castShadow
+    mesh.receiveShadow = true
+    mesh.instanceMatrix.needsUpdate = true
+    vegetation.add(mesh)
+  }
+
+  const trunkMaterial = new THREE.MeshStandardMaterial({ color: '#5c3c25', roughness: 1 })
+  createPart(broadleaf, new THREE.CylinderGeometry(0.55, 0.9, 7.5, 6), trunkMaterial, 3.75, new THREE.Vector3(1, 1, 1))
+  createPart(
+    broadleaf,
+    new THREE.IcosahedronGeometry(4.4, 1),
+    new THREE.MeshStandardMaterial({ color: '#3d783c', roughness: 1 }),
+    9.2,
+    new THREE.Vector3(1.1, 0.95, 1.1),
+  )
+
+  createPart(jungle, new THREE.CylinderGeometry(0.65, 1.05, 9, 7), trunkMaterial, 4.5, new THREE.Vector3(1, 1, 1))
+  createPart(
+    jungle,
+    new THREE.IcosahedronGeometry(5.2, 1),
+    new THREE.MeshStandardMaterial({ color: '#176332', roughness: 0.95 }),
+    10.6,
+    new THREE.Vector3(1.35, 0.83, 1.35),
+  )
+  createPart(
+    jungle,
+    new THREE.IcosahedronGeometry(3.4, 1),
+    new THREE.MeshStandardMaterial({ color: '#2c8140', roughness: 0.95 }),
+    13,
+    new THREE.Vector3(1.1, 0.65, 1.1),
+    false,
+  )
+
+  createPart(conifers, new THREE.CylinderGeometry(0.45, 0.8, 8, 6), trunkMaterial, 4, new THREE.Vector3(1, 1, 1))
+  createPart(
+    conifers,
+    new THREE.ConeGeometry(4.6, 10.5, 8),
+    new THREE.MeshStandardMaterial({ color: '#183e2b', roughness: 1 }),
+    9.3,
+    new THREE.Vector3(1, 1, 1),
+  )
+  createPart(
+    conifers,
+    new THREE.ConeGeometry(3.5, 8, 8),
+    new THREE.MeshStandardMaterial({ color: '#28553a', roughness: 1 }),
+    13,
+    new THREE.Vector3(1, 1, 1),
+    false,
+  )
+
+  const cactusMaterial = new THREE.MeshStandardMaterial({ color: '#507845', roughness: 0.92 })
+  createPart(cacti, new THREE.CylinderGeometry(0.65, 0.85, 7, 7), cactusMaterial, 3.5, new THREE.Vector3(1, 1, 1))
+  return vegetation
+}
+
 function createStreetLight(x: number, z: number, rotation: number) {
   const group = new THREE.Group()
   const pole = new THREE.Mesh(
@@ -204,7 +399,10 @@ function createStreetLight(x: number, z: number, rotation: number) {
   pole.position.y = 4.5
   const lamp = box([2.4, 0.35, 0.7], '#e8dba6', [0.9, 8.7, 0])
   ;(lamp.material as THREE.MeshStandardMaterial).emissive.set('#5d5128')
-  group.add(pole, lamp)
+  ;(lamp.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.2
+  const light = new THREE.PointLight('#ffe1a3', 38, 26, 2)
+  light.position.set(0.9, 8.25, 0)
+  group.add(pole, lamp, light)
   group.position.set(x, 5.8, z)
   group.rotation.y = rotation
   return group
@@ -303,15 +501,12 @@ export function createWorld(): WorldData {
     }
   }
 
-  for (let i = 0; i < 105; i++) {
-    const angle = seeded(i, 10) * Math.PI * 2
-    const radius = 320 + seeded(i, 11) * 330
-    const x = Math.cos(angle) * radius
-    const z = Math.sin(angle) * radius
-    if (Math.hypot(x + 355, z - 285) > 145 && terrainHeight(x, z) > 0) {
-      group.add(createTree(x, z, 0.75 + seeded(i, 12) * 0.85))
-    }
-  }
+  group.add(createVegetation())
+  const parkTrees: [number, number][] = [
+    [-58, -58], [58, -58], [-58, 58], [58, 58],
+    [-265, -264], [-265, 264], [265, -264], [265, 264],
+  ]
+  parkTrees.forEach(([x, z], index) => group.add(createTree(x, z, 0.75 + (index % 3) * 0.12)))
 
   for (let i = -3; i <= 3; i++) {
     if (i === 0) continue

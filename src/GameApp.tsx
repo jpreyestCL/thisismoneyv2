@@ -65,7 +65,7 @@ export default function GameApp() {
         <div className="city-silhouette" />
         <header className="landing-header">
           <div className="brand"><span>THIS IS</span><strong>MONEY</strong></div>
-          <span className="build">PRE-ALPHA · BUILD 0.1.0</span>
+          <span className="build">PRE-ALPHA · BUILD 0.2.0</span>
         </header>
         <section className="hero-copy">
           <p className="eyebrow"><Mountain size={15} /> NUEVA ESPERANZA TE ESPERA</p>
@@ -78,7 +78,7 @@ export default function GameApp() {
           <div className="world-stats">
             <span><strong>1.96</strong> km² de mundo</span>
             <span><strong>5</strong> vehículos</span>
-            <span><strong>7</strong> distritos</span>
+            <span><strong>11</strong> regiones</span>
           </div>
         </section>
         <div className="menu-hint">VERSIÓN DE DESARROLLO · EL MUNDO SE GENERA LOCALMENTE</div>
