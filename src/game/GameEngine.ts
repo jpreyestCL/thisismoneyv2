@@ -86,7 +86,8 @@ export class GameEngine {
   private world = createWorld()
   private inputs = new Set<GameInput>()
   private yaw = Math.PI
-  private pitch = 0.35
+  private pitch = 0.08
+  private draggingCamera = false
   private verticalVelocity = 0
   private grounded = true
   private activeCar: THREE.Group | null = null
@@ -129,6 +130,8 @@ export class GameEngine {
     window.addEventListener('keydown', this.handleKeyDown)
     window.addEventListener('keyup', this.handleKeyUp)
     canvas.addEventListener('click', this.requestPointerLock)
+    canvas.addEventListener('pointerdown', this.startCameraDrag)
+    window.addEventListener('pointerup', this.stopCameraDrag)
     document.addEventListener('mousemove', this.handleMouseMove)
     this.resizeObserver = new ResizeObserver(this.resize)
     this.resizeObserver.observe(canvas)
@@ -190,8 +193,16 @@ export class GameEngine {
     if (document.pointerLockElement !== this.canvas) this.canvas.requestPointerLock().catch(() => undefined)
   }
 
+  private startCameraDrag = () => {
+    this.draggingCamera = true
+  }
+
+  private stopCameraDrag = () => {
+    this.draggingCamera = false
+  }
+
   private handleMouseMove = (event: MouseEvent) => {
-    if (document.pointerLockElement !== this.canvas) return
+    if (document.pointerLockElement !== this.canvas && !this.draggingCamera) return
     this.yaw -= event.movementX * 0.0024
     this.pitch = THREE.MathUtils.clamp(this.pitch + event.movementY * 0.0018, -0.12, 0.82)
   }
@@ -410,6 +421,8 @@ export class GameEngine {
     window.removeEventListener('keydown', this.handleKeyDown)
     window.removeEventListener('keyup', this.handleKeyUp)
     this.canvas.removeEventListener('click', this.requestPointerLock)
+    this.canvas.removeEventListener('pointerdown', this.startCameraDrag)
+    window.removeEventListener('pointerup', this.stopCameraDrag)
     document.removeEventListener('mousemove', this.handleMouseMove)
     this.resizeObserver.disconnect()
     this.timer.dispose()
