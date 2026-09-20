@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 
 export const WORLD_SIZE = 1500
 export const SEA_LEVEL = -3
@@ -212,70 +213,116 @@ function createRoads(group: THREE.Group) {
   }
 }
 
-function createBuilding(x: number, z: number, index: number) {
-  const width = 34 + seeded(index, 1) * 22
-  const depth = 34 + seeded(index, 2) * 22
-  const height = 24 + seeded(index, 3) * 115
+function createCityBuildings() {
+  const city = new THREE.Group()
   const colors = ['#b55442', '#dbcfb3', '#7e9196', '#4d5963', '#d1aa6f', '#6e665f']
-  const group = new THREE.Group()
-  const body = box([width, height, depth], colors[index % colors.length], [0, height / 2, 0])
-  group.add(body)
+  const bodies = colors.map(() => [] as THREE.BufferGeometry[])
+  const facades: THREE.BufferGeometry[] = []
+  const rooftops: THREE.BufferGeometry[] = []
+  const blocks = [-200, -120, -40, 40, 120, 200]
+  let index = 0
 
-  const warmWindows = index % 4 === 0
-  const windowCanvas = document.createElement('canvas')
-  windowCanvas.width = 96
-  windowCanvas.height = 256
-  const context = windowCanvas.getContext('2d')
-  context?.clearRect(0, 0, windowCanvas.width, windowCanvas.height)
-  const floors = Math.max(2, Math.floor(height / 9))
-  for (let floor = 0; floor < floors; floor++) {
+  const transformedGeometry = (
+    geometry: THREE.BufferGeometry,
+    position: THREE.Vector3,
+    scale: THREE.Vector3,
+    rotationY = 0,
+  ) => {
+    const matrix = new THREE.Matrix4().compose(
+      position,
+      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotationY),
+      scale,
+    )
+    geometry.applyMatrix4(matrix)
+    return geometry
+  }
+
+  for (const x of blocks) {
+    for (const z of blocks) {
+      if (Math.abs(x) < 70 && Math.abs(z) < 70) continue
+      if (seeded(x, z) < 0.14) continue
+      const width = 34 + seeded(index, 1) * 22
+      const depth = 34 + seeded(index, 2) * 22
+      const height = 24 + seeded(index, 3) * 115
+      bodies[index % colors.length].push(
+        transformedGeometry(
+          new THREE.BoxGeometry(1, 1, 1),
+          new THREE.Vector3(x, 5 + height / 2, z),
+          new THREE.Vector3(width, height, depth),
+        ),
+      )
+      const panelHeight = Math.max(10, height - 9)
+      for (const side of [-1, 1]) {
+        facades.push(
+          transformedGeometry(
+            new THREE.PlaneGeometry(1, 1),
+            new THREE.Vector3(x, 6 + height / 2, z + side * (depth / 2 + 0.04)),
+            new THREE.Vector3(width * 0.7, panelHeight, 1),
+            side < 0 ? Math.PI : 0,
+          ),
+          transformedGeometry(
+            new THREE.PlaneGeometry(1, 1),
+            new THREE.Vector3(x + side * (width / 2 + 0.04), 6 + height / 2, z),
+            new THREE.Vector3(depth * 0.66, panelHeight, 1),
+            side > 0 ? Math.PI / 2 : -Math.PI / 2,
+          ),
+        )
+      }
+      if (height > 70) {
+        rooftops.push(
+          transformedGeometry(
+            new THREE.BoxGeometry(1, 1, 1),
+            new THREE.Vector3(x, 5 + height + 2, z),
+            new THREE.Vector3(width * 0.45, 4, depth * 0.45),
+          ),
+        )
+      }
+      index++
+    }
+  }
+
+  bodies.forEach((geometries, colorIndex) => {
+    if (!geometries.length) return
+    const mesh = new THREE.Mesh(
+      mergeGeometries(geometries)!,
+      new THREE.MeshStandardMaterial({ color: colors[colorIndex], roughness: 0.78 }),
+    )
+    mesh.receiveShadow = true
+    city.add(mesh)
+  })
+
+  const canvas = document.createElement('canvas')
+  canvas.width = 96
+  canvas.height = 256
+  const context = canvas.getContext('2d')
+  context?.clearRect(0, 0, 96, 256)
+  for (let row = 0; row < 18; row++) {
     for (let column = 0; column < 4; column++) {
-      const lit = seeded(index * 31 + floor, column + 240) > 0.27
       if (context) {
-        context.fillStyle = lit ? (warmWindows ? '#ffd47a' : '#83d4e5') : '#19313b'
-        context.fillRect(7 + column * 23, 238 - floor * (220 / floors), 15, Math.max(5, 120 / floors))
+        context.fillStyle = seeded(row, column + 515) > 0.27 ? (row % 4 === 0 ? '#ffd47a' : '#83d4e5') : '#152d37'
+        context.fillRect(7 + column * 23, 8 + row * 14, 15, 8)
       }
     }
   }
-  const windowTexture = new THREE.CanvasTexture(windowCanvas)
-  windowTexture.colorSpace = THREE.SRGBColorSpace
-  const glassMaterial = new THREE.MeshStandardMaterial({
-    color: '#ffffff',
-    map: windowTexture,
-    emissive: warmWindows ? '#c66f25' : '#27738a',
-    emissiveMap: windowTexture,
-    emissiveIntensity: 1.1,
-    roughness: 0.25,
-    metalness: 0.32,
-    transparent: true,
-    alphaTest: 0.12,
-  })
-  const panelHeight = Math.max(10, height - 9)
-  for (const side of [-1, 1]) {
-    const front = new THREE.Mesh(new THREE.PlaneGeometry(width * 0.7, panelHeight), glassMaterial)
-    front.position.set(0, height / 2 + 1, side * (depth / 2 + 0.03))
-    front.rotation.y = side < 0 ? Math.PI : 0
-    group.add(front)
-    const sidePanel = new THREE.Mesh(new THREE.PlaneGeometry(depth * 0.66, panelHeight), glassMaterial)
-    sidePanel.position.set(side * (width / 2 + 0.03), height / 2 + 1, 0)
-    sidePanel.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2
-    group.add(sidePanel)
-  }
-  const entrance = box([width * 0.28, 4.8, 0.35], '#83c8d7', [0, 2.5, depth / 2 + 0.2])
-  entrance.material = glassMaterial
-  group.add(entrance)
-  if (height > 70) {
-    group.add(box([width * 0.45, 4, depth * 0.45], '#3f474c', [0, height + 2, 0]))
-    const beacon = new THREE.Mesh(
-      new THREE.SphereGeometry(0.7, 8, 6),
-      new THREE.MeshStandardMaterial({ color: '#ff3028', emissive: '#ff1810', emissiveIntensity: 4 }),
+  const windows = new THREE.CanvasTexture(canvas)
+  windows.colorSpace = THREE.SRGBColorSpace
+  if (facades.length) {
+    city.add(
+      new THREE.Mesh(
+        mergeGeometries(facades)!,
+        new THREE.MeshBasicMaterial({ map: windows, transparent: true, alphaTest: 0.12 }),
+      ),
     )
-    beacon.position.set(0, height + 5, 0)
-    group.add(beacon)
   }
-  group.position.set(x, 5, z)
-  shadow(group)
-  return group
+  if (rooftops.length) {
+    city.add(
+      new THREE.Mesh(
+        mergeGeometries(rooftops)!,
+        new THREE.MeshStandardMaterial({ color: '#3f474c', roughness: 0.8 }),
+      ),
+    )
+  }
+  return city
 }
 
 function createTree(x: number, z: number, scale = 1) {
@@ -511,15 +558,7 @@ export function createWorld(): WorldData {
   group.add(createTerrain(), ...water)
   createRoads(group)
 
-  let buildingIndex = 0
-  const blocks = [-200, -120, -40, 40, 120, 200]
-  for (const x of blocks) {
-    for (const z of blocks) {
-      if (Math.abs(x) < 70 && Math.abs(z) < 70) continue
-      if (seeded(x, z) < 0.14) continue
-      group.add(createBuilding(x, z, buildingIndex++))
-    }
-  }
+  group.add(createCityBuildings())
 
   group.add(createVegetation())
   const parkTrees: [number, number][] = [
