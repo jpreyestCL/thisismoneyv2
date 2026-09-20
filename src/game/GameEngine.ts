@@ -77,7 +77,7 @@ export class GameEngine {
   private renderer: THREE.WebGLRenderer
   private scene = new THREE.Scene()
   private camera = new THREE.PerspectiveCamera(62, 1, 0.1, 2600)
-  private clock = new THREE.Clock()
+  private timer = new THREE.Timer()
   private character = createCharacter()
   private world = createWorld()
   private inputs = new Set<GameInput>()
@@ -110,7 +110,7 @@ export class GameEngine {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75))
     this.renderer.shadowMap.enabled = true
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.05
@@ -128,6 +128,7 @@ export class GameEngine {
     document.addEventListener('mousemove', this.handleMouseMove)
     this.resizeObserver = new ResizeObserver(this.resize)
     this.resizeObserver.observe(canvas)
+    this.timer.connect(document)
     this.resize()
     this.animate()
   }
@@ -386,8 +387,9 @@ export class GameEngine {
     })
   }
 
-  private animate = () => {
-    const delta = Math.min(this.clock.getDelta(), 0.05)
+  private animate = (timestamp?: number) => {
+    this.timer.update(timestamp)
+    const delta = Math.min(this.timer.getDelta(), 0.05)
     this.elapsed += delta
     this.updateCharacter(delta)
     this.updateVehicle(delta)
@@ -406,6 +408,7 @@ export class GameEngine {
     this.canvas.removeEventListener('click', this.requestPointerLock)
     document.removeEventListener('mousemove', this.handleMouseMove)
     this.resizeObserver.disconnect()
+    this.timer.dispose()
     this.renderer.dispose()
     this.scene.traverse((object) => {
       if (object instanceof THREE.Mesh) {
