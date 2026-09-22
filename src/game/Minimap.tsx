@@ -74,7 +74,16 @@ function ensureAtlas() {
   const toX = (x: number) => ((x + WORLD_SIZE / 2) / WORLD_SIZE) * ATLAS
   const toY = (z: number) => ((WORLD_SIZE / 2 - z) / WORLD_SIZE) * ATLAS
   for (const district of DISTRITOS) {
-    context.fillStyle = district.tipo === 'hogar' ? '#6d9a58' : district.tipo === 'deporte' ? '#3f7d45' : '#8e948f'
+    const districtColor =
+      district.id.includes('desierto') || district.id.includes('dunas') ? '#c2a36a'
+      : district.id === 'playa' ? '#e6d3a2'
+      : district.tipo === 'hogar' || district.tipo === 'casas' || district.tipo === 'parque' ? '#6d9a58'
+      : district.tipo === 'deporte' ? '#3f7d45'
+      : district.tipo === 'plaza' ? '#d5d0c4'
+      : district.tipo === 'torres' ? '#9aa7b5'
+      : district.tipo === 'aeropuerto' ? '#c5ccd4'
+      : '#cfc8bb'
+    context.fillStyle = districtColor
     context.fillRect(toX(district.x - district.w / 2), toY(district.z + district.d / 2), (district.w / WORLD_SIZE) * ATLAS, (district.d / WORLD_SIZE) * ATLAS)
   }
   for (const street of callesDelMapa()) {
