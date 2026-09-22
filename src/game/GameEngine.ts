@@ -12,6 +12,7 @@ import {
   type Collider,
 } from './world'
 import { CoreLoop, type LoopSave } from './coreLoop'
+import { tickRides } from './places'
 import { LUGARES, distritoEn } from './cityMap'
 import type { BuildKind } from './rules'
 
@@ -626,7 +627,7 @@ export class GameEngine {
     this.sun.target.position.copy(target.position)
   }
 
-  private updateEnvironment() {
+  private updateEnvironment(delta: number) {
     const daylight = this.core.phase === 'night' ? 0.14 : 0.86
     this.sun.intensity = daylight * 2.4
     this.hemi.intensity = daylight * 1.45
@@ -652,6 +653,7 @@ export class GameEngine {
         this.scene.fog.density = 0.00115
       }
     }
+    tickRides(delta, this.elapsed)
     this.missionMarker.rotation.y += 0.01
     const pulse = 1 + Math.sin(this.elapsed * 3) * 0.08
     this.missionMarker.scale.setScalar(pulse)
@@ -732,7 +734,7 @@ export class GameEngine {
         this.character.visible = true
       }
       this.updateCamera(delta)
-      this.updateEnvironment()
+      this.updateEnvironment(delta)
       this.updateMission()
       this.emitSnapshot()
     }

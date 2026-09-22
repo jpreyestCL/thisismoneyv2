@@ -8,6 +8,7 @@ export const LAKE_X = -355
 export const LAKE_Z = 285
 export const LAKE_RADIUS = 128
 export const LAKE_SURFACE = 7.05
+export const POOL = { x: 100, z: 214, halfW: 16, halfD: 11, surface: 4.85, bottom: 1.15 }
 export const CITY_ROADS = [-240, -160, -80, 0, 80, 160, 240]
 export const ROAD_LENGTH = 590
 
@@ -94,6 +95,12 @@ export function terrainHeight(x: number, z: number) {
   height = THREE.MathUtils.lerp(height, 0.6, basin)
   height = blendDisc(height, x, z, 0, 520, 150, 22)
   height = blendDisc(height, x, z, -520, -420, 78, 8)
+  const poolX = Math.abs(x - POOL.x) / POOL.halfW
+  const poolZ = Math.abs(z - POOL.z) / POOL.halfD
+  if (poolX < 1 && poolZ < 1) {
+    const basin = 1 - THREE.MathUtils.smoothstep(Math.max(poolX, poolZ), 0.72, 1)
+    height = THREE.MathUtils.lerp(height, POOL.bottom, basin)
+  }
   return height
 }
 
@@ -105,6 +112,7 @@ function blendDisc(height: number, x: number, z: number, cx: number, cz: number,
 }
 
 export function waterSurfaceAt(x: number, z: number, terrain = terrainHeight(x, z)) {
+  if (Math.abs(x - POOL.x) <= POOL.halfW && Math.abs(z - POOL.z) <= POOL.halfD && terrain < POOL.surface + 0.35) return POOL.surface
   if (Math.hypot(x - LAKE_X, z - LAKE_Z) <= LAKE_RADIUS && terrain < LAKE_SURFACE + 0.2) return LAKE_SURFACE
   if (terrain < SEA_LEVEL + 0.5) return SEA_LEVEL
   return null
@@ -300,7 +308,21 @@ function createWater() {
   lake.rotation.x = -Math.PI / 2
   lake.position.set(LAKE_X, LAKE_SURFACE, LAKE_Z)
   lake.userData.surface = LAKE_SURFACE
-  return [ocean, lake]
+  const pool = new THREE.Mesh(
+    new THREE.PlaneGeometry(POOL.halfW * 2 - 1.2, POOL.halfD * 2 - 1.2),
+    new THREE.MeshPhysicalMaterial({
+      color: '#1d8490',
+      roughness: 0.12,
+      transparent: true,
+      opacity: 0.62,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
+  )
+  pool.rotation.x = -Math.PI / 2
+  pool.position.set(POOL.x, POOL.surface, POOL.z)
+  pool.userData.surface = POOL.surface
+  return [ocean, lake, pool]
 }
 
 function box(

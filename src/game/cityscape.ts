@@ -6,6 +6,7 @@ import {
   callesDelMapa,
   type Distrito,
 } from './cityMap'
+import { addAirliner, buildCondoPark, buildFunPark, buildWaterPark } from './places'
 import { PLATUS, TESORO } from './rules'
 import { terrainHeight, type Collider } from './world'
 
@@ -251,18 +252,6 @@ function dressPlaza(city: THREE.Group, district: Distrito, y: number) {
   }
 }
 
-function dressPark(city: THREE.Group, district: Distrito, y: number) {
-  const path = new THREE.Mesh(new THREE.PlaneGeometry(3.2, district.d * 0.8), paint('#d7d0c2'))
-  path.rotation.x = -Math.PI / 2
-  path.position.set(district.x, y + 0.1, district.z)
-  path.receiveShadow = true
-  city.add(path)
-  for (let i = 0; i < 10; i++) {
-    const side = i % 2 === 0 ? -1 : 1
-    stylizedTree(city, district.x + side * (6 + hash(i, 4) * 8), district.z - district.d / 2 + 6 + i * 3.1, y, i + 11)
-  }
-}
-
 function dressWild(city: THREE.Group, district: Distrito, y: number) {
   const desert = district.id.includes('desierto') || district.id.includes('dunas')
   const count = desert ? 8 : 6
@@ -314,13 +303,15 @@ function buildDistrict(city: THREE.Group, district: Distrito, colliders: Collide
   pad.rotation.x = -Math.PI / 2
   pad.position.set(district.x, y + 0.08, district.z)
   pad.receiveShadow = true
-  city.add(pad)
+  if (district.id !== 'acuatico') city.add(pad)
 
   if (district.tipo === 'casas') fillFronts(city, colliders, district, y)
   else if (district.tipo === 'torres') fillTowers(city, colliders, district, y)
   else if (district.tipo === 'comercio' || district.tipo === 'ocio') fillShops(city, colliders, district, y)
   else if (district.tipo === 'plaza') dressPlaza(city, district, y)
-  else if (district.tipo === 'parque') dressPark(city, district, y)
+  else if (district.id === 'parque') buildCondoPark(city, colliders, district.x, district.z, y)
+  else if (district.id === 'diversiones') buildFunPark(city, colliders, district.x, district.z, y)
+  else if (district.id === 'acuatico') buildWaterPark(city, colliders)
   else if (district.tipo === 'natural') dressWild(city, district, y)
 }
 
@@ -420,22 +411,12 @@ function buildLandmarks(city: THREE.Group, interactables: THREE.Object3D[], coll
     solid([22, 8, 14], '#e7eef2', [-28, 4, -8]),
     solid([8, 3, 8], '#f1cc3a', [-28, 9.2, -8]),
   )
+  addAirliner(airport)
   airport.position.set(LUGARES.aeropuerto.x, airY, LUGARES.aeropuerto.z)
   airport.userData.role = 'airport'
   airport.userData.interaction = 'Aeropuerto — E para viajar a Platus'
   interactables.push(airport)
   city.add(airport)
-
-  const poolY = groundAt(LUGARES.parqueAcuatico.x, LUGARES.parqueAcuatico.z)
-  const pool = new THREE.Mesh(new THREE.CircleGeometry(16, 28), paint('#1d8490'))
-  pool.rotation.x = -Math.PI / 2
-  pool.position.set(LUGARES.parqueAcuatico.x, poolY + 0.2, LUGARES.parqueAcuatico.z)
-  city.add(pool, solid([4, 10, 4], '#e7e4dc', [LUGARES.parqueAcuatico.x + 18, poolY + 5, LUGARES.parqueAcuatico.z]))
-
-  const wheelY = groundAt(LUGARES.parqueDiversiones.x, LUGARES.parqueDiversiones.z)
-  const wheel = new THREE.Mesh(new THREE.TorusGeometry(10, 0.6, 10, 28), paint('#e44c35'))
-  wheel.position.set(LUGARES.parqueDiversiones.x, wheelY + 12, LUGARES.parqueDiversiones.z)
-  city.add(wheel, solid([3, 12, 3], '#5c656c', [LUGARES.parqueDiversiones.x, wheelY + 6, LUGARES.parqueDiversiones.z]))
 
   const gas = new THREE.Group()
   const gasY = groundAt(LUGARES.gasolinera.x, LUGARES.gasolinera.z)
