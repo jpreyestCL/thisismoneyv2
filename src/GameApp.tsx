@@ -41,13 +41,15 @@ export default function GameApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const engineRef = useRef<GameEngine | null>(null)
   const mapRef = useRef<MinimapHandle>(null)
-  const [phase, setPhase] = useState<'menu' | 'loading' | 'playing' | 'error'>(() =>
-    localStorage.getItem(SESSION_KEY) === 'true' ? 'playing' : 'menu',
-  )
+  const [phase, setPhase] = useState<'menu' | 'loading' | 'playing' | 'error'>('menu')
   const [snapshot, setSnapshot] = useState(initialSnapshot)
   const [message, setMessage] = useState('')
   const [muted, setMuted] = useState(false)
   const [paused, setPaused] = useState(false)
+
+  useEffect(() => {
+    window.location.replace('/original/index.html')
+  }, [])
 
   useEffect(() => {
     if (phase !== 'playing' || !canvasRef.current) return
@@ -74,9 +76,7 @@ export default function GameApp() {
   }, [paused])
 
   const startGame = () => {
-    localStorage.setItem(SESSION_KEY, 'true')
-    setPhase('loading')
-    window.setTimeout(() => setPhase('playing'), 850)
+    window.location.assign('/original/index.html')
   }
 
   const saveAndExit = () => {
