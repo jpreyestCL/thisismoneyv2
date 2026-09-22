@@ -1,9 +1,15 @@
 import * as THREE from 'three'
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
+import { buildCity } from './cityscape'
 
 export const WORLD_SIZE = 1500
 export const SEA_LEVEL = -3
 export const CITY_LIMIT = 270
+export const LAKE_X = -355
+export const LAKE_Z = 285
+export const LAKE_RADIUS = 128
+export const LAKE_SURFACE = 7.05
+export const CITY_ROADS = [-240, -160, -80, 0, 80, 160, 240]
+export const ROAD_LENGTH = 590
 
 const seeded = (x: number, z: number) => {
   const value = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453
@@ -78,13 +84,30 @@ export function terrainHeight(x: number, z: number) {
   const mountainDetail = mountains > 5 ? Math.abs(fbm(x * 0.025, z * 0.025, 4)) * mountains * 0.24 : 0
   let height = SEA_LEVEL - 18 + island * (26 + broadHills + fineRelief + rolling + mountains + mountainDetail)
 
-  const cityInfluence = 1 - THREE.MathUtils.smoothstep(Math.max(Math.abs(x), Math.abs(z)), 220, 335)
+  const cityInfluence = 1 - THREE.MathUtils.smoothstep(Math.max(Math.abs(x), Math.abs(z)), 300, 430)
   height = THREE.MathUtils.lerp(height, 5, cityInfluence)
 
-  const lakeDistance = Math.hypot(x + 355, z - 285)
-  const lakeBasin = 1 - THREE.MathUtils.smoothstep(lakeDistance, 108, 151)
-  height = THREE.MathUtils.lerp(height, 6.4, lakeBasin)
+  const lakeDistance = Math.hypot(x - LAKE_X, z - LAKE_Z)
+  const shore = 1 - THREE.MathUtils.smoothstep(lakeDistance, 96, 140)
+  height = THREE.MathUtils.lerp(height, LAKE_SURFACE + 0.15, shore)
+  const basin = 1 - THREE.MathUtils.smoothstep(lakeDistance, 18, 78)
+  height = THREE.MathUtils.lerp(height, 0.6, basin)
+  height = blendDisc(height, x, z, 0, 520, 150, 22)
+  height = blendDisc(height, x, z, -520, -420, 78, 8)
   return height
+}
+
+function blendDisc(height: number, x: number, z: number, cx: number, cz: number, radius: number, top: number) {
+  const distance = Math.hypot(x - cx, z - cz)
+  if (distance > radius) return height
+  const rim = THREE.MathUtils.smoothstep(distance, radius * 0.72, radius)
+  return THREE.MathUtils.lerp(top, height, rim)
+}
+
+export function waterSurfaceAt(x: number, z: number, terrain = terrainHeight(x, z)) {
+  if (Math.hypot(x - LAKE_X, z - LAKE_Z) <= LAKE_RADIUS && terrain < LAKE_SURFACE + 0.2) return LAKE_SURFACE
+  if (terrain < SEA_LEVEL + 0.5) return SEA_LEVEL
+  return null
 }
 
 function terrainColor(height: number, x: number, z: number) {
@@ -110,12 +133,112 @@ const shadow = (object: THREE.Object3D, cast = true, receive = true) => {
   })
 }
 
+export type Collider =
+  | { kind: 'circle'; x: number; z: number; radius: number }
+  | { kind: 'box'; x: number; z: number; halfWidth: number; halfDepth: number; rotation: number }
+
 export interface WorldData {
   group: THREE.Group
   cars: THREE.Group[]
   interactables: THREE.Object3D[]
   water: THREE.Mesh[]
   animated: THREE.Object3D[]
+  colliders: Collider[]
+}
+
+export function carCollider(car: THREE.Object3D): Collider {
+  return {
+    kind: 'box',
+    x: car.position.x,
+    z: car.position.z,
+    halfWidth: 2.55,
+    halfDepth: 4.4,
+    rotation: car.rotation.y,
+  }
+}
+
+function resolveCircleCollider(
+  x: number,
+  z: number,
+  radius: number,
+  collider: Extract<Collider, { kind: 'circle' }>,
+) {
+  const dx = x - collider.x
+  const dz = z - collider.z
+  const minDistance = radius + collider.radius
+  const distanceSq = dx * dx + dz * dz
+  if (distanceSq >= minDistance * minDistance) return { x, z }
+  const distance = Math.sqrt(distanceSq)
+  if (distance < 1e-6) return { x: collider.x + minDistance, z: collider.z }
+  const scale = minDistance / distance
+  return { x: collider.x + dx * scale, z: collider.z + dz * scale }
+}
+
+function resolveBoxCollider(
+  x: number,
+  z: number,
+  radius: number,
+  collider: Extract<Collider, { kind: 'box' }>,
+) {
+  const cos = Math.cos(collider.rotation)
+  const sin = Math.sin(collider.rotation)
+  const dx = x - collider.x
+  const dz = z - collider.z
+  let localX = dx * cos - dz * sin
+  let localZ = dx * sin + dz * cos
+  const closestX = THREE.MathUtils.clamp(localX, -collider.halfWidth, collider.halfWidth)
+  const closestZ = THREE.MathUtils.clamp(localZ, -collider.halfDepth, collider.halfDepth)
+  const inside =
+    Math.abs(localX) <= collider.halfWidth && Math.abs(localZ) <= collider.halfDepth
+
+  if (inside) {
+    const gapX = collider.halfWidth - Math.abs(localX)
+    const gapZ = collider.halfDepth - Math.abs(localZ)
+    if (gapX < gapZ) localX = (localX < 0 ? -1 : 1) * (collider.halfWidth + radius)
+    else localZ = (localZ < 0 ? -1 : 1) * (collider.halfDepth + radius)
+  } else {
+    const offsetX = localX - closestX
+    const offsetZ = localZ - closestZ
+    const distanceSq = offsetX * offsetX + offsetZ * offsetZ
+    if (distanceSq >= radius * radius) return { x, z }
+    const distance = Math.sqrt(distanceSq) || 1e-6
+    const push = (radius - distance) / distance
+    localX += offsetX * push
+    localZ += offsetZ * push
+  }
+
+  return {
+    x: collider.x + localX * cos + localZ * sin,
+    z: collider.z - localX * sin + localZ * cos,
+  }
+}
+
+export function separateFromColliders(
+  x: number,
+  z: number,
+  radius: number,
+  ...groups: Collider[][]
+) {
+  let nextX = x
+  let nextZ = z
+  for (let pass = 0; pass < 3; pass++) {
+    for (const colliders of groups) {
+      for (const collider of colliders) {
+        const reach =
+          collider.kind === 'circle'
+            ? radius + collider.radius
+            : radius + collider.halfWidth + collider.halfDepth
+        if (Math.abs(nextX - collider.x) > reach || Math.abs(nextZ - collider.z) > reach) continue
+        const resolved =
+          collider.kind === 'circle'
+            ? resolveCircleCollider(nextX, nextZ, radius, collider)
+            : resolveBoxCollider(nextX, nextZ, radius, collider)
+        nextX = resolved.x
+        nextZ = resolved.z
+      }
+    }
+  }
+  return { x: nextX, z: nextZ }
 }
 
 function createTerrain() {
@@ -156,19 +279,27 @@ function createWater() {
   )
   ocean.rotation.x = -Math.PI / 2
   ocean.position.y = SEA_LEVEL
+  ocean.userData.surface = SEA_LEVEL
   ocean.receiveShadow = true
+  const oceanMaterial = ocean.material as THREE.MeshPhysicalMaterial
+  oceanMaterial.opacity = 0.58
+  oceanMaterial.depthWrite = false
+  oceanMaterial.side = THREE.DoubleSide
 
   const lake = new THREE.Mesh(
-    new THREE.CircleGeometry(128, 64),
+    new THREE.CircleGeometry(LAKE_RADIUS, 64),
     new THREE.MeshPhysicalMaterial({
       color: '#1d8490',
       roughness: 0.16,
       transparent: true,
-      opacity: 0.82,
+      opacity: 0.62,
+      depthWrite: false,
+      side: THREE.DoubleSide,
     }),
   )
   lake.rotation.x = -Math.PI / 2
-  lake.position.set(-355, 7.05, 285)
+  lake.position.set(LAKE_X, LAKE_SURFACE, LAKE_Z)
+  lake.userData.surface = LAKE_SURFACE
   return [ocean, lake]
 }
 
@@ -185,167 +316,6 @@ function box(
   return mesh
 }
 
-function createRoads(group: THREE.Group) {
-  const roadMaterial = new THREE.MeshStandardMaterial({ color: '#22272a', roughness: 0.91 })
-  const markingMaterial = new THREE.MeshBasicMaterial({ color: '#e4c64d' })
-  const sidewalkMaterial = new THREE.MeshStandardMaterial({ color: '#8a8e89', roughness: 1 })
-  const coordinates = [-240, -160, -80, 0, 80, 160, 240]
-
-  for (const value of coordinates) {
-    for (const rotation of [0, Math.PI / 2]) {
-      const road = new THREE.Mesh(new THREE.PlaneGeometry(42, 590), roadMaterial)
-      road.rotation.set(-Math.PI / 2, 0, rotation)
-      road.position.set(rotation ? 0 : value, 5.12, rotation ? value : 0)
-      road.receiveShadow = true
-      group.add(road)
-
-      const line = new THREE.Mesh(new THREE.PlaneGeometry(1, 590), markingMaterial)
-      line.rotation.set(-Math.PI / 2, 0, rotation)
-      line.position.set(rotation ? 0 : value, 5.15, rotation ? value : 0)
-      group.add(line)
-    }
-  }
-
-  for (const x of [-280, 280]) {
-    const walk = box([14, 1.3, 590], '#8a8e89', [x, 5.5, 0])
-    walk.material = sidewalkMaterial
-    group.add(walk)
-  }
-}
-
-function createCityBuildings() {
-  const city = new THREE.Group()
-  const colors = ['#b55442', '#dbcfb3', '#7e9196', '#4d5963', '#d1aa6f', '#6e665f']
-  const bodies = colors.map(() => [] as THREE.BufferGeometry[])
-  const facades: THREE.BufferGeometry[] = []
-  const rooftops: THREE.BufferGeometry[] = []
-  const blocks = [-200, -120, -40, 40, 120, 200]
-  let index = 0
-
-  const transformedGeometry = (
-    geometry: THREE.BufferGeometry,
-    position: THREE.Vector3,
-    scale: THREE.Vector3,
-    rotationY = 0,
-  ) => {
-    const matrix = new THREE.Matrix4().compose(
-      position,
-      new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotationY),
-      scale,
-    )
-    geometry.applyMatrix4(matrix)
-    return geometry
-  }
-
-  for (const x of blocks) {
-    for (const z of blocks) {
-      if (Math.abs(x) < 70 && Math.abs(z) < 70) continue
-      if (seeded(x, z) < 0.14) continue
-      const width = 34 + seeded(index, 1) * 22
-      const depth = 34 + seeded(index, 2) * 22
-      const height = 24 + seeded(index, 3) * 115
-      bodies[index % colors.length].push(
-        transformedGeometry(
-          new THREE.BoxGeometry(1, 1, 1),
-          new THREE.Vector3(x, 5 + height / 2, z),
-          new THREE.Vector3(width, height, depth),
-        ),
-      )
-      const panelHeight = Math.max(10, height - 9)
-      for (const side of [-1, 1]) {
-        facades.push(
-          transformedGeometry(
-            new THREE.PlaneGeometry(1, 1),
-            new THREE.Vector3(x, 6 + height / 2, z + side * (depth / 2 + 0.04)),
-            new THREE.Vector3(width * 0.7, panelHeight, 1),
-            side < 0 ? Math.PI : 0,
-          ),
-          transformedGeometry(
-            new THREE.PlaneGeometry(1, 1),
-            new THREE.Vector3(x + side * (width / 2 + 0.04), 6 + height / 2, z),
-            new THREE.Vector3(depth * 0.66, panelHeight, 1),
-            side > 0 ? Math.PI / 2 : -Math.PI / 2,
-          ),
-        )
-      }
-      if (height > 70) {
-        rooftops.push(
-          transformedGeometry(
-            new THREE.BoxGeometry(1, 1, 1),
-            new THREE.Vector3(x, 5 + height + 2, z),
-            new THREE.Vector3(width * 0.45, 4, depth * 0.45),
-          ),
-        )
-      }
-      index++
-    }
-  }
-
-  bodies.forEach((geometries, colorIndex) => {
-    if (!geometries.length) return
-    const mesh = new THREE.Mesh(
-      mergeGeometries(geometries)!,
-      new THREE.MeshStandardMaterial({ color: colors[colorIndex], roughness: 0.78 }),
-    )
-    mesh.receiveShadow = true
-    city.add(mesh)
-  })
-
-  const canvas = document.createElement('canvas')
-  canvas.width = 96
-  canvas.height = 256
-  const context = canvas.getContext('2d')
-  context?.clearRect(0, 0, 96, 256)
-  for (let row = 0; row < 18; row++) {
-    for (let column = 0; column < 4; column++) {
-      if (context) {
-        context.fillStyle = seeded(row, column + 515) > 0.27 ? (row % 4 === 0 ? '#ffd47a' : '#83d4e5') : '#152d37'
-        context.fillRect(7 + column * 23, 8 + row * 14, 15, 8)
-      }
-    }
-  }
-  const windows = new THREE.CanvasTexture(canvas)
-  windows.colorSpace = THREE.SRGBColorSpace
-  if (facades.length) {
-    city.add(
-      new THREE.Mesh(
-        mergeGeometries(facades)!,
-        new THREE.MeshBasicMaterial({ map: windows, transparent: true, alphaTest: 0.12 }),
-      ),
-    )
-  }
-  if (rooftops.length) {
-    city.add(
-      new THREE.Mesh(
-        mergeGeometries(rooftops)!,
-        new THREE.MeshStandardMaterial({ color: '#3f474c', roughness: 0.8 }),
-      ),
-    )
-  }
-  return city
-}
-
-function createTree(x: number, z: number, scale = 1) {
-  const group = new THREE.Group()
-  const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.9 * scale, 1.4 * scale, 9 * scale, 7),
-    new THREE.MeshStandardMaterial({ color: '#67462c', roughness: 1 }),
-  )
-  trunk.position.y = 4.5 * scale
-  const crown = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(5.3 * scale, 1),
-    new THREE.MeshStandardMaterial({
-      color: seeded(x, z) > 0.5 ? '#2f6b39' : '#3f793b',
-      roughness: 1,
-    }),
-  )
-  crown.position.y = 11.5 * scale
-  group.add(trunk, crown)
-  group.position.set(x, terrainHeight(x, z), z)
-  shadow(group)
-  return group
-}
-
 interface PlantPoint {
   x: number
   y: number
@@ -354,7 +324,7 @@ interface PlantPoint {
   rotation: number
 }
 
-function createVegetation() {
+function createVegetation(colliders: Collider[]) {
   const vegetation = new THREE.Group()
   vegetation.name = 'vegetation'
   const broadleaf: PlantPoint[] = []
@@ -365,7 +335,9 @@ function createVegetation() {
   for (let i = 0; i < 1200; i++) {
     const x = (seeded(i, 91) * 2 - 1) * 655
     const z = (seeded(i, 117) * 2 - 1) * 655
-    if (Math.max(Math.abs(x), Math.abs(z)) < 315) continue
+    if (Math.max(Math.abs(x), Math.abs(z)) < 360) continue
+    if (Math.hypot(x, z - 520) < 160) continue
+    if (Math.hypot(x + 520, z + 420) < 90) continue
     if (Math.hypot(x + 355, z - 285) < 166) continue
     const y = terrainHeight(x, z)
     const biome = biomeAt(x, z, y)
@@ -456,28 +428,21 @@ function createVegetation() {
 
   const cactusMaterial = new THREE.MeshStandardMaterial({ color: '#507845', roughness: 0.92 })
   createPart(cacti, new THREE.CylinderGeometry(0.65, 0.85, 7, 7), cactusMaterial, 3.5, new THREE.Vector3(1, 1, 1))
+
+  const addTrunks = (points: PlantPoint[], radius: number) => {
+    for (const point of points) {
+      colliders.push({ kind: 'circle', x: point.x, z: point.z, radius: radius * point.scale })
+    }
+  }
+  addTrunks(broadleaf, 1.15)
+  addTrunks(jungle, 1.3)
+  addTrunks(conifers, 1.05)
+  addTrunks(cacti, 1)
   return vegetation
 }
 
-function createStreetLight(x: number, z: number, rotation: number) {
-  const group = new THREE.Group()
-  const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.18, 0.28, 9, 8),
-    new THREE.MeshStandardMaterial({ color: '#202529', metalness: 0.8, roughness: 0.35 }),
-  )
-  pole.position.y = 4.5
-  const lamp = box([2.4, 0.35, 0.7], '#e8dba6', [0.9, 8.7, 0])
-  ;(lamp.material as THREE.MeshStandardMaterial).emissive.set('#5d5128')
-  ;(lamp.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.2
-  group.add(pole, lamp)
-  group.position.set(x, 5.8, z)
-  group.rotation.y = rotation
-  return group
-}
-
-export function createCar(color = '#e7442e') {
+function createCar(color: string) {
   const car = new THREE.Group()
-  car.name = 'vehicle'
   const body = box([4.5, 1.2, 8.2], color, [0, 1.4, 0])
   const cabin = new THREE.Mesh(
     new THREE.BoxGeometry(3.8, 1.4, 4.1),
@@ -505,90 +470,32 @@ export function createCar(color = '#e7442e') {
   return car
 }
 
-function createLandmarks(group: THREE.Group, interactables: THREE.Object3D[]) {
-  const plaza = new THREE.Mesh(
-    new THREE.CylinderGeometry(43, 43, 1.2, 48),
-    new THREE.MeshStandardMaterial({ color: '#bdb9a8', roughness: 0.95 }),
-  )
-  plaza.position.set(0, 5.7, 0)
-  plaza.receiveShadow = true
-  group.add(plaza)
-
-  const tower = new THREE.Group()
-  const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(10, 15, 5, 12),
-    new THREE.MeshStandardMaterial({ color: '#5d6468' }),
-  )
-  base.position.y = 2.5
-  const beam = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.5, 4.5, 42, 10),
-    new THREE.MeshStandardMaterial({ color: '#d9d4c5', roughness: 0.8 }),
-  )
-  beam.position.y = 26
-  const globe = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(6, 2),
-    new THREE.MeshStandardMaterial({ color: '#e7a52b', emissive: '#6b3f00', emissiveIntensity: 0.45 }),
-  )
-  globe.position.y = 50
-  tower.add(base, beam, globe)
-  tower.position.set(0, 6, 0)
-  tower.userData.interaction = 'Mirador Central — punto de referencia desbloqueado'
-  interactables.push(tower)
-  shadow(tower)
-  group.add(tower)
-
-  const gasStation = new THREE.Group()
-  gasStation.add(
-    box([30, 1.5, 18], '#e8e6db', [0, 9, 0]),
-    box([5, 9, 5], '#d44b38', [-11, 4.5, 0]),
-    box([5, 9, 5], '#d44b38', [11, 4.5, 0]),
-  )
-  gasStation.position.set(202, 6, 117)
-  gasStation.userData.interaction = 'Estación Norte — vehículo reparado y combustible al máximo'
-  interactables.push(gasStation)
-  group.add(gasStation)
-}
-
 export function createWorld(): WorldData {
   const group = new THREE.Group()
   const cars: THREE.Group[] = []
   const interactables: THREE.Object3D[] = []
   const animated: THREE.Object3D[] = []
+  const colliders: Collider[] = []
   const water = createWater()
   group.add(createTerrain(), ...water)
-  createRoads(group)
-
-  group.add(createCityBuildings())
-
-  group.add(createVegetation())
-  const parkTrees: [number, number][] = [
-    [-58, -58], [58, -58], [-58, 58], [58, 58],
-    [-265, -264], [-265, 264], [265, -264], [265, 264],
-  ]
-  parkTrees.forEach(([x, z], index) => group.add(createTree(x, z, 0.75 + (index % 3) * 0.12)))
-
-  for (let i = -3; i <= 3; i++) {
-    if (i === 0) continue
-    group.add(createStreetLight(i * 80 + 18, -22, Math.PI))
-    group.add(createStreetLight(-22, i * 80 + 18, Math.PI / 2))
-  }
+  buildCity(group, interactables, colliders)
+  group.add(createVegetation(colliders))
 
   const carColors = ['#e44c35', '#e6bd42', '#2a72a5', '#e8e7df', '#262b31']
-  const carPositions: [number, number, number, number][] = [
-    [233, 6, 235, 0],
-    [-98, 6, -18, Math.PI / 2],
-    [178, 6, -95, 0],
-    [-178, 6, 180, Math.PI / 2],
-    [95, 6, 220, Math.PI / 2],
+  const carSpots: [number, number, number][] = [
+    [0, 40, 0],
+    [55, -30, Math.PI / 2],
+    [-55, 36, Math.PI / 2],
+    [18, -70, 0],
+    [-36, 78, 0],
   ]
-  carPositions.forEach(([x, y, z, rotation], index) => {
+  carSpots.forEach(([x, z, rotation], index) => {
     const car = createCar(carColors[index])
-    car.position.set(x, y, z)
+    car.position.set(x, terrainHeight(x, z) + 0.4, z)
     car.rotation.y = rotation
     cars.push(car)
     group.add(car)
   })
 
-  createLandmarks(group, interactables)
-  return { group, cars, interactables, water, animated }
+  return { group, cars, interactables, water, animated, colliders }
 }

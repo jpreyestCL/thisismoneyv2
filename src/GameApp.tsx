@@ -2,13 +2,18 @@ import { useEffect, useRef, useState } from 'react'
 import { Car, CircleDollarSign, Clock3, Compass, Crosshair, Gauge, MapPin, Menu, Mountain, Play, Volume2, VolumeX } from 'lucide-react'
 import './game.css'
 import { GameEngine, type GameInput, type GameSnapshot } from './game/GameEngine'
+import { Minimap, type MinimapHandle } from './game/Minimap'
+import type { BuildKind } from './game/rules'
 
 const SESSION_KEY = 'this-is-money-active-session'
 
 const initialSnapshot: GameSnapshot = {
   speed: 0, district: 'Ciudad Nueva Esperanza', time: '08:00', health: 100,
   stamina: 100, money: 1250, inVehicle: false, nearbyAction: null,
-  missionDistance: 290, missionComplete: false,
+  missionDistance: 40, missionComplete: false, swimming: false, afloat: false, onSeabed: false,
+  phase: 'day', phaseLabel: 'DÍA', objectiveTitle: 'PRIMEROS PASOS', objectiveText: 'Compra tu terreno',
+  objectiveHint: 'Condominio Los Aromos · $1000', shopOpen: false, buildMode: false, buildKind: 'wall',
+  inventory: { wall: 0, floor: 0, ramp: 0 }, shopItems: [],
 }
 
 function ControlButton({ input, label, onInput }: {
@@ -35,6 +40,7 @@ function ControlButton({ input, label, onInput }: {
 export default function GameApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const engineRef = useRef<GameEngine | null>(null)
+  const mapRef = useRef<MinimapHandle>(null)
   const [phase, setPhase] = useState<'menu' | 'loading' | 'playing' | 'error'>(() =>
     localStorage.getItem(SESSION_KEY) === 'true' ? 'playing' : 'menu',
   )
@@ -46,10 +52,15 @@ export default function GameApp() {
   useEffect(() => {
     if (phase !== 'playing' || !canvasRef.current) return
     try {
-      const engine = new GameEngine(canvasRef.current, setSnapshot, (nextMessage) => {
-        setMessage(nextMessage)
-        window.setTimeout(() => setMessage(''), 4300)
-      })
+      const engine = new GameEngine(
+        canvasRef.current,
+        setSnapshot,
+        (nextMessage) => {
+          setMessage(nextMessage)
+          window.setTimeout(() => setMessage(''), 4300)
+        },
+        (map) => mapRef.current?.draw(map),
+      )
       engineRef.current = engine
       return () => { engine.destroy(); engineRef.current = null }
     } catch (error) {
@@ -150,14 +161,49 @@ export default function GameApp() {
       <div className="mission-card">
         <div className="mission-icon"><MapPin size={19} /></div>
         <div>
-          <span>{snapshot.missionComplete ? 'MISIÓN COMPLETADA' : 'PRIMEROS PASOS'}</span>
-          <strong>{snapshot.missionComplete ? 'Punto de encuentro asegurado' : 'Ve al punto de encuentro'}</strong>
-          {!snapshot.missionComplete && <small>{snapshot.missionDistance} m de distancia</small>}
+          <span>{snapshot.objectiveTitle}</span>
+          <strong>{snapshot.objectiveText}</strong>
+          <small>{snapshot.objectiveHint}{snapshot.missionDistance ? ` · ${snapshot.missionDistance} m` : ''}</small>
         </div>
       </div>
       <div className="crosshair"><Crosshair size={23} /></div>
       {message && <div className="toast">{message}</div>}
-      {snapshot.nearbyAction && <div className="interaction">{snapshot.nearbyAction}</div>}
+      {snapshot.shopOpen && (
+        <div className="shop-panel" role="dialog" aria-label="Súper">
+          <span>SÚPER</span>
+          <strong>Plata ${snapshot.money.toLocaleString('es-CL')}</strong>
+          {snapshot.shopItems.map((item) => (
+            <button key={item.key} disabled={item.locked} onClick={() => engineRef.current?.buy(item.key)}>
+              {item.name}
+              <small>{item.locked ? 'Bloqueado' : `$${item.price}`}</small>
+            </button>
+          ))}
+          <button className="shop-close" onClick={() => engineRef.current?.closeShop()}>Cerrar</button>
+        </div>
+      )}
+      {snapshot.buildMode && (
+        <div className="build-bar">
+          {(['wall', 'floor', 'ramp'] as BuildKind[]).map((kind) => (
+            <button
+              key={kind}
+              className={snapshot.buildKind === kind ? 'selected' : ''}
+              onClick={() => engineRef.current?.setBuild(kind)}
+            >
+              {kind === 'wall' ? 'Muro' : kind === 'floor' ? 'Piso' : 'Rampa'}
+              <small>{snapshot.inventory[kind]}</small>
+            </button>
+          ))}
+        </div>
+      )}
+      {snapshot.swimming && (
+        <div className="swim-status">
+          {snapshot.afloat
+            ? 'FLOTANDO · SUELTA ESPACIO PARA HUNDIRTE'
+            : snapshot.onSeabed
+              ? 'EN EL FONDO · MANTÉN ESPACIO PARA SUBIR'
+              : 'TE HUNDES · MANTÉN ESPACIO PARA NADAR'}
+        </div>
+      )}
       <div className="player-status">
         <div className="portrait">JP</div>
         <div className="status-bars">
@@ -167,13 +213,10 @@ export default function GameApp() {
         <div className="cash"><CircleDollarSign size={16} /> ${snapshot.money.toLocaleString('es-CL')}</div>
       </div>
       {snapshot.inVehicle && <div className="speedometer"><Gauge size={24} /><strong>{snapshot.speed}</strong><span>KM/H</span></div>}
-      <div className="minimap" aria-label="Minimapa">
-        <div className="map-grid" /><div className="map-water" /><div className="map-road road-h" />
-        <div className="map-road road-v" /><div className="mission-dot" /><div className="player-arrow" /><span>N</span>
-      </div>
+      <Minimap ref={mapRef} />
       <div className="desktop-help">
-        <span><kbd>WASD</kbd> Moverse</span><span><kbd>SHIFT</kbd> Correr / turbo</span>
-        <span><kbd>CLIC + ARRASTRAR</kbd> Cámara</span><span><kbd>F</kbd> Vehículo</span><span><kbd>E</kbd> Interactuar</span>
+        <span><kbd>W S</kbd> Avanzar</span><span><kbd>A D</kbd> Doblar</span>
+        <span><kbd>E</kbd> Usar</span><span><kbd>B</kbd> Construir</span><span><kbd>Q</kbd> Golpear</span><span><kbd>N</kbd> Noche</span><span><kbd>F</kbd> Vehículo</span>
       </div>
       <div className="touch-controls">
         <div className="touch-pad">
@@ -181,7 +224,9 @@ export default function GameApp() {
           <ControlButton input="backward" label="▼" onInput={setInput} /><ControlButton input="right" label="▶" onInput={setInput} />
         </div>
         <div className="touch-actions">
-          <button onClick={() => engineRef.current?.toggleVehicle()}><Car size={21} /><span>VEHÍCULO</span></button>
+          <button onClick={() => engineRef.current?.toggleVehicle()}><Car size={21} /><span>AUTO</span></button>
+          <button onClick={() => engineRef.current?.attack()}><span>GOLPE</span></button>
+          <button onClick={() => engineRef.current?.toggleBuild()}><span>CASA</span></button>
           <ControlButton input="jump" label="SALTAR" onInput={setInput} />
         </div>
       </div>

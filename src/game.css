@@ -66,16 +66,21 @@ button { font: inherit; }
 .speedometer svg { grid-row: span 2; align-self: center; }
 .speedometer strong { font: 700 39px/27px 'Barlow Condensed'; }
 .speedometer span { font-size: 7px; letter-spacing: .16em; color: rgba(255,255,255,.7); }
-.minimap { position: absolute; right: 27px; bottom: 25px; width: 158px; height: 158px; border-radius: 50%; overflow: hidden; border: 3px solid rgba(255,255,255,.67); background: #51754c; box-shadow: 0 3px 15px #0008; }
-.map-grid { position: absolute; inset: 0; opacity: .26; background-image: linear-gradient(#dce0d9 2px,transparent 2px), linear-gradient(90deg,#dce0d9 2px,transparent 2px); background-size: 25px 25px; transform: rotate(12deg); }
-.map-water { position: absolute; width: 74px; height: 75px; right: -18px; bottom: -12px; border-radius: 50%; background: #3e8493; }
-.map-road { position: absolute; background: #27312d; border: 1px solid #bcb4a1; }
-.road-h { left: 0; right: 0; top: 72px; height: 12px; transform: rotate(-8deg); }
-.road-v { top: 0; bottom: 0; left: 72px; width: 12px; transform: rotate(9deg); }
-.player-arrow { position: absolute; top: 67px; left: 71px; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 18px solid white; filter: drop-shadow(0 1px 2px #000); transform: rotate(18deg); }
-.mission-dot { position: absolute; left: 37px; top: 36px; width: 10px; height: 10px; background: #f0cc28; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 0 5px #efd43144; animation: pulse 1.4s infinite; }
-@keyframes pulse { 50% { transform: scale(1.25); } }
-.minimap > span { position: absolute; top: 5px; left: 74px; font: 800 9px Inter; text-shadow: 0 1px 2px black; }
+.minimap { position: absolute; right: 27px; bottom: 25px; width: 158px; height: 158px; border-radius: 50%; overflow: hidden; border: 3px solid rgba(255,255,255,.67); background: #0a6c84; box-shadow: 0 3px 15px #0008; }
+.minimap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.swim-status { position: absolute; top: 58%; left: 50%; transform: translateX(-50%); padding: 8px 14px; background: rgba(6, 28, 36, .82); border: 1px solid rgba(120, 210, 220, .45); font-size: 10px; letter-spacing: .08em; white-space: nowrap; }
+.shop-panel { position: absolute; top: 92px; right: 27px; width: 240px; z-index: 6; display: flex; flex-direction: column; gap: 6px; padding: 14px; background: rgba(8, 17, 13, .92); border-top: 3px solid #edca3a; }
+.shop-panel span { color: #edca3a; font-size: 9px; letter-spacing: .14em; font-weight: 800; }
+.shop-panel strong { font: 700 18px 'Barlow Condensed'; }
+.shop-panel button { display: flex; justify-content: space-between; align-items: center; border: 0; background: rgba(255,255,255,.08); color: white; padding: 8px 10px; cursor: pointer; font-size: 12px; }
+.shop-panel button:disabled { opacity: .4; cursor: default; }
+.shop-panel small { color: #f1cc3a; }
+.shop-close { background: #edca3a !important; color: #182116 !important; font-weight: 800; justify-content: center !important; }
+.build-bar { position: absolute; bottom: 78px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+.build-bar button { min-width: 74px; border: 1px solid rgba(255,255,255,.3); background: rgba(8,16,12,.8); color: white; padding: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.build-bar button.selected { border-color: #f1cc3a; color: #f1cc3a; }
+.build-bar small { font-size: 10px; }
+.minimap > span { position: absolute; top: 5px; left: 74px; z-index: 1; font: 800 9px Inter; text-shadow: 0 1px 2px black; }
 .desktop-help { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; color: rgba(255,255,255,.66); font-size: 8px; }
 kbd { border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.45); padding: 3px 5px; color: white; font: 700 8px Inter; }
 .touch-controls { position: absolute; inset: auto 0 83px; display: flex; justify-content: space-between; padding: 0 25px; pointer-events: none; opacity: .72; transition: opacity .2s; }
@@ -112,9 +117,8 @@ kbd { border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.45); padd
   .location-chip { left: 14px; transform: none; }
   .mission-card { top: 75px; left: 14px; width: 244px; }
   .minimap { width: 110px; height: 110px; right: 12px; bottom: 16px; }
-  .map-road.road-h { top: 49px; }
-  .map-road.road-v { left: 49px; }
-  .player-arrow { top: 45px; left: 48px; }
+  .minimap > span { left: 50px; }
+  .swim-status { font-size: 8px; max-width: 92vw; white-space: normal; text-align: center; }
   .player-status { left: 14px; bottom: 18px; transform: scale(.87); transform-origin: bottom left; }
   .speedometer { right: 126px; bottom: 20px; }
   .touch-controls { position: absolute; inset: auto 0 106px; display: flex; justify-content: space-between; padding: 0 17px; pointer-events: none; }
