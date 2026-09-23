@@ -1216,6 +1216,36 @@ import { CHAT_BUBBLE_MS, CHAT_CUSTOM_MAX, CHAT_EMOJIS, CHAT_HISTORY, CHAT_MAX_LE
 const ui = id => document.getElementById(id);
 // Loader compartido con soporte meshopt. Los .glb están comprimidos (texturas WebP 1024 + geometría meshopt).
 const gltfLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+function softenTexture(map) {
+  if (!map || !map.image || map.userData.soft) return map;
+  const img = map.image;
+  const srcW = img.width || img.videoWidth, srcH = img.height || img.videoHeight;
+  if (!srcW || !srcH) return map;
+  try {
+    const small = document.createElement('canvas');
+    small.width = Math.max(28, Math.round(srcW / 4));
+    small.height = Math.max(28, Math.round(srcH / 4));
+    const sctx = small.getContext('2d');
+    sctx.imageSmoothingEnabled = true;
+    sctx.drawImage(img, 0, 0, small.width, small.height);
+    const cv = document.createElement('canvas');
+    cv.width = srcW; cv.height = srcH;
+    const ctx = cv.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(small, 0, 0, srcW, srcH);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = map.colorSpace || THREE.SRGBColorSpace;
+    tex.flipY = map.flipY;
+    tex.wrapS = map.wrapS; tex.wrapT = map.wrapT;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.anisotropy = 8;
+    tex.userData.soft = true;
+    tex.needsUpdate = true;
+    return tex;
+  } catch (e) { return map; }
+}
 function pixelateModel(root) {
   root.traverse(o => {
     if (!o.isMesh) return;
@@ -1223,10 +1253,10 @@ function pixelateModel(root) {
     const materials = Array.isArray(o.material) ? o.material : [o.material];
     materials.forEach(m => {
       if (!m) return;
-      if (m.roughness != null) m.roughness = Math.min(m.roughness, 0.62);
+      if (m.roughness != null) m.roughness = Math.min(Math.max(m.roughness, 0.42), 0.72);
       if (m.metalness != null && m.metalness > 0.85) m.metalness = 0.35;
       m.flatShading = false;
-      if (m.map) { m.map.magFilter = THREE.LinearFilter; m.map.minFilter = THREE.LinearMipmapLinearFilter; m.map.needsUpdate = true; }
+      if (m.map) m.map = softenTexture(m.map);
       m.needsUpdate = true;
     });
   });
@@ -1327,7 +1357,7 @@ function makePixelTexture(color, neutral = false) {
   }
   cx.strokeStyle = 'rgba(0,0,0,.12)'; cx.strokeRect(.5, .5, 15, 15);
   const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace; tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestMipmapNearestFilter;
+  tex.colorSpace = THREE.SRGBColorSpace; tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   pixelTextureCache.set(key, tex); return tex;
 }
@@ -1804,13 +1834,13 @@ function createVoxelTool(kind, color, scale) {
 // Brazo y herramienta en primera persona.
 function makeViewmodel() {
   const g = new THREE.Group();
-  g.position.set(0.45, -0.55, -0.9);
-  const skin = new THREE.MeshStandardMaterial({ color: 0xe0ac69, roughness: 0.9 });
-  const sleeve = new THREE.MeshStandardMaterial({ color: 0x3f6212, roughness: 0.9 });
-  const arm = new THREE.Mesh(smoothBox(0.28, 0.28, 0.7), sleeve);  // manga
-  arm.position.set(0, 0, 0.15); g.add(arm);
-  const fist = new THREE.Mesh(smoothBox(0.32, 0.32, 0.34), skin);   // puño al frente
-  fist.position.set(0, 0.01, -0.35); g.add(fist);
+  g.position.set(0.42, -0.42, -0.72);
+  const skin = new THREE.MeshStandardMaterial({ color: 0xe0ac69, roughness: 0.55, metalness: 0.02 });
+  const sleeve = new THREE.MeshStandardMaterial({ color: 0x3f6212, roughness: 0.62, metalness: 0.02 });
+  const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.46, 4, 10), sleeve);
+  arm.rotation.x = Math.PI / 2; arm.position.set(0.02, -0.02, 0.08); arm.castShadow = true; g.add(arm);
+  const fist = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 10), skin);
+  fist.position.set(0, 0.02, -0.28); fist.castShadow = true; g.add(fist);
   const mount = new THREE.Group(); mount.position.set(-.04, .04, -.44); mount.rotation.set(-.2, 0, -.22); g.add(mount); g.userData.toolMount = mount;
   return g;
 }
@@ -1836,23 +1866,17 @@ function makePerson(colorBody, colorHead) {
     const m = new THREE.Mesh(new THREE.CapsuleGeometry(radius, length, 3, 8), skin(col));
     m.position.y = -(length * 0.5 + radius); m.castShadow = true; pivot.add(m); g.add(pivot); return pivot;
   };
-  const facePiece = (w, h, col, x, y, z) => {
-    const m = new THREE.Mesh(smoothBox(w, h, 0.02), skin(col));
-    m.position.set(x, y, z); g.add(m); return m;
-  };
+  const dot = (radius, col, x, y, z) => piece(new THREE.SphereGeometry(radius, 10, 8), col, x, y, z);
   for (const sx of [-0.09, 0.09]) {
-    facePiece(0.09, 0.1, 0xf8fafc, sx, 2.12, 0.24);
-    facePiece(0.045, 0.07, 0x1f2937, sx + (sx > 0 ? .015 : -.015), 2.12, 0.255);
-    facePiece(0.1, 0.03, 0x3b2b1f, sx, 2.22, 0.18);
+    dot(0.045, 0xf8fafc, sx, 2.12, 0.2);
+    dot(0.022, 0x1f2937, sx + (sx > 0 ? 0.012 : -0.012), 2.11, 0.232);
   }
-  facePiece(0.12, 0.035, 0x7f3a35, 0, 1.96, 0.2);
-  facePiece(0.045, 0.06, 0xcf9b6d, 0, 2.04, 0.25);
-  piece(new THREE.SphereGeometry(0.06, 8, 6), colorHead, -0.24, 2.08, 0);
-  piece(new THREE.SphereGeometry(0.06, 8, 6), colorHead, 0.24, 2.08, 0);
+  piece(new THREE.SphereGeometry(0.035, 8, 6), 0xcf9b6d, 0, 2.02, 0.24);
+  piece(new THREE.SphereGeometry(0.055, 8, 6), colorHead, -0.24, 2.08, 0);
+  piece(new THREE.SphereGeometry(0.055, 8, 6), colorHead, 0.24, 2.08, 0);
   const pelo = 0x3b2b1f;
-  piece(new THREE.SphereGeometry(0.18, 10, 8), pelo, 0, 2.26, -0.02);
-  piece(smoothBox(0.36, 0.14, 0.1), pelo, 0, 2.14, -0.18);
-  piece(smoothBox(0.32, 0.06, 0.08), pelo, 0, 2.26, 0.16);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), skin(pelo));
+  hair.position.set(0, 2.16, -0.03); hair.castShadow = true; g.add(hair);
   piece(smoothBox(0.2, 0.08, 0.26), colorHead, 0, 1.78, 0);
   piece(smoothBox(0.46, 0.08, 0.28), 0x27303f, 0, 0.98, 0);
   piece(smoothBox(0.1, 0.07, 0.03), 0xd4a017, 0, 0.98, 0.15);
@@ -1906,17 +1930,16 @@ function applyMinecraftArmor(person, tier, scale) {
     m.position.set(x * k, y * k, z * k); m.castShadow = true; parent.add(m); parts.push(m); return m;
   };
   const limbs = person.userData.limbs || {};
-  piece(person, .62, .3, .62, 0, 2.24, 0, T.color);          // casco: tapa
-  piece(person, .62, .26, .12, 0, 2.02, -.27, T.color);      // casco: nuca
-  for (const sx of [-1, 1]) piece(person, .12, .26, .62, sx * .27, 2.02, 0, T.color);   // casco: costados
-  piece(person, .84, .78, .52, 0, 1.42, 0, T.color);         // peto
-  piece(person, .86, .16, .54, 0, 1.06, 0, T.trim);          // cinturón
-  piece(person, .8, .12, .5, 0, 1.76, 0, T.trim);            // cuello
-  if (limbs.armL) piece(limbs.armL, .32, .38, .38, 0, -.19, 0, T.color);   // hombreras (se mueven con el brazo)
-  if (limbs.armR) piece(limbs.armR, .32, .38, .38, 0, -.19, 0, T.color);
+  const helm = new THREE.Mesh(new THREE.SphereGeometry(0.32 * k, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), mat(T.color));
+  helm.position.set(0, 2.18 * k, -0.02 * k); helm.castShadow = true; person.add(helm); parts.push(helm);
+  piece(person, .5, .58, .46, 0, 1.38, 0.03, T.color);       // peto
+  piece(person, .48, .1, .3, 0, 1.04, 0.05, T.trim);         // cinturón
+  piece(person, .28, .08, .28, 0, 1.72, 0.04, T.trim);       // cuello
+  if (limbs.armL) piece(limbs.armL, .24, .22, .24, 0, -.08, 0, T.color);
+  if (limbs.armR) piece(limbs.armR, .24, .22, .24, 0, -.08, 0, T.color);
   for (const leg of [limbs.legL, limbs.legR]) if (leg) {
-    piece(leg, .36, .42, .4, 0, -.24, 0, T.color);           // greba
-    piece(leg, .38, .22, .44, 0, -.76, .02, T.trim);         // bota
+    piece(leg, .26, .32, .26, 0, -.18, 0, T.color);          // greba
+    piece(leg, .24, .12, .3, 0, -.7, .04, T.trim);           // bota
   }
   person.userData.mcArmor = parts;
 }
@@ -5296,16 +5319,25 @@ spawnPedestrians();
 //  las oficinas del sur. Bloquean el paso y se puede aterrizar arriba.
 // ===================================================================
 function makeWindowTexture(color, luz) {
-  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const c = document.createElement('canvas'); c.width = 64; c.height = 128;
   const g = c.getContext('2d');
-  g.fillStyle = '#' + new THREE.Color(color).getHexString(); g.fillRect(0, 0, 64, 64);
-  for (let fila = 0; fila < 8; fila++) for (let col = 0; col < 8; col++) {
-    const encendida = Math.random() < .35;
-    g.fillStyle = encendida ? '#' + new THREE.Color(luz).getHexString() : 'rgba(15,23,42,.72)';
-    g.fillRect(col * 8 + 2, fila * 8 + 2, 5, 5);
+  const muro = '#' + new THREE.Color(color).getHexString();
+  const vidrio = '#' + new THREE.Color(luz).getHexString();
+  g.fillStyle = muro; g.fillRect(0, 0, 64, 128);
+  for (let fila = 0; fila < 7; fila++) {
+    const y = 10 + fila * 16;
+    g.fillStyle = 'rgba(15,23,42,.55)';
+    g.fillRect(5, y, 54, 9);
+    g.fillStyle = vidrio;
+    g.globalAlpha = Math.random() < .6 ? .72 : .28;
+    g.fillRect(7, y + 1, 22, 7);
+    g.fillRect(35, y + 1, 22, 7);
+    g.globalAlpha = 1;
   }
   const t = new THREE.CanvasTexture(c);
-  t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.anisotropy = 8;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return t;
 }
@@ -5882,27 +5914,27 @@ function mcMountain(parent, cx, cz, r, h, rock, cap, seed, planet, opts) {
   const rand = () => { rnd = (rnd * 9301 + 49297) % 233280; return rnd / 233280; };
   const m = { x: cx, z: cz, r, h, ph: (seed || 1) * 1.7, planet: planet || 'tierra', ski: !!o.ski };
   mountains.push(m);
-  const CELL = o.cell || (o.ski ? 4.2 : 2.8), cols = [], extentZ = o.ski ? r * 1.8 : r;
-  for (let gx = -r; gx <= r; gx += CELL) for (let gz = -extentZ; gz <= extentZ; gz += CELL) {
-    const hh = mountainProfile(m, gx, gz);
-    if (hh > .4) cols.push([gx, gz, hh]);
+  const CELL = o.cell || (o.ski ? 4.2 : 2.8), extentZ = o.ski ? r * 1.8 : r;
+  const step = Math.max(CELL * 0.85, 2.2);
+  const segX = Math.max(10, Math.round((r * 2) / step));
+  const segZ = Math.max(10, Math.round((extentZ * 2) / step));
+  const geo = new THREE.PlaneGeometry(r * 2, extentZ * 2, segX, segZ);
+  geo.rotateX(-Math.PI / 2);
+  const attr = geo.attributes.position;
+  const colors = new Float32Array(attr.count * 3);
+  const tint = new THREE.Color();
+  for (let i = 0; i < attr.count; i++) {
+    const hh = mountainProfile(m, attr.getX(i), attr.getZ(i));
+    attr.setY(i, hh > 0.35 ? hh : -1.4);
+    const f = Math.max(0, hh) / h;
+    tint.setHex(f > .8 ? cap : (f > .34 ? rock : (f > .14 ? soil : grass)));
+    colors[i * 3] = tint.r; colors[i * 3 + 1] = tint.g; colors[i * 3 + 2] = tint.b;
   }
-  const geo = smoothBox(CELL * 1.03, 1, CELL * 1.03);
-  const matCol = new THREE.MeshStandardMaterial({ map: rockTex, color: 0xffffff, roughness: 1, metalness: 0, flatShading: false });
-  const im = new THREE.InstancedMesh(geo, matCol, cols.length);
-  im.castShadow = false; im.receiveShadow = true;
-  const m4 = new THREE.Matrix4(), pos = new THREE.Vector3(), qq = new THREE.Quaternion(), scl = new THREE.Vector3(), col = new THREE.Color();
-  cols.forEach(([gx, gz, hh], i) => {
-    const bottom = -2.5;                                   // las columnas nacen bajo el pasto
-    pos.set(cx + gx, (hh + bottom) / 2, cz + gz);
-    scl.set(1, hh - bottom, 1);
-    m4.compose(pos, qq, scl); im.setMatrixAt(i, m4);
-    const f = hh / h;                                      // pasto abajo · tierra · roca · nieve arriba
-    col.setHex(f > .8 ? cap : (f > .34 ? rock : (f > .14 ? soil : grass)));
-    im.setColorAt(i, col);
-  });
-  im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
-  parent.add(im);
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+  const slope = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }));
+  slope.receiveShadow = true;
+  parent.add(slope);
   // Piedras sueltas repartidas por la ladera
   for (let i = 0; i < 10; i++) {
     const a = rand() * 6.28, d = r * (.2 + rand() * .7);
