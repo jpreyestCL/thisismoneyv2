@@ -77,6 +77,12 @@ const ANILLO = [
   ['barrioSuroeste', 'Barrio Suroeste', '🏘️', -130, -130],
 ];
 
+// El banco y el súper van en manzanas distintas del anillo, lejos uno del otro.
+const SERVICIOS = [
+  { id: 'banco', nombre: 'Banco Central', icono: '🏦', x: -130, z: 27.5, w: 25, d: 40, tipo: 'civico' },
+  { id: 'super', nombre: 'Supermercado', icono: '🛒', x: 130, z: -27.5, w: 25, d: 40, tipo: 'comercio' },
+];
+
 const AFUERAS = [
   { id: 'aeropuerto', nombre: 'Aeropuerto', icono: '✈️', x: -30, z: 220, w: 150, d: 110, tipo: 'aeropuerto' },
   { id: 'acuatico', nombre: 'Parque acuático', icono: '🏊', x: 100, z: 208, w: 76, d: 70, tipo: 'parque' },
@@ -92,6 +98,7 @@ export const DISTRITOS = Object.freeze([
   ...ANILLO.map(([id, nombre, icono, x, z]) =>
     Object.freeze({ id, nombre, icono, x, z, w: BANDA, d: BANDA, tipo: 'casas' })),
   ...AFUERAS.map(Object.freeze),
+  ...SERVICIOS.map(Object.freeze),
 ]);
 
 // ---- LUGARES -------------------------------------------------------
@@ -103,9 +110,9 @@ export const LUGARES = Object.freeze({
   spawn: Object.freeze({ x: 10, z: 16, distrito: 'casa' }),
   spawnPapa: Object.freeze({ x: 12, z: 13, distrito: 'casa' }),
   spawnMama: Object.freeze({ x: 15.5, z: 18.5, distrito: 'casa' }),   // en la explanada común del condominio
-  super: Object.freeze({ x: 28, z: -35, distrito: 'comercial' }),   // al fondo de la manzana: el banco ocupa el frente
-  banco: Object.freeze({ x: 19, z: -15, distrito: 'comercial' }),
-  entregaAutos: Object.freeze({ x: 42, z: -44, distrito: 'comercial' }),
+  super: Object.freeze({ x: 130, z: -27.5, distrito: 'super' }),
+  banco: Object.freeze({ x: -130, z: 27.5, distrito: 'banco' }),
+  entregaAutos: Object.freeze({ x: 130, z: -44, distrito: 'super' }),
   armeria: Object.freeze({ x: -82, z: -86, distrito: 'armeria' }),
   gasolinera: Object.freeze({ x: -33, z: 18, distrito: 'plaza' }),
   ranking: Object.freeze({ x: -18, z: 38, distrito: 'plaza' }),

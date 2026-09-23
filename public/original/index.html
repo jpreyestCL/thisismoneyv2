@@ -1211,7 +1211,7 @@ import { Reflector } from 'three/addons/objects/Reflector.js';                  
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { PARK, CAMPAIGNS, newPark, parkDate, startCampaign, maintainPark, settleParkDay, parkReport } from './src/park-business.js?v=1';
 import { CHAPTERS, GAME_RULES, dayDuration, houseRatings, monsterKillReward, nightDuration, roadmapFor } from './src/game-config.js?v=9';
-import { AVENIDAS, CALLE, CERROS, CONDOMINIO, DISTRITOS, LUGARES, MEDIA_CALLE, SEMAFOROS, callesDelMapa, distritoEn, enCalle, enCondominio, loteEn, lotePorId, lotesEnVenta, manzanasLibres, rectCalle, rectDistrito, rectLote, seCruzan } from './src/city-map.js?v=3';
+import { AVENIDAS, CALLE, CERROS, CONDOMINIO, DISTRITOS, LUGARES, MEDIA_CALLE, SEMAFOROS, callesDelMapa, distritoEn, enCalle, enCondominio, loteEn, lotePorId, lotesEnVenta, manzanasLibres, rectCalle, rectDistrito, rectLote, seCruzan } from './src/city-map.js?v=4';
 import { CHAT_BUBBLE_MS, CHAT_CUSTOM_MAX, CHAT_EMOJIS, CHAT_HISTORY, CHAT_MAX_LEN, CHAT_NAME_MAX, CHAT_STICKERS, accountNameKey, chatSendWait, chatTime, cleanAccountName, cleanChatName, cleanChatText, cleanStickerLabel, customStickerPayload, stickerFromText, stickerPayload } from './src/chat.js?v=4';
 const ui = id => document.getElementById(id);
 // Loader compartido con soporte meshopt. Los .glb están comprimidos (texturas WebP 1024 + geometría meshopt).
@@ -1300,7 +1300,7 @@ function trackBillboard(o) {
   return o;
 }
 
-const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, preferLowPerf ? 320 : 600);
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, preferLowPerf ? 800 : 2200);
 
 // Ajuste de tamaño robusto: el canvas SIEMPRE llena la pantalla, aunque Safari cambie el
 // viewport o el usuario haga zoom. Usa visualViewport si existe y NO escribe estilos inline
@@ -1432,6 +1432,108 @@ const groundMat = new THREE.MeshStandardMaterial({
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(1800, 1800), groundMat);
 ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
 scene.add(ground);
+ground.visible = false;
+
+function terrainWave(x, z, f) {
+  return Math.sin(x * f + 1.7) * Math.cos(z * f * 0.83 + 0.4);
+}
+function terrainField(x, z) {
+  return terrainWave(x, z, 0.00115) * 0.62 + terrainWave(x + 80, z - 40, 0.0024) * 0.28 + terrainWave(z, x, 0.0048) * 0.1;
+}
+function smoothGate(d, inner, outer) {
+  if (d <= inner) return 0;
+  if (d >= outer) return 1;
+  const t = (d - inner) / (outer - inner);
+  return t * t * (3 - 2 * t);
+}
+const SKI_PATH = [[150, 130], [200, 170], [245, 215], [285, 262], [300, 300], [345, 332], [380, 355], [520, 500]];
+function distToSkiRoad(x, z) {
+  let best = 1e9;
+  for (let i = 0; i < SKI_PATH.length - 1; i++) {
+    const ax = SKI_PATH[i][0], az = SKI_PATH[i][1], bx = SKI_PATH[i + 1][0], bz = SKI_PATH[i + 1][1];
+    const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1;
+    let t = ((x - ax) * dx + (z - az) * dz) / l2;
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    best = Math.min(best, Math.hypot(x - (ax + dx * t), z - (az + dz * t)));
+  }
+  return best;
+}
+const WILD_PEAKS = [
+  { x: 1100, z: -520, h: 96, r: 240 },
+  { x: -80, z: 1280, h: 84, r: 280 },
+  { x: 1380, z: 1040, h: 120, r: 300 },
+  { x: -980, z: 820, h: 72, r: 200 },
+  { x: 860, z: -1100, h: 78, r: 220 },
+  { x: -1200, z: -900, h: 64, r: 190 },
+];
+function wildHeight(x, z) {
+  const n = terrainField(x, z), n2 = terrainField(x + 500, z - 300);
+  let h = 3 + n * 8 + Math.max(0, n2) * 16;
+  const ridge = 1 - Math.abs(terrainWave(x, z, 0.0031));
+  h += Math.pow(Math.max(0, ridge), 3) * 26 * Math.max(0, n2 + 0.15);
+  for (const p of WILD_PEAKS) {
+    const d = Math.hypot(x - p.x, z - p.z);
+    if (d < p.r) h += p.h * Math.pow(1 - d / p.r, 1.55);
+  }
+  return Math.max(0, h);
+}
+function terrainMask(x, z) {
+  let m = smoothGate(Math.hypot(x, z), 320, 480);
+  m = Math.min(m, smoothGate(Math.hypot(x - 520, z - 500), 260, 390));
+  m = Math.min(m, smoothGate(Math.hypot(x + 1060, z + 155), 260, 400));
+  if (x < -145 && z > -430 && z < 90) return 0;
+  m = Math.min(m, smoothGate(distToSkiRoad(x, z), 18, 46));
+  for (const c of CERROS) m = Math.min(m, smoothGate(Math.hypot(x - c.x, z - c.z), c.r + 8, c.r + 48));
+  for (const d of DISTRITOS) {
+    const r = rectDistrito(d, 6);
+    if (x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ) return 0;
+  }
+  return m;
+}
+function terrainHeightAt(x, z) {
+  const m = terrainMask(x, z);
+  return m <= 0 ? 0 : wildHeight(x, z) * m;
+}
+function biomeTint(x, z, h, out) {
+  const m = terrainMask(x, z);
+  if (m < 0.05) { out.setHex(0x4a7c3a); return; }
+  const temp = terrainField(x + 220, z - 80);
+  const moist = terrainField(z + 140, x * 0.7);
+  let hex = 0x4f9a3c;
+  if (h > 48) hex = 0xf7fafc;
+  else if (h > 32) hex = 0x9aa3ad;
+  else if (h > 20) hex = 0x6e5b46;
+  else if (moist > 0.28 && temp > 0.05) hex = 0x3cb54a;
+  else if (moist > 0.2 && temp < -0.04) hex = 0x14321b;
+  else if (moist > 0.42) hex = 0x3c4630;
+  else if (moist < -0.22 && temp > 0.1) hex = 0xc4a56c;
+  else if (temp < -0.28) hex = 0xb7c6c2;
+  else if (moist < -0.1) hex = 0x5a4532;
+  out.setHex(hex).lerp(new THREE.Color(0x4a7c3a), 1 - m);
+}
+const EARTH_SIZE = 4600;
+const earthSeg = preferLowPerf ? 72 : 148;
+const earthGeo = new THREE.PlaneGeometry(EARTH_SIZE, EARTH_SIZE, earthSeg, earthSeg);
+const earthPos = earthGeo.attributes.position;
+const earthColors = new Float32Array(earthPos.count * 3);
+const earthTint = new THREE.Color();
+for (let i = 0; i < earthPos.count; i++) {
+  const x = earthPos.getX(i), z = -earthPos.getY(i);
+  const h = terrainHeightAt(x, z);
+  earthPos.setZ(i, h);
+  biomeTint(x, z, h, earthTint);
+  earthColors[i * 3] = earthTint.r; earthColors[i * 3 + 1] = earthTint.g; earthColors[i * 3 + 2] = earthTint.b;
+}
+earthGeo.setAttribute('color', new THREE.BufferAttribute(earthColors, 3));
+earthGeo.computeVertexNormals();
+const earthTerrain = new THREE.Mesh(earthGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0 }));
+earthTerrain.rotation.x = -Math.PI / 2;
+earthTerrain.receiveShadow = true;
+scene.add(earthTerrain);
+function showEarthGround(earth) {
+  earthTerrain.visible = !!earth;
+  ground.visible = !earth;
+}
 
 // ===================================================================
 //  PASTO 3D — matitas alrededor tuyo que se mecen con el viento
@@ -1860,7 +1962,9 @@ function makePerson(colorBody, colorHead) {
     m.position.set(x, y, z); m.castShadow = true; g.add(m); return m;
   };
   piece(new THREE.CapsuleGeometry(0.22, 0.5, 4, 10), colorBody, 0, 1.35, 0);
-  piece(new THREE.SphereGeometry(0.26, 16, 12), colorHead, 0, 2.08, 0);
+  const cuello = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.28, 10), skin(colorHead));
+  cuello.position.set(0, 1.72, 0); cuello.castShadow = true; g.add(cuello);
+  piece(new THREE.SphereGeometry(0.28, 16, 12), colorHead, 0, 1.9, 0);
   const limb = (col, radius, length, x, pivotY) => {
     const pivot = new THREE.Group(); pivot.position.set(x, pivotY, 0);
     const m = new THREE.Mesh(new THREE.CapsuleGeometry(radius, length, 3, 8), skin(col));
@@ -1868,16 +1972,15 @@ function makePerson(colorBody, colorHead) {
   };
   const dot = (radius, col, x, y, z) => piece(new THREE.SphereGeometry(radius, 10, 8), col, x, y, z);
   for (const sx of [-0.09, 0.09]) {
-    dot(0.045, 0xf8fafc, sx, 2.12, 0.2);
-    dot(0.022, 0x1f2937, sx + (sx > 0 ? 0.012 : -0.012), 2.11, 0.232);
+    dot(0.045, 0xf8fafc, sx, 1.94, 0.2);
+    dot(0.022, 0x1f2937, sx + (sx > 0 ? 0.012 : -0.012), 1.93, 0.232);
   }
-  piece(new THREE.SphereGeometry(0.035, 8, 6), 0xcf9b6d, 0, 2.02, 0.24);
-  piece(new THREE.SphereGeometry(0.055, 8, 6), colorHead, -0.24, 2.08, 0);
-  piece(new THREE.SphereGeometry(0.055, 8, 6), colorHead, 0.24, 2.08, 0);
+  piece(new THREE.SphereGeometry(0.035, 8, 6), 0xcf9b6d, 0, 1.84, 0.24);
+  piece(new THREE.SphereGeometry(0.055, 8, 6), colorHead, -0.24, 1.9, 0);
+  piece(new THREE.SphereGeometry(0.055, 8, 6), colorHead, 0.24, 1.9, 0);
   const pelo = 0x3b2b1f;
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), skin(pelo));
-  hair.position.set(0, 2.16, -0.03); hair.castShadow = true; g.add(hair);
-  piece(smoothBox(0.2, 0.08, 0.26), colorHead, 0, 1.78, 0);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.58), skin(pelo));
+  hair.position.set(0, 1.98, -0.02); hair.castShadow = true; g.add(hair);
   piece(smoothBox(0.46, 0.08, 0.28), 0x27303f, 0, 0.98, 0);
   piece(smoothBox(0.1, 0.07, 0.03), 0xd4a017, 0, 0.98, 0.15);
   const armL = limb(colorBody, 0.09, 0.62, -0.34, 1.78);
@@ -1931,7 +2034,7 @@ function applyMinecraftArmor(person, tier, scale) {
   };
   const limbs = person.userData.limbs || {};
   const helm = new THREE.Mesh(new THREE.SphereGeometry(0.32 * k, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), mat(T.color));
-  helm.position.set(0, 2.18 * k, -0.02 * k); helm.castShadow = true; person.add(helm); parts.push(helm);
+  helm.position.set(0, 2.0 * k, -0.02 * k); helm.castShadow = true; person.add(helm); parts.push(helm);
   piece(person, .5, .58, .46, 0, 1.38, 0.03, T.color);       // peto
   piece(person, .48, .1, .3, 0, 1.04, 0.05, T.trim);         // cinturón
   piece(person, .28, .08, .28, 0, 1.72, 0.04, T.trim);       // cuello
@@ -2829,6 +2932,34 @@ function techoCasa(g, tipo, cx, cz, w, d, y, color) {
   cono.position.set(cx, y + .22 + alto / 2, cz); cono.castShadow = true; g.add(cono);
   return y + .22 + alto;
 }
+const HOUSE_POOLS = [];
+function placeYardPool(parent, lx, lz, rot, ox, oz) {
+  const pw = 2.4, pd = 1.45, deep = 1.5, surface = 0.32;
+  const agua = new THREE.MeshStandardMaterial({
+    color: 0x22b8e6, transparent: true, opacity: 0.55, roughness: 0.12, metalness: 0.05,
+    depthWrite: false, side: THREE.DoubleSide,
+  });
+  const borde = (px, py, pz, w, h, d) => {
+    const m = new THREE.Mesh(smoothBox(w, h, d), mat(0xe7e5e4));
+    m.position.set(px, py, pz); m.castShadow = true; parent.add(m);
+  };
+  borde(lx, 0.16, lz - pd / 2, pw + 0.5, 0.32, 0.22);
+  borde(lx - pw / 2, 0.16, lz, 0.22, 0.32, pd);
+  borde(lx + pw / 2, 0.16, lz, 0.22, 0.32, pd);
+  const piso = new THREE.Mesh(smoothBox(pw - 0.2, 0.1, pd - 0.2), mat(0x7dd3fc));
+  piso.position.set(lx, -deep + 0.05, lz); parent.add(piso);
+  const vol = new THREE.Mesh(smoothBox(pw - 0.16, deep, pd - 0.16), agua);
+  vol.position.set(lx, surface - deep / 2, lz); parent.add(vol);
+  const cs = Math.cos(rot), sn = Math.sin(rot);
+  const wx = ox + lx * cs + lz * sn, wz = oz - lx * sn + lz * cs;
+  const girada = Math.abs(cs) < 0.5;
+  HOUSE_POOLS.push({
+    cx: wx, cz: wz,
+    waterW: (girada ? pd : pw) - 0.28,
+    waterD: (girada ? pw : pd) - 0.28,
+    surface, bottom: -deep + 0.2,
+  });
+}
 let houseSerial = 0;
 function makeCityHouse(x, z, golden, rot = 0, maxW = 7.5, maxD = 7.5, plan = null) {
   plan = plan || planDeCasa(maxW, maxD) || planDeCasa(4, 4);
@@ -2942,6 +3073,7 @@ function makeCityHouse(x, z, golden, rot = 0, maxW = 7.5, maxD = 7.5, plan = nul
     }
     caja(bx, h1 + .1, pz, bw * .98, .34, 2.1, plan.tejas);
   }
+  if (w >= 4.2 && d >= 3.6) placeYardPool(g, bx, bz - bd / 2 - 1.2, rot, x, z);
   g.position.set(x, 0, z); scene.add(g);
   // pista secreta: la del tesoro es la ÚNICA en la que puedes entrar (las demás te bloquean)
   if (!golden) {
@@ -3304,15 +3436,15 @@ function restoreAlleyExitWorld() {
   if (planet === 'platus') {
     setEarthWorld(false); setCityVisible(false); if (typeof setCountryVisible === 'function') setCountryVisible(false);
     if (typeof setPlatusVisible === 'function') setPlatusVisible(true);
-    ground.visible = true; scene.fog.near = 1; scene.fog.far = 160;
+    showEarthGround(false); scene.fog.near = 1; scene.fog.far = 160;
   } else if (country) {
     setEarthWorld(false); setCityVisible(false); if (typeof setPlatusVisible === 'function') setPlatusVisible(false);
     if (typeof setCountryVisible === 'function') setCountryVisible(true);
-    ground.visible = true; scene.fog.near = 1; scene.fog.far = 320;
+    showEarthGround(false); scene.fog.near = 1; scene.fog.far = 320;
   } else {
     setEarthWorld(true); setCityVisible(true); if (typeof setPlatusVisible === 'function') setPlatusVisible(false);
     if (typeof setCountryVisible === 'function') setCountryVisible(false);
-    ground.visible = true; scene.fog.near = 1; scene.fog.far = 900;
+    showEarthGround(true); scene.fog.near = 1; scene.fog.far = 1400;
   }
 }
 function showAlleyWorld(on) {
@@ -3322,7 +3454,7 @@ function showAlleyWorld(on) {
     alley.skyWas = scene.background.getHex ? scene.background.getHex() : 0x87ceeb;
     setEarthWorld(false); setCityVisible(false); if (typeof setCountryVisible === 'function') setCountryVisible(false);
     if (typeof setPlatusVisible === 'function') setPlatusVisible(false);
-    ground.visible = false;
+    ground.visible = false; if (typeof earthTerrain !== 'undefined') earthTerrain.visible = false;
     if (typeof skiResortGroup !== 'undefined' && skiResortGroup) skiResortGroup.visible = false;
     if (typeof oceanFxGroup !== 'undefined' && oceanFxGroup) oceanFxGroup.visible = false;
     applyAlleySky();
@@ -3332,7 +3464,7 @@ function showAlleyWorld(on) {
   } else {
     setAlleyCollisions(false);
     if (alley.root) alley.root.visible = false;
-    ground.visible = true;
+    showEarthGround(state.planet !== 'platus' && !state.country);
     dad.visible = true;
     restoreAlleyExitWorld();
   }
@@ -4659,7 +4791,7 @@ function tryRob() {
 // Árboles (en la Tierra)
 const decor = [];
 let worldTreeTrunks=null,worldTreeLeaves=null,worldTreeLeaves2=null,worldTreeLeaves3=null;
-const worldTreeSpots=[], worldTreeSizes=[];
+const worldTreeSpots=[], worldTreeSizes=[], worldTreeBase=[], worldTreeObs=[];
 function buildTrees() {   // árboles INSTANCIADOS: ~100 árboles en solo 2 draw calls (rinde mejor en celular)
   const spots = [];
   const plant = (r0, r1) => {
@@ -4681,6 +4813,14 @@ function buildTrees() {   // árboles INSTANCIADOS: ~100 árboles en solo 2 draw
       spots.push([x, z]);
     }
   }
+  for (let i = 0; i < (preferLowPerf ? 36 : 100); i++) {
+    const x = (Math.random() - 0.5) * 4200, z = (Math.random() - 0.5) * 4200;
+    if (terrainMask(x, z) < 0.62) continue;
+    const h = terrainHeightAt(x, z);
+    if (h < 0.8 || h > 18) continue;
+    if (enCalle(x, z, 4) || distritoEn(x, z, 6)) continue;
+    spots.push([x, z]);
+  }
   worldTreeSpots.push(...spots);
   // Tronco con corteza y copa de TRES pisos (la de arriba más chica): sigue siendo
   // instanciado, así que son pocos draw calls aunque haya cientos de árboles.
@@ -4696,15 +4836,18 @@ function buildTrees() {   // árboles INSTANCIADOS: ~100 árboles en solo 2 draw
   const up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
   spots.forEach(([x, z], i) => {
     const alto = .85 + Math.random() * .5, giro = Math.random() * Math.PI * 2;
+    const base = terrainHeightAt(x, z);
     worldTreeSizes.push(alto);
+    worldTreeBase.push(base);
     q.setFromAxisAngle(up, giro);
-    pos.set(x, 1.7 * alto, z); esc.set(1, alto, 1); m4.compose(pos, q, esc); trunks.setMatrixAt(i, m4);
+    pos.set(x, base + 1.7 * alto, z); esc.set(1, alto, 1); m4.compose(pos, q, esc); trunks.setMatrixAt(i, m4);
     const verde = col.setHSL(.26 + Math.random() * .07, .48 + Math.random() * .22, .22 + Math.random() * .12);
     leaves.setColorAt(i, verde); leaves2.setColorAt(i, verde.clone().offsetHSL(0, 0, .05)); leaves3.setColorAt(i, verde.clone().offsetHSL(0, 0, .1));
     const anchoA = .9 + Math.random() * .35;
-    pos.set(x, 3.4 * alto, z); esc.set(anchoA, alto, anchoA); m4.compose(pos, q, esc); leaves.setMatrixAt(i, m4);
-    pos.set(x, 4.6 * alto, z); esc.set(anchoA, alto, anchoA); m4.compose(pos, q, esc); leaves2.setMatrixAt(i, m4);
-    pos.set(x, 5.6 * alto, z); esc.set(anchoA, alto, anchoA); m4.compose(pos, q, esc); leaves3.setMatrixAt(i, m4);
+    pos.set(x, base + 3.4 * alto, z); esc.set(anchoA, alto, anchoA); m4.compose(pos, q, esc); leaves.setMatrixAt(i, m4);
+    pos.set(x, base + 4.6 * alto, z); esc.set(anchoA, alto, anchoA); m4.compose(pos, q, esc); leaves2.setMatrixAt(i, m4);
+    pos.set(x, base + 5.6 * alto, z); esc.set(anchoA, alto, anchoA); m4.compose(pos, q, esc); leaves3.setMatrixAt(i, m4);
+    worldTreeObs.push(addObstacle(x, z, 0.9, 0.9, base + 2.35, 'arbol'));
   });
   scene.add(trunks); scene.add(leaves); scene.add(leaves2); scene.add(leaves3);
   decor.push(trunks, leaves, leaves2, leaves3);
@@ -4747,6 +4890,7 @@ function waterZoneAt(x, z) {
     const lx=dx*c-dz*s,lz=dx*s+dz*c;
     if(Math.abs(lx)<2.4&&Math.abs(lz)<1.5)return o.poolZone||{surface:(o.baseY||0)+.55,bottom:o.baseY||0};
   }
+  for (const w of HOUSE_POOLS) if (Math.abs(x - w.cx) < w.waterW / 2 && Math.abs(z - w.cz) < w.waterD / 2) return w;
   for (const w of WATER_ZONES) if (Math.abs(x - w.cx) < w.waterW / 2 && Math.abs(z - w.cz) < w.waterD / 2) return w;
   return null;
 }
@@ -5404,6 +5548,9 @@ function mcTree(parent, x, z, h, leaf, baseY) {     // árbol de parque: tronco 
   const tronco = new THREE.Mesh(new THREE.CylinderGeometry(.28, .45, t, 7), mat(0x6b4423));
   tronco.position.set(x, y0 + t / 2, z); tronco.castShadow = true; parent.add(tronco);
   if (typeof addLandingSurface === 'function') addLandingSurface(x, z, 3, 3, y0 + t + 1.5, parent);   // te puedes parar sobre la copa
+  parent.updateWorldMatrix(true, false);
+  _mcFloorV.set(x, 0, z).applyMatrix4(parent.matrixWorld);
+  addObstacle(_mcFloorV.x, _mcFloorV.z, 0.95, 0.95, y0 + 2.35, 'arbol');
   const L = leaf || 0x3f8f29;
   const capa = (y, s, giro) => {
     const c = new THREE.Mesh(smoothBox(s, s * .38, s), mat(L));
@@ -5432,6 +5579,10 @@ function mcBench(parent, x, z, rot) {              // banca de plaza: tablas, re
     mcBox(g, sx, .62, .18, .1, .1, .42, 0x475569);            // apoyabrazos
     mcBox(g, sx, .78, 0, .1, .35, .1, 0x475569);
   }
+  parent.updateWorldMatrix(true, true);
+  _mcFloorV.set(0, 0, 0).applyMatrix4(g.matrixWorld);
+  const girada = Math.abs(Math.cos(rot || 0)) < 0.5;
+  addObstacle(_mcFloorV.x, _mcFloorV.z, girada ? 0.7 : 2.2, girada ? 2.2 : 0.7, 0.95, 'banca');
   return g;
 }
 function mcLamp(parent, x, z, color) {             // farol de parque: base, poste, farola de vidrio y remate
@@ -5444,6 +5595,9 @@ function mcLamp(parent, x, z, color) {             // farol de parque: base, pos
   vidrio.position.y = 3.85; g.add(vidrio);
   const techito = new THREE.Mesh(new THREE.ConeGeometry(.5, .38, 6), mat(0x27272a)); techito.position.y = 4.42; techito.castShadow = true; g.add(techito);
   const perilla = new THREE.Mesh(new THREE.SphereGeometry(.08, 6, 5), mat(0x52525b)); perilla.position.y = 4.68; g.add(perilla);
+  parent.updateWorldMatrix(true, false);
+  _mcFloorV.set(x, 0, z).applyMatrix4(parent.matrixWorld);
+  addObstacle(_mcFloorV.x, _mcFloorV.z, 0.5, 0.5, 2.2, 'farol');
   return g;
 }
 function mcFlowers(parent, x, z, r) {   // macizo de flores de colores
@@ -5468,24 +5622,82 @@ function mcBush(parent, x, z, r) {   // arbusto redondeado
     b.position.set((Math.random() - .5) * r, (r || 1) * (.45 + Math.random() * .3), (Math.random() - .5) * r);
     b.castShadow = true; g.add(b);
   }
+  parent.updateWorldMatrix(true, false);
+  _mcFloorV.set(x, 0, z).applyMatrix4(parent.matrixWorld);
+  addObstacle(_mcFloorV.x, _mcFloorV.z, Math.max(0.8, (r || 1) * 1.1), Math.max(0.8, (r || 1) * 1.1), 1.15, 'arbusto');
   return g;
 }
-function mcFence(parent, cx, cz, w, d, color, gapW, gapNorte) {   // reja baja (decorativa, no bloquea)
+function mcFence(parent, cx, cz, w, d, color, gapW, gapNorte, gapSide) {   // reja: se ve y no se atraviesa
   const step = 2, g = new THREE.Group(); parent.add(g);
-  for (let x = -w / 2; x <= w / 2; x += step) {   // gapNorte deja la entrada por el lado +z
-    if (gapNorte || Math.abs(x) > gapW / 2) mcBox(g, cx + x, .6, cz - d / 2, .25, 1.2, .25, color);
-    if (!gapNorte || Math.abs(x) > gapW / 2) mcBox(g, cx + x, .6, cz + d / 2, .25, 1.2, .25, color);
+  const gap = gapW || 0;
+  const side = gapSide || (gap > 0.3 ? (gapNorte ? 'n' : 's') : null);
+  const abierto = (eje, coord) => {
+    if (!side || gap <= 0.3) return false;
+    if (eje === 'z' && side === 'n') return coord > cz;
+    if (eje === 'z' && side === 's') return coord < cz;
+    if (eje === 'x' && side === 'e') return coord > cx;
+    if (eje === 'x' && side === 'w') return coord < cx;
+    return false;
+  };
+  const enHueco = (along, off) => along && Math.abs(off) <= gap / 2;
+  for (let x = -w / 2; x <= w / 2 + 0.01; x += step) {
+    if (!enHueco(abierto('z', cz - d / 2), x)) mcBox(g, cx + x, .6, cz - d / 2, .25, 1.2, .25, color);
+    if (!enHueco(abierto('z', cz + d / 2), x)) mcBox(g, cx + x, .6, cz + d / 2, .25, 1.2, .25, color);
   }
-  for (let z = -d / 2; z <= d / 2; z += step) {
-    mcBox(g, cx - w / 2, .6, cz + z, .25, 1.2, .25, color);
-    mcBox(g, cx + w / 2, .6, cz + z, .25, 1.2, .25, color);
+  for (let z = -d / 2; z <= d / 2 + 0.01; z += step) {
+    if (!enHueco(abierto('x', cx - w / 2), z)) mcBox(g, cx - w / 2, .6, cz + z, .25, 1.2, .25, color);
+    if (!enHueco(abierto('x', cx + w / 2), z)) mcBox(g, cx + w / 2, .6, cz + z, .25, 1.2, .25, color);
   }
-  for (const sx of [-1, 1]) {   // pasamanos arriba y abajo (se ve como una reja de verdad)
-    mcBox(g, cx + sx * w / 2, 1.18, cz, .12, .1, d, color);
-    mcBox(g, cx + sx * w / 2, .35, cz, .1, .08, d, color);
-    mcBox(g, cx, 1.18, cz + sx * d / 2, w, .1, .12, color);
-    mcBox(g, cx, .35, cz + sx * d / 2, w, .08, .1, color);
-  }
+  const riel = (eje, pos, y, largo, alto, grueso) => {
+    if (abierto(eje, pos) && gap < largo - 0.6) {
+      const trozo = (largo - gap) / 2;
+      if (trozo < 0.3) return;
+      if (eje === 'z') {
+        mcBox(g, cx - gap / 2 - trozo / 2, y, pos, trozo, alto, grueso, color);
+        mcBox(g, cx + gap / 2 + trozo / 2, y, pos, trozo, alto, grueso, color);
+      } else {
+        mcBox(g, pos, y, cz - gap / 2 - trozo / 2, grueso, alto, trozo, color);
+        mcBox(g, pos, y, cz + gap / 2 + trozo / 2, grueso, alto, trozo, color);
+      }
+      return;
+    }
+    if (eje === 'z') mcBox(g, cx, y, pos, largo, alto, grueso, color);
+    else mcBox(g, pos, y, cz, grueso, alto, largo, color);
+  };
+  riel('x', cx - w / 2, 1.18, d, .1, .12);
+  riel('x', cx + w / 2, 1.18, d, .1, .12);
+  riel('x', cx - w / 2, .35, d, .08, .1);
+  riel('x', cx + w / 2, .35, d, .08, .1);
+  riel('z', cz - d / 2, 1.18, w, .1, .12);
+  riel('z', cz + d / 2, 1.18, w, .1, .12);
+  riel('z', cz - d / 2, .35, w, .08, .1);
+  riel('z', cz + d / 2, .35, w, .08, .1);
+  parent.updateWorldMatrix(true, false);
+  const muro = (lx, lz, bw, bd) => {
+    _mcFloorV.set(lx, 0, lz).applyMatrix4(parent.matrixWorld);
+    addObstacle(_mcFloorV.x, _mcFloorV.z, bw, bd, 1.35, 'valla');
+  };
+  const lado = (eje, pos, largo) => {
+    const t = 0.42;
+    if (abierto(eje, pos) && gap < largo - 0.6) {
+      const trozo = (largo - gap) / 2;
+      if (trozo < 0.35) return;
+      if (eje === 'z') {
+        muro(cx - gap / 2 - trozo / 2, pos, trozo, t);
+        muro(cx + gap / 2 + trozo / 2, pos, trozo, t);
+      } else {
+        muro(pos, cz - gap / 2 - trozo / 2, t, trozo);
+        muro(pos, cz + gap / 2 + trozo / 2, t, trozo);
+      }
+      return;
+    }
+    if (eje === 'z') muro(cx, pos, largo, t);
+    else muro(pos, cz, t, largo);
+  };
+  lado('z', cz - d / 2, w);
+  lado('z', cz + d / 2, w);
+  lado('x', cx - w / 2, d);
+  lado('x', cx + w / 2, d);
   return g;
 }
 function mcSign(parent, x, y, z, text, color) {
@@ -5884,6 +6096,10 @@ function mountainHeightAt(x, z) {
     const hh = mountainProfile(m, x - m.x, z - m.z);
     if (hh > best) best = hh;
   }
+  if (here === 'tierra' && !state.country) {
+    const wild = terrainHeightAt(x, z);
+    if (wild > best) best = wild;
+  }
   return best;
 }
 // La montaña es SÓLIDA: volar o pilotar nunca atraviesa el volumen de roca.
@@ -5934,6 +6150,7 @@ function mcMountain(parent, cx, cz, r, h, rock, cap, seed, planet, opts) {
   geo.computeVertexNormals();
   const slope = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }));
   slope.receiveShadow = true;
+  slope.position.set(cx, 0, cz);
   parent.add(slope);
   // Piedras sueltas repartidas por la ladera
   for (let i = 0; i < 10; i++) {
@@ -7099,7 +7316,7 @@ function buildCondominio() {
   addNoGrassZone(centroPasaje, pas.z, largoPasaje, pas.ancho + 2.4);
 
   // Reja perimetral y portón al pasaje (mira a la avenida del oeste).
-  mcFence(g, cx, cz, manzana.w - 1.4, manzana.d - 1.4, 0x7c8798, 0);
+  mcFence(g, cx, cz, manzana.w - 1.4, manzana.d - 1.4, 0x7c8798, pas.ancho + 1.6, false, 'w');
   const porton = CONDOMINIO.porton;
   for (const sz of [-1, 1]) {   // pilares del portón
     mcBox(g, porton.x, 1.9, porton.z + sz * (pas.ancho / 2 + .9), 1.2, 3.8, 1.2, 0xb9a88a);
@@ -7175,6 +7392,7 @@ function setEarthWorld(v) {   // muestra/oculta la Tierra completa (con sus coli
   if (!v) { for (const o of earthObstacles) { const i = obstacles.indexOf(o); if (i >= 0) obstacles.splice(i, 1); } }
   else { for (const o of earthObstacles) if (!obstacles.includes(o)) obstacles.push(o); }
   setCityVisible(v);
+  showEarthGround(!!v && state.planet !== 'platus' && !state.country);
 }
 
 if (typeof buildDarkAlley === 'function') buildDarkAlley();
@@ -8579,12 +8797,13 @@ function rebuildPlayerStructureZones(){
     const m4=new THREE.Matrix4(),q=new THREE.Quaternion(),pos=new THREE.Vector3(),esc=new THREE.Vector3(),up=new THREE.Vector3(0,1,0);
     for(let i=0;i<worldTreeSpots.length;i++){
       const [x,z]=worldTreeSpots[i],alto=worldTreeSizes[i]||1,hidden=insidePlayerStructure(x,z,1.4);
-      const y0=hidden?-200:0;
+      const base=hidden?-200:(worldTreeBase[i]||0);
       q.setFromAxisAngle(up,0);
-      pos.set(x,y0+1.7*alto,z);esc.set(1,alto,1);m4.compose(pos,q,esc);worldTreeTrunks.setMatrixAt(i,m4);
-      pos.set(x,y0+3.4*alto,z);esc.set(1,alto,1);m4.compose(pos,q,esc);worldTreeLeaves.setMatrixAt(i,m4);
-      pos.set(x,y0+4.6*alto,z);m4.compose(pos,q,esc);worldTreeLeaves2.setMatrixAt(i,m4);
-      pos.set(x,y0+5.6*alto,z);m4.compose(pos,q,esc);worldTreeLeaves3.setMatrixAt(i,m4);
+      pos.set(x,base+1.7*alto,z);esc.set(1,alto,1);m4.compose(pos,q,esc);worldTreeTrunks.setMatrixAt(i,m4);
+      const ob=worldTreeObs[i]; if(ob){ ob.top=hidden?-80:(worldTreeBase[i]||0)+2.35; }
+      pos.set(x,base+3.4*alto,z);esc.set(1,alto,1);m4.compose(pos,q,esc);worldTreeLeaves.setMatrixAt(i,m4);
+      pos.set(x,base+4.6*alto,z);m4.compose(pos,q,esc);worldTreeLeaves2.setMatrixAt(i,m4);
+      pos.set(x,base+5.6*alto,z);m4.compose(pos,q,esc);worldTreeLeaves3.setMatrixAt(i,m4);
     }
     worldTreeTrunks.instanceMatrix.needsUpdate=true;worldTreeLeaves.instanceMatrix.needsUpdate=true;
     worldTreeLeaves2.instanceMatrix.needsUpdate=true;worldTreeLeaves3.instanceMatrix.needsUpdate=true;
@@ -13121,7 +13340,12 @@ function leaderboardStatsFor(name) {
     return { money: Math.max(0, Math.floor(Number(d.money) || 0)), stage: d.stage || 1, creative: !!d.creative };
   } catch (e) { return null; }
 }
-const LEADERBOARD_API = location.protocol === 'file:' ? 'https://tim.strivexlatam.com/api/leaderboard' : '/api/leaderboard';
+function apiOnThisHost(path) {
+  const host = location.hostname;
+  if (location.protocol !== 'file:' && (host === 'tim.strivexlatam.com' || host === 'www.tim.strivexlatam.com')) return path;
+  return 'https://tim.strivexlatam.com' + path;
+}
+const LEADERBOARD_API = apiOnThisHost('/api/leaderboard');
 try {
   leaderboardPlayerId = localStorage.getItem('tim_leaderboard_id');
   if (!leaderboardPlayerId) {
@@ -13213,7 +13437,7 @@ document.querySelectorAll('.ranking-tab').forEach(b => b.onclick = () => loadLea
 //  Por debajo es la misma API mundial del ranking (server/leaderboard.mjs):
 //  el cliente pregunta cada pocos segundos "¿qué se dijo después de N?".
 // ===================================================================
-const CHAT_API = location.protocol === 'file:' ? 'https://tim.strivexlatam.com/api/chat' : '/api/chat';
+const CHAT_API = apiOnThisHost('/api/chat');
 const chat = {
   lastId: null,      // último mensaje que ya vimos (null = todavía no escuchamos)
   online: 0,
@@ -13779,7 +14003,7 @@ function saveGame() {
   } catch (e) {}
 }
 function hasSave() { return getProfiles().some(n => { try { return !!localStorage.getItem(profileKey(n)); } catch (e) { return false; } }); }
-const SAVES_API = location.protocol === 'file:' ? 'https://tim.strivexlatam.com/api/saves' : '/api/saves';
+const SAVES_API = apiOnThisHost('/api/saves');
 let cloudPass = '';
 let saveKeyAfter = null;
 async function cloudNameStatus(name) {
@@ -13873,6 +14097,56 @@ function closeCloudLoginBox() {
   ui('cloudLoginErr').textContent = '';
   typing = algunRecuadroAbierto();
 }
+function knownSaveNames() {
+  const names = [];
+  const add = (raw) => {
+    const clean = desiredAccountName(raw);
+    if (!clean || names.some(n => accountNameKey(n) === accountNameKey(clean))) return;
+    names.push(clean);
+  };
+  try {
+    getProfiles().forEach(add);
+    add(activeProfile());
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) || '';
+      if (k.startsWith('tim_save_')) add(k.slice('tim_save_'.length));
+      else if (k.startsWith('tim_cloud_ok_')) add(k.slice('tim_cloud_ok_'.length));
+    }
+  } catch (e) {}
+  return names;
+}
+function localSaveFor(name) {
+  try {
+    const save = JSON.parse(localStorage.getItem(profileKey(name)) || 'null');
+    return save && typeof save === 'object' ? save : null;
+  } catch (e) { return null; }
+}
+async function fetchCloudSave(name, pass) {
+  const r = await fetch(SAVES_API, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'load', name, password: pass }),
+    signal: AbortSignal.timeout(20000),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || 'No se pudo cargar');
+  if (!d.save || typeof d.save !== 'object') throw new Error('La partida llegó vacía');
+  return { save: d.save, name: desiredAccountName(d.name || name) || name };
+}
+function enterLoadedSave(found, pass, fromCloud) {
+  const usedName = found.name;
+  if (isDavidAccount(usedName) && !davidGateOpen) throw new Error('Clave incorrecta');
+  setProfile(usedName);
+  syncAccountNames(usedName);
+  localStorage.setItem(profileKey(usedName), JSON.stringify(found.save));
+  cloudPass = pass;
+  try { localStorage.setItem('tim_cloud_ok_' + usedName, '1'); } catch (e) {}
+  closeCloudLoginBox();
+  ui('namebox').style.display = 'none';
+  ui('profilebox').style.display = 'none';
+  continueGame();
+  toast(fromCloud ? '☁️ Partida cargada con tu clave' : '💾 Recuperé la partida que estaba en este aparato');
+}
 async function submitCloudLogin() {
   const name = desiredAccountName(ui('cloudLoginName').value);
   const pass = String(ui('cloudLoginPass').value || '');
@@ -13895,31 +14169,31 @@ async function submitCloudLogin() {
   }
   ui('cloudLoginOk').disabled = true;
   err.textContent = 'Buscando tu partida…';
-  try {
-    const r = await fetch(SAVES_API, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'load', name, password: pass }),
-      signal: AbortSignal.timeout(20000),
-    });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(d.error || 'No se pudo cargar');
-    if (!d.save || typeof d.save !== 'object') throw new Error('La partida llegó vacía');
-    const usedName = desiredAccountName(d.name || name) || name;
-    if (isDavidAccount(usedName) && !davidGateOpen) throw new Error('Clave incorrecta');
-    setProfile(usedName);
-    syncAccountNames(usedName);
-    localStorage.setItem(profileKey(usedName), JSON.stringify(d.save));
-    cloudPass = pass;
-    try { localStorage.setItem('tim_cloud_ok_' + usedName, '1'); } catch (e) {}
-    closeCloudLoginBox();
-    ui('namebox').style.display = 'none';
-    ui('profilebox').style.display = 'none';
-    continueGame();
-    toast('☁️ Partida cargada con tu usuario y clave');
-  } catch (e) {
-    err.textContent = e.message || 'Nombre o clave incorrectos';
+  const candidates = [name, ...knownSaveNames().filter(n => accountNameKey(n) !== accountNameKey(name))];
+  let found = null, lastErr = null, wrongPass = false;
+  for (let i = 0; i < candidates.length; i++) {
+    try {
+      found = await fetchCloudSave(candidates[i], pass);
+      break;
+    } catch (e) {
+      lastErr = e;
+      const msg = String(e.message || '');
+      if (i === 0 && /clave|contrase|password|incorrect/i.test(msg)) { wrongPass = true; break; }
+    }
   }
+  if (!found && !wrongPass) {
+    const local = localSaveFor(name);
+    if (local) found = { save: local, name, local: true };
+  }
+  if (!found) {
+    err.textContent = wrongPass
+      ? 'La clave no coincide'
+      : ((lastErr && lastErr.message && !/failed|fetch|network|load/i.test(String(lastErr.message))) ? lastErr.message : 'No se pudo cargar con esa clave. Usa el mismo usuario con el que guardaste el mundo.');
+    ui('cloudLoginOk').disabled = false;
+    return;
+  }
+  try { enterLoadedSave(found, pass, !found.local); }
+  catch (e) { err.textContent = e.message || 'No se pudo cargar'; }
   ui('cloudLoginOk').disabled = false;
 }
 ui('saveKeyOk').onclick = () => submitSaveKey();
@@ -13953,7 +14227,7 @@ function applyPerfMode() {   // modo rendimiento: sin sombras, menos resolución
   renderer.toneMappingExposure = perfMode ? 1 : 1.15;
   renderer.setPixelRatio(perfMode ? (perfExtra ? 0.75 : 1) : Math.min(devicePixelRatio, 2));
   // la niebla tapa todo desde ~160: dibujar hasta 600 es puro gasto en equipos lentos
-  camera.far = perfMode ? (perfExtra ? 220 : 320) : 600; camera.updateProjectionMatrix();
+  camera.far = perfMode ? (perfExtra ? 480 : 800) : 2200; camera.updateProjectionMatrix();
 }
 // ---- Detector de lag: si el juego va lento un par de segundos, baja la calidad solo ----
 let fpsMedT = 0, fpsMedN = 0, fpsLento = 0, autoPerfStage = 0, autoPerfLock = false, fpsPrev = 0;
@@ -14605,7 +14879,7 @@ function loadGame() {
   state.baseLevel = d.baseLevel || 0; state.baseTurrets = d.baseTurrets || 0; state.baseGenerator = !!d.baseGenerator;   // base espacial
   if (state.planet === 'platus') { groundMat.color.set(state.planetGround || 0x9c4a2a); decor.forEach(t => t.visible = false); setEarthWorld(false); setPlatusVisible(true); refillCrystals(); refillGeodes(); refillBuriedTreasures(); refillEggs(); refillRuins(); state.inCastle = false; setCastleVisible(false); refillCastle(); state.inArena = false; setColiVisible(false); clearArenaFoes(); refillColiseum(); refillFloatingWorld(); spawnBase(); applyPlanetLook({ trees: 0x4a3728, moons: [0xd946ef, 0x38bdf8], fog: 160, ...PLANETS.find(p => p.name === state.planetName) }); applySpaceSuit(true); }
   else if(state.country){const c=currentCountry();groundMat.color.set(c.ground);decor.forEach(t=>t.visible=false);buildCountry(c);setCountryVisible(true);setEarthWorld(false);setCityVisible(false);setPlatusVisible(false);applySpaceSuit(false);removeBase();scene.background.set(c.sky);scene.fog.far=320;syncPlacedCountryVisibility();}
-  else { groundMat.color.set(0x4a7c3a); decor.forEach(t => t.visible = true); setEarthWorld(true); setCityVisible(true); setPlatusVisible(false); applySpaceSuit(false); removeBase(); scene.fog.far = 900; syncPlacedCountryVisibility(); }
+  else { groundMat.color.set(0x4a7c3a); decor.forEach(t => t.visible = true); setEarthWorld(true); setCityVisible(true); setPlatusVisible(false); applySpaceSuit(false); removeBase(); scene.fog.far = 1400; syncPlacedCountryVisibility(); }
   selectedCrop = CROP_DEFS[d.selectedCrop] ? d.selectedCrop : 'apple';
   (d.plants || []).forEach(p => spawnPlant(p.x, p.z, p.grow, p.produce != null ? p.produce : p.apples, p.crop || 'apple'));   // huerto: reponer cultivos y saves antiguos
   state.helperWeapon = !!d.helperWeapon; state.helperArmor = !!d.helperArmor;   // arma/armadura de los hijos (antes de recrearlos)
@@ -14910,12 +15184,18 @@ function updateDriving(dt) {
   }
   // El mapa ampliado incluye el camino al centro de esquí (x/z hasta 800).
   // Mantener el auto dentro de esos límites permite llegar a la montaña.
-  car.group.position.x = THREE.MathUtils.clamp(car.group.position.x, car.helicopter ? worldWestLimit() : -800, 800);
-  car.group.position.z = THREE.MathUtils.clamp(car.group.position.z, -600, 800);
+  if (!car.helicopter) {
+    const prevH = mountainHeightAt(prevX, prevZ);
+    const nextH = mountainHeightAt(car.group.position.x, car.group.position.z);
+    const horiz = Math.hypot(car.group.position.x - prevX, car.group.position.z - prevZ);
+    if (nextH > prevH + Math.max(0.45, horiz * 0.9)) { car.group.position.x = prevX; car.group.position.z = prevZ; }
+  }
+  car.group.position.x = THREE.MathUtils.clamp(car.group.position.x, car.helicopter ? worldWestLimit() : -1600, 2100);
+  car.group.position.z = THREE.MathUtils.clamp(car.group.position.z, -1600, 2100);
   if (car.helicopter && inTreasureIsland(car.group.position.x, car.group.position.z)) noteIslandArrival('🏝️ Llegaste en helicóptero a la ISLA DEL TESORO');
   if (car.helicopter) {
     const rise = (keys['Space'] || touch.jump || touch.jumpHeld ? 1 : 0) - (keys['ControlLeft'] || keys['ControlRight'] || touch.crouch || touch.heliDown ? 1 : 0);
-    car.group.position.y = THREE.MathUtils.clamp(car.group.position.y + rise * 12 * dt, 0, 45);
+    car.group.position.y = THREE.MathUtils.clamp(car.group.position.y + rise * 12 * dt, 0, 180);
     resolveMountainSolid(car.group.position, prevX, prevZ, prevY, 1.4);
     for (const rotor of car.rotors) rotor.rotation.y += dt * (state.driving ? 22 : 5);
     touch.jump = false;   // cada toque del botón ⬆️ da impulso de ascenso también en celular
@@ -18095,8 +18375,8 @@ function updateCreativeFlight(dt) {
     const flyWater = waterZoneAt(player.position.x, player.position.z);
     if (flyWater) minFlyY = Math.max(minFlyY, flyWater.surface + PLAYER_EYE);
     player.position.y = Math.max(minFlyY, player.position.y + vertical * speed * dt / parts);
-    player.position.x = THREE.MathUtils.clamp(player.position.x, worldWestLimit(), 800);
-    player.position.z = THREE.MathUtils.clamp(player.position.z, -600, 820);
+    player.position.x = THREE.MathUtils.clamp(player.position.x, worldWestLimit(), 2100);
+    player.position.z = THREE.MathUtils.clamp(player.position.z, -1600, 2100);
     resolveMountainSolid(player.position, px, pz, py, PLAYER_EYE);
     resolveCollisions();
   }
@@ -18151,6 +18431,15 @@ function updateMovement(dt) {
   const mag = Math.hypot(ax, az); if (mag > 1) { ax /= mag; az /= mag; }   // no ir más rápido en diagonal
   player.position.addScaledVector(forward, az * step);
   player.position.addScaledVector(rightV, ax * step);
+  if (state.planet === 'tierra' && !state.underground && !state.skiing && !state.skiLiftRide && !state.inCastle && !state.inRuins && !state.inArena) {
+    const prevH = mountainHeightAt(moveStartX, moveStartZ);
+    const nextH = mountainHeightAt(player.position.x, player.position.z);
+    const horiz = Math.hypot(player.position.x - moveStartX, player.position.z - moveStartZ);
+    if (nextH > prevH + Math.max(0.42, horiz * 1.35 + 0.05)) {
+      player.position.x = moveStartX;
+      player.position.z = moveStartZ;
+    }
+  }
   if (state.inFlight) {   // cabina en el cielo: el pasillo es el suelo, no caigas al vacío
     player.position.x = THREE.MathUtils.clamp(player.position.x, FLIGHT.x - 1.85, FLIGHT.x + 1.85);
     player.position.z = THREE.MathUtils.clamp(player.position.z, FLIGHT.z - 11.05, FLIGHT.z + 8.55);
@@ -18249,7 +18538,7 @@ function updateMovement(dt) {
       const [tx, tz] = worldTreeSpots[i];
       if (Math.abs(px - tx) > 1.7 || Math.abs(pz - tz) > 1.7) continue;
       if (insidePlayerStructure(tx, tz, 1.4)) continue;          // ese árbol está escondido
-      const alto = worldTreeSizes[i] || 1, copa = 5.55 * alto;   // altura de la copa grande
+      const alto = worldTreeSizes[i] || 1, copa = (worldTreeBase[i] || 0) + 5.55 * alto;   // altura de la copa grande
       if (pies < copa - .9 && piesAntes < copa - .05) continue;  // vas por debajo: pasas entre el follaje
       if (copa + eye > floorY) floorY = copa + eye;
     }
@@ -18303,19 +18592,9 @@ function updateMovement(dt) {
     player.position.x = THREE.MathUtils.clamp(player.position.x, COUNTRY_C.x - 175, COUNTRY_C.x + 175);
     player.position.z = THREE.MathUtils.clamp(player.position.z, COUNTRY_C.z - 175, COUNTRY_C.z + 175);
   } else {
-    player.position.x = THREE.MathUtils.clamp(player.position.x, worldWestLimit(), 800);
-    player.position.z = THREE.MathUtils.clamp(player.position.z, -600, 820);
+    player.position.x = THREE.MathUtils.clamp(player.position.x, worldWestLimit(), 2100);
+    player.position.z = THREE.MathUtils.clamp(player.position.z, -1600, 2100);
     noteIslandArrival('🏝️ Llegaste a la ISLA DEL TESORO');
-  }
-  // La montaña no se puede atravesar por detrás: si el siguiente paso intenta
-  // subir una pared demasiado pronunciada, conserva la posición anterior.
-  // Las pistas y los andariveles siguen siendo las formas correctas de subir.
-  if (!state.skiing && !state.skiLiftRide && !state.underground && !state.inCastle && !state.inRuins && !state.inArena && inSkiResort()) {
-    const prevSnow = mountainHeightAt(moveStartX, moveStartZ), nextSnow = mountainHeightAt(player.position.x, player.position.z);
-    if (nextSnow > prevSnow + 2.2) {
-      player.position.x = moveStartX; player.position.z = moveStartZ;
-      if (performance.now() - skiAccessWarnAt > 1800) { skiAccessWarnAt = performance.now(); toast('🚡 La montaña bloquea el paso · sube por un andarivel o el arrastre'); }
-    }
   }
   if (state.skiGearWorn && !state.skiing && !state.skiLiftRide && inSkiResort() && !inSkiTopHollow()) {
     const prevSnow = mountainHeightAt(moveStartX, moveStartZ), nextSnow = mountainHeightAt(player.position.x, player.position.z);
