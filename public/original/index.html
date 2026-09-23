@@ -5187,25 +5187,34 @@ function makeCar(color) {
   return g;
 }
 // ---- Calles: la cuadrícula de la ciudad (el trazado vive en src/city-map.js) ----
-const roadMat = new THREE.MeshStandardMaterial({ color: 0x34383f, roughness: 1 });
-const lineMat = new THREE.MeshStandardMaterial({ color: 0xd9dee6, roughness: 1 });
-const veredaMat = new THREE.MeshStandardMaterial({ color: 0xb2b8c0, roughness: .96 });
+function streetMat(color, rough, units) {
+  return new THREE.MeshStandardMaterial({
+    color, roughness: rough, metalness: 0,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: units,
+  });
+}
+const veredaMatH = streetMat(0xb2b8c0, .96, -6);
+const veredaMatV = streetMat(0xb2b8c0, .96, -12);
+const roadMatH = streetMat(0x34383f, 1, -20);
+const roadMatV = streetMat(0x34383f, 1, -28);
+const lineMatH = streetMat(0xd9dee6, 1, -36);
+const lineMatV = streetMat(0xd9dee6, 1, -44);
 const roadMeshes = [];
-// Las horizontales y las verticales van a alturas apenas distintas para que el
-// asfalto de un cruce no pelee con el de la otra calle (z-fighting).
 function makeRoad(cx, cz, len, horizontal, ramal) {
-  const w = CALLE.ancho, wv = w + CALLE.vereda * 2, y = horizontal ? 0 : .004;
-  const acera = new THREE.Mesh(horizontal ? new THREE.PlaneGeometry(len, wv) : new THREE.PlaneGeometry(wv, len), veredaMat);
-  acera.rotation.x = -Math.PI / 2; acera.position.set(cx, .012 + y, cz); acera.receiveShadow = true;
+  const w = CALLE.ancho, wv = w + CALLE.vereda * 2;
+  const acera = new THREE.Mesh(horizontal ? new THREE.PlaneGeometry(len, wv) : new THREE.PlaneGeometry(wv, len), horizontal ? veredaMatH : veredaMatV);
+  acera.rotation.x = -Math.PI / 2; acera.position.set(cx, .04, cz); acera.receiveShadow = true; acera.renderOrder = 2;
   scene.add(acera); roadMeshes.push(acera);
-  const r = new THREE.Mesh(horizontal ? new THREE.PlaneGeometry(len, w) : new THREE.PlaneGeometry(w, len), roadMat);
-  r.rotation.x = -Math.PI / 2; r.position.set(cx, .026 + y, cz); r.receiveShadow = true; scene.add(r); roadMeshes.push(r);
-  if (ramal) return;   // los ramales cortos a las afueras van sin línea central
+  const r = new THREE.Mesh(horizontal ? new THREE.PlaneGeometry(len, w) : new THREE.PlaneGeometry(w, len), horizontal ? roadMatH : roadMatV);
+  r.rotation.x = -Math.PI / 2; r.position.set(cx, .07, cz); r.receiveShadow = true; r.renderOrder = 3;
+  scene.add(r); roadMeshes.push(r);
+  if (ramal) return;
   const dashN = Math.floor(len / 6);
   for (let i = 0; i < dashN; i++) {
-    const d = new THREE.Mesh(new THREE.PlaneGeometry(horizontal ? 2 : 0.28, horizontal ? 0.28 : 2), lineMat);
+    const d = new THREE.Mesh(new THREE.PlaneGeometry(horizontal ? 2 : 0.28, horizontal ? 0.28 : 2), horizontal ? lineMatH : lineMatV);
     d.rotation.x = -Math.PI / 2; const off = (i - dashN / 2) * 6 + 3;
-    d.position.set(cx + (horizontal ? off : 0), .036 + y, cz + (horizontal ? 0 : off)); scene.add(d); roadMeshes.push(d);
+    d.position.set(cx + (horizontal ? off : 0), .1, cz + (horizontal ? 0 : off)); d.renderOrder = 4;
+    scene.add(d); roadMeshes.push(d);
   }
 }
 // Mostrar/ocultar toda la ciudad (calles, tráfico, autos estacionados, semáforos): en Platus no hay ciudad
@@ -5221,22 +5230,25 @@ roads.forEach(r => makeRoad(r.cx, r.cz, r.len, r.horizontal, r.ramal));
 // así que van en UN solo InstancedMesh (una sola llamada de dibujo).
 (function pintarCruces() {
   const franja = new THREE.PlaneGeometry(.7, CALLE.ancho - 1.4);
-  const total = SEMAFOROS.length * 4 * 5;
-  const cebra = new THREE.InstancedMesh(franja, lineMat, total);
+  const porLado = SEMAFOROS.length * 2 * 5;
+  const cebraH = new THREE.InstancedMesh(franja, lineMatH, porLado);
+  const cebraV = new THREE.InstancedMesh(franja, lineMatV, porLado);
+  cebraH.renderOrder = cebraV.renderOrder = 5;
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), esc = new THREE.Vector3(1, 1, 1);
   const plano = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
   const girado = plano.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2));
-  let i = 0;
+  let ih = 0, iv = 0;
   for (const cruce of SEMAFOROS) {
     for (const lado of [-1, 1]) {
       for (let k = 0; k < 5; k++) {
         const off = (k - 2) * 1.5, borde = lado * (CALLE.ancho / 2 + 1.3);
-        q.copy(girado); pos.set(cruce.x + off, .04, cruce.z + borde); m4.compose(pos, q, esc); cebra.setMatrixAt(i++, m4);
-        q.copy(plano); pos.set(cruce.x + borde, .042, cruce.z + off); m4.compose(pos, q, esc); cebra.setMatrixAt(i++, m4);
+        q.copy(girado); pos.set(cruce.x + off, .13, cruce.z + borde); m4.compose(pos, q, esc); cebraH.setMatrixAt(ih++, m4);
+        q.copy(plano); pos.set(cruce.x + borde, .13, cruce.z + off); m4.compose(pos, q, esc); cebraV.setMatrixAt(iv++, m4);
       }
     }
   }
-  cebra.count = i; scene.add(cebra); roadMeshes.push(cebra);
+  cebraH.count = ih; cebraV.count = iv;
+  scene.add(cebraH); scene.add(cebraV); roadMeshes.push(cebraH, cebraV);
 })();
 // ¿ese punto cae sobre el asfalto o la vereda? (el pasto no crece en la calle)
 function onRoadAt(x, z, margen = 0) {
