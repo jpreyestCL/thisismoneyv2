@@ -9725,11 +9725,48 @@ function makeSmart() {    // zombi inteligente (bata clara)
   const g = makePerson(0xe5e7eb, 0x84cc16);
   return g;
 }
-function makeKnight() {   // comandante de los toros (armadura + espada)
-  const g = makePerson(0x475569, 0x94a3b8);
-  const sword = makeVoxelSword(0xe2e8f0, .58); sword.position.set(.62, 1.25, .34); sword.rotation.x = Math.PI; g.add(sword);
-  const helmet = new THREE.Mesh(smoothBox(.55, .35, .55), mat(0x334155)); helmet.position.y = 2.35; g.add(helmet);
+function makeBullThrone(rider) {   // trono de mano: cuatro toros lo cargan y el comandante va sentado
+  const g = new THREE.Group();
+  const wood = mat(0x6b3a1f), gold = mat(0xd4a017), cloth = mat(0x7f1d1d);
+  for (const [x, z] of [[-1.05, 1.25], [1.05, 1.25], [-1.05, -1.35], [1.05, -1.35]]) {
+    const b = makeBull();
+    b.scale.setScalar(0.72);
+    b.position.set(x, 0, z);
+    g.add(b);
+  }
+  for (const sx of [-1.05, 1.05]) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(.07, .07, 2.85, 8), wood);
+    pole.rotation.x = Math.PI / 2; pole.position.set(sx, 1.22, -.05); pole.castShadow = true; g.add(pole);
+  }
+  const plat = new THREE.Mesh(smoothBox(1.55, .14, 1.25), wood);
+  plat.position.set(0, 1.42, -.08); plat.castShadow = true; g.add(plat);
+  const cushion = new THREE.Mesh(smoothBox(.72, .14, .58), cloth);
+  cushion.position.set(0, 1.56, -.12); g.add(cushion);
+  const back = new THREE.Mesh(smoothBox(.82, .9, .12), gold);
+  back.position.set(0, 2.05, -.42); back.castShadow = true; g.add(back);
+  for (const sx of [-.42, .42]) {
+    const rest = new THREE.Mesh(smoothBox(.1, .1, .52), gold);
+    rest.position.set(sx, 1.78, -.1); g.add(rest);
+  }
+  rider.position.set(0, 1.48, -.1);
+  g.add(rider);
+  g.userData.rider = rider;
   return g;
+}
+function makeKnight() {   // comandante de los toros: sentado en el trono, espada al frente
+  const g = makePerson(0x475569, 0x94a3b8);
+  const helmet = new THREE.Mesh(smoothBox(.55, .32, .55), mat(0x334155));
+  helmet.position.y = 2.02; helmet.castShadow = true; g.add(helmet);
+  const limbs = g.userData.limbs;
+  if (limbs) {
+    limbs.legL.rotation.x = -1.2; limbs.legR.rotation.x = -1.2;
+    limbs.armL.rotation.x = -.35;
+    limbs.armR.rotation.x = -1.55;
+    const sword = makeVoxelSword(0xe2e8f0, .46);
+    sword.position.set(0, -.92, .06); sword.rotation.x = Math.PI;
+    limbs.armR.add(sword);
+  }
+  return makeBullThrone(g);
 }
 function makeBull(armored) {   // toro con 4 patas, pezuñas y cuernos grandes (no una caja)
   const g = new THREE.Group();
@@ -9843,7 +9880,8 @@ function makeSmartArmored() {
 // Comandante de toros CON armadura (etapa 6): igual que el toro pero con placa dorada
 function makeKnightArmored() {
   const g = makeKnight();
-  const plate = new THREE.Mesh(smoothBox(0.9, 0.8, 0.55), mat(0xca8a04)); plate.position.y = 1.35; plate.castShadow = true; g.add(plate);
+  const rider = g.userData.rider || g;
+  const plate = new THREE.Mesh(smoothBox(0.9, 0.8, 0.55), mat(0xca8a04)); plate.position.y = 1.35; plate.castShadow = true; rider.add(plate);
   return g;
 }
 // Topo JEFE (etapa 11): topo gigante que llama a sus topitos a atacarte
@@ -9947,8 +9985,8 @@ const ENEMY_DEFS = {
   zombieArmored: { make: makeZombieArmored, hp: 30,  spd: s => 1.6 + s * 0.10, dmg: 10, barY: 3.8 },
   smart:         { make: makeSmart,         hp: 10,  spd: s => 1.9 + s * 0.12, dmg: 10, barY: 3.3, opensDoors: true },
   smartArmored:  { make: makeSmartArmored,  hp: 30,  spd: s => 1.7 + s * 0.10, dmg: 10, barY: 3.8, opensDoors: true },
-  toro:          { make: makeKnight,         hp: 40,  spd: () => 1.15,          dmg: 12, barY: 3.3, commander: true },
-  toroArmored:   { make: makeKnightArmored,  hp: 62,  spd: () => 1.05,          dmg: 12, barY: 3.6, commander: true },
+  toro:          { make: makeKnight,         hp: 46,  spd: () => 1.15,          dmg: 12, barY: 4.55, commander: true },
+  toroArmored:   { make: makeKnightArmored,  hp: 68,  spd: () => 1.05,          dmg: 12, barY: 4.7, commander: true },
   mole:          { make: makeMole,          hp: 20,  spd: () => 2.8,           dmg: 20, barY: 1.9, mole: true },
   moleBoss:      { make: makeMoleBoss,      hp: 160, spd: () => 2.2,           dmg: 20, barY: 3.4, mole: true, boss: true },
   ant:           { make: makeAnt,           hp: 30,  spd: () => 2.6,           dmg: 17, barY: 2.2, poison: true },
@@ -10325,7 +10363,11 @@ function pickTarget(from, attacker) {
   for (const h of livingCompanions()) { const d = dist2D(from, h.position); if (d < bd) { bd = d; best = h.position; } }
   return best || houseAnchor;   // nada que atacar (todos escondidos): van hacia la casa
 }
-function livingRadius(e) { return (e && e.userData && e.userData.type === 'bull') ? 0.8 : 0.5; }
+function livingRadius(e) {
+  if (e && e.userData && e.userData.type === 'bull') return 0.8;
+  if (e && e.userData && e.userData.commander) return 1.55;
+  return 0.5;
+}
 function bodyIgnoresWalls(e) { return !!(e && e.userData && (e.userData.fly || e.userData.ufo || e.userData.mineHole)); }
 function obstacleAt(x, z, feetY, r) {
   for (const o of obstacles) {
