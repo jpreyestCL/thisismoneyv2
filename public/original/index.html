@@ -1530,12 +1530,12 @@ function terrainMask(x, z) {
 // (más abajo) les da lagos, naranjos y nieve que se notan al caminar.
 const BIOMES = [
   { id: 'naranjal', name: 'Naranjal', icon: '🍊', x: 920, z: 240, r: 210, kind: 'orange', ground: 0xff6a00, bed: 0xc2410c },
-  { id: 'vergel', name: 'Vergel', icon: '🌿', x: -760, z: 620, r: 165, kind: 'green', ground: 0x16a34a, bed: 0x166534 },
-  { id: 'pantano', name: 'Pantano oscuro', icon: '🌑', x: 640, z: -820, r: 155, kind: 'dark', ground: 0x102018, bed: 0x0b1410 },
-  { id: 'gigantes', name: 'Bosque gigante', icon: '🌳', x: -900, z: -860, r: 175, kind: 'giant', ground: 0x166534, bed: 0x14532d },
-  { id: 'nieve', name: 'Bioma de nieve', icon: '❄️', x: 1560, z: -80, r: 260, kind: 'snow', ground: 0xf8fafc, bed: 0xe2e8f0 },
-  { id: 'lagos', name: 'Lagos', icon: '🏞️', x: -560, z: 1180, r: 180, kind: 'lakes', ground: 0x4d7c0f, bed: 0x1e3a5f },
-  { id: 'canon', name: 'Cañón rojo', icon: '🏜️', x: 1700, z: 700, r: 160, kind: 'canyon', ground: 0xc2410c, bed: 0x7c2d12 },
+  { id: 'vergel', name: 'Vergel', icon: '🌿', x: -760, z: 620, r: 165, kind: 'green', ground: 0x22c55e, bed: 0x15803d },
+  { id: 'pantano', name: 'Pantano oscuro', icon: '🌑', x: 640, z: -820, r: 155, kind: 'dark', ground: 0x1c3324, bed: 0x0b140e },
+  { id: 'gigantes', name: 'Bosque gigante', icon: '🌳', x: -900, z: -860, r: 175, kind: 'giant', ground: 0x166534, bed: 0x052e16 },
+  { id: 'nieve', name: 'Bioma de nieve', icon: '❄️', x: 1560, z: -80, r: 260, kind: 'snow', ground: 0xffffff, bed: 0xe0f2fe },
+  { id: 'lagos', name: 'Lagos', icon: '🏞️', x: -560, z: 1180, r: 180, kind: 'lakes', ground: 0x4ade80, bed: 0x166534 },
+  { id: 'canon', name: 'Cañón rojo', icon: '🏜️', x: 1700, z: 700, r: 160, kind: 'canyon', ground: 0xb45309, bed: 0x7c2d12 },
 ];
 const BIOME_LAKES = [
   { biome: 'pantano', cx: 650, cz: -828, rx: 62, rz: 44, depth: 6.5, surface: 0.35, bottom: -5.4, color: 0x1a7f8a, opacity: 0.7 },
@@ -1556,16 +1556,16 @@ const _biomeNear = new THREE.Color();
   ];
   const nombres = {
     orange: ['Naranjal', '🍊', 0xff6a00, 0xc2410c],
-    blue: ['Cumbre nevada', '🏔️', 0xf8fafc, 0xbae6fd],
-    red: ['Tierra roja', '🟠', 0xd4783a, 0x6b8f3a],
-    sunset: ['Atardecer', '🌇', 0xfb923c, 0xf9a8d4],
-    snow: ['Nieve', '❄️', 0xf8fafc, 0xe2e8f0],
-    green: ['Pradera', '🌿', 0x16a34a, 0x166534],
+    blue: ['Cumbre nevada', '🏔️', 0xffffff, 0xe0f2fe],
+    red: ['Tierra roja', '🟠', 0xd97706, 0x65a30d],
+    sunset: ['Atardecer', '🌇', 0xf97316, 0xf9a8d4],
+    snow: ['Nieve', '❄️', 0xffffff, 0xe0f2fe],
+    green: ['Pradera', '🌿', 0x22c55e, 0x15803d],
     gray: ['Bosque gris', '🪨', 0x6b7280, 0x374151],
     jungle: ['Jungla', '🌴', 0x166534, 0x14532d],
-    desert: ['Desierto', '🏜️', 0xe7c07a, 0xc4a15a],
-    savanna: ['Sabana', '🦁', 0xc4b15a, 0x854d0e],
-    pine: ['Pinar', '🌲', 0x3f6212, 0x365314],
+    desert: ['Desierto', '🏜️', 0x4d7c0f, 0x3f6212],
+    savanna: ['Sabana', '🦁', 0x84cc16, 0x65a30d],
+    pine: ['Pinar', '🌲', 0x166534, 0x14532d],
     steppe: ['Estepa', '🌾', 0xc2b280, 0xa89060],
   };
   let n = 0;
@@ -1734,21 +1734,25 @@ function biomeTint(x, z, h, out) {
       let hex = b.ground;
       const tone = terrainField(x * 1.6, z * 1.6);
       if (b.kind === 'orange') hex = tone > 0.2 ? 0xff8c1a : tone < -0.18 ? 0xe85d04 : 0xff6a00;
-      else if (b.kind === 'snow') hex = h > 28 ? 0xffffff : 0xf8fafc;
-      else if (b.kind === 'blue') hex = h > 42 ? 0xffffff : h > 26 ? 0xe0f2fe : h > 14 ? 0xcbd5e1 : 0x94a3b8;
-      else if (b.kind === 'red') hex = tone > 0.18 ? 0xc4a035 : tone > -0.05 ? 0xd4783a : 0x6b8f3a;
-      else if (b.kind === 'sunset') hex = h > 16 ? 0xfde68a : (tone > 0.05 ? 0xfb923c : 0xf9a8d4);
-      else if (b.kind === 'green') hex = tone > 0.15 ? 0x4ade80 : 0x16a34a;
+      else if (b.kind === 'snow') hex = tone > 0.12 ? 0xffffff : 0xe0f2fe;
+      else if (b.kind === 'blue') hex = tone > 0.08 ? 0xffffff : 0xe0f2fe;
+      else if (b.kind === 'red') hex = tone > 0.12 ? 0xd97706 : 0x65a30d;
+      else if (b.kind === 'sunset') hex = tone > 0.05 ? 0xf97316 : 0xf9a8d4;
+      else if (b.kind === 'green') hex = tone > 0.12 ? 0x22c55e : 0x15803d;
       else if (b.kind === 'gray') hex = tone > 0.1 ? 0x9ca3af : 0x4b5563;
-      else if (b.kind === 'jungle') hex = tone > 0.1 ? 0x15803d : 0x14532d;
-      else if (b.kind === 'desert') hex = tone > 0.15 ? 0xf5d7a1 : 0xd6b36a;
-      else if (b.kind === 'savanna') hex = tone > 0.1 ? 0xc4b15a : 0xa3a04a;
-      else if (b.kind === 'pine') hex = 0x3f6212;
-      else if (b.kind === 'steppe') hex = tone > 0.1 ? 0xd6c48a : 0xc2b280;
+      else if (b.kind === 'jungle') hex = tone > 0.1 ? 0x166534 : 0x14532d;
+      else if (b.kind === 'desert') hex = tone > 0.12 ? 0x4d7c0f : 0x3f6212;
+      else if (b.kind === 'savanna') hex = tone > 0.1 ? 0x84cc16 : 0x65a30d;
+      else if (b.kind === 'pine') hex = tone > 0.1 ? 0x166534 : 0x14532d;
+      else if (b.kind === 'steppe') hex = tone > 0.1 ? 0xc2b280 : 0xa89060;
+      else if (b.kind === 'dark') hex = tone > 0.1 ? 0x1c3324 : 0x0b140e;
+      else if (b.kind === 'giant') hex = tone > 0.1 ? 0x166534 : 0x052e16;
+      else if (b.kind === 'lakes') hex = tone > 0.1 ? 0x4ade80 : 0x166534;
+      else if (b.kind === 'canyon') hex = tone > 0.1 ? 0xb45309 : 0x7c2d12;
       else if (h < 0.25) hex = b.bed;
       else if (h > 40) hex = 0xf1f5f9;
       out.setHex(hex);
-      const vivo = b.kind === 'orange' || b.kind === 'snow' || b.kind === 'blue' || b.kind === 'red' || b.kind === 'sunset' || b.kind === 'green' || b.kind === 'gray' || b.kind === 'jungle' || b.kind === 'desert' || b.kind === 'savanna' || b.kind === 'pine' || b.kind === 'steppe';
+      const vivo = b.kind === 'orange' || b.kind === 'snow' || b.kind === 'blue' || b.kind === 'red' || b.kind === 'sunset' || b.kind === 'green' || b.kind === 'gray' || b.kind === 'jungle' || b.kind === 'desert' || b.kind === 'savanna' || b.kind === 'pine' || b.kind === 'steppe' || b.kind === 'dark' || b.kind === 'giant' || b.kind === 'lakes' || b.kind === 'canyon';
       if (w < 0.9) out.lerp(_biomeCity, (1 - w) * (vivo ? 0.16 : 0.45));
       return;
     }
@@ -5267,8 +5271,8 @@ function placeGlaciers(g, b, tune) {
   }
 }
 function placeGrayTrees(g, spots) {
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.95 });
-  const leafMat = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.9 });
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.95 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x9ca3af, roughness: 0.9 });
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.92 });
   for (const [x, z, y] of spots) {
     const h = 4.2 + Math.random() * 4.5;
@@ -5512,7 +5516,7 @@ function buildWorldBiomes() {
     red: { n: 34, scale: 1.95, leaf: 0xd97706, leaf2: 0x65a30d, trunk: 0x7c4a2d, fruit: 0xfde68a, spread: 0.78, fat: 1.4 },
     sunset: { n: 32, scale: 2.05, leaf: 0xf97316, leaf2: 0xf9a8d4, trunk: 0x7c2d12, fruit: 0xfde68a, spread: 0.76, fat: 1.45 },
     green: { n: 28, scale: 1.35, leaf: 0x22c55e, leaf2: 0x15803d, trunk: 0x5c3a1e, spread: 0.72 },
-    gray: { n: 22, scale: 1.6, leaf: 0x4b5563, leaf2: 0x374151, trunk: 0x1f2937, spread: 0.74 },
+    gray: { n: 22, scale: 1.6, leaf: 0x9ca3af, leaf2: 0x1f2937, trunk: 0x6b4423, spread: 0.74 },
     jungle: { n: 18, scale: 3.1, leaf: 0x166534, leaf2: 0x14532d, trunk: 0x5c4033, spread: 0.7, fat: 2.1 },
     desert: { n: 16, scale: 1.4, leaf: 0x4d7c0f, leaf2: 0x3f6212, trunk: 0x4d7c0f, spread: 0.78 },
     savanna: { n: 14, scale: 1.2, leaf: 0x84cc16, leaf2: 0x65a30d, trunk: 0x78350f, spread: 0.8 },
