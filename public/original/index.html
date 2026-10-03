@@ -1816,6 +1816,7 @@ const earthTerrain = new THREE.Mesh(earthGeo, new THREE.MeshStandardMaterial({ v
 earthTerrain.rotation.x = -Math.PI / 2;
 earthTerrain.receiveShadow = true;
 earthTerrain.userData.walkSurface = true;
+earthTerrain.userData.sueloReal = true;
 scene.add(earthTerrain);
 function showEarthGround(earth) {
   earthTerrain.visible = !!earth;
@@ -1961,7 +1962,7 @@ function monsterCanHit(e, tgt) {   // en el aire solo los VOLADORES suben y pega
 function playerStandEyeY() {
   let floor = state.groundY || 0;
   if (!state.underground && !state.inCastle && !state.inRuins && !state.inArena) {
-    const cerro = mountainHeightAt(player.position.x, player.position.z);
+    const cerro = sueloReal(player.position.x, player.position.z);
     if (cerro > floor) floor = cerro;
     if (state.planet === 'tierra' && inTreasureIsland(player.position.x, player.position.z)) floor = Math.max(floor, TREASURE_ISLAND.surface);
   }
@@ -3291,7 +3292,9 @@ function placeYardPool(parent, lx, lz, rot, ox, oz) {
 }
 let houseSerial = 0;
 function sueloFirme(x, z, w, d) {
-  let top = 0;
+  const fuera = Math.abs(x) > 260 || Math.abs(z) > 260;
+  if (fuera) return alturaDeApoyo(x, z);
+  let top = -1e9;
   const hw = Math.max(w || 2, 2) / 2, hd = Math.max(d || 2, 2) / 2;
   for (let sx = x - hw; sx <= x + hw + 0.01; sx += 2) {
     for (let sz = z - hd; sz <= z + hd + 0.01; sz += 2) {
@@ -3299,7 +3302,7 @@ function sueloFirme(x, z, w, d) {
       if (h > top) top = h;
     }
   }
-  return top;
+  return top < -1e8 ? 0 : top;
 }
 function makeCityHouse(x, z, golden, rot = 0, maxW = 7.5, maxD = 7.5, plan = null, baseY = 0, tag = '') {
   plan = plan || planDeCasa(maxW, maxD) || planDeCasa(4, 4);
@@ -3309,7 +3312,8 @@ function makeCityHouse(x, z, golden, rot = 0, maxW = 7.5, maxD = 7.5, plan = nul
   const col = plan.muro;
   const w = plan.w, d = plan.d, h1 = plan.h1;
   const firme = sueloFirme(x, z, w + 1.6, d + 1.6);
-  if ((baseY || 0) < firme) baseY = firme;
+  if (Math.abs(x) > 260 || Math.abs(z) > 260) baseY = firme;
+  else if ((baseY || 0) < firme) baseY = firme;
   if (golden) {
     // CASA SECRETA: hueca, con puerta abierta para ENTRAR y un cofre de oro adentro
     const gw = Math.max(5.2, Math.min(6.5, w, d)), gh = 4, t = 0.25, wm = mat(col);
@@ -4139,7 +4143,7 @@ function updateNPCs(dt) {
       if (b.wait <= 0 && distance <= .7) b.thinkIn = 0;
     }
     if (state.phase === 'NIGHT' && dist2D(n.position, b.home) < 1.2) n.visible = false;
-    if (!state.country) n.position.y = groundHeightAt(n.position.x, n.position.z);
+    if (!state.country) n.position.y = sueloReal(n.position.x, n.position.z);
     if (moved) swingLimbs(n, dt); else swingLimbs(n, 0);
     n.userData.activity = b.activity;
   }
@@ -5503,6 +5507,7 @@ function buildWorldBiomes() {
     mesh.position.set(b.x, 0, b.z);
     mesh.receiveShadow = true;
     mesh.userData.walkSurface = true;
+    mesh.userData.sueloReal = true;
     g.add(mesh);
     const dir = Math.hypot(b.x, b.z) || 1;
     const sx = b.x - (b.x / dir) * b.r * 0.86, sz = b.z - (b.z / dir) * b.r * 0.86;
@@ -5756,7 +5761,13 @@ function mineFloorY(h) {
 function syncIslandSurfaceDecor() { syncFarWorld(); }
 
 function nearSkiNow() {
-  return !!(state.skiing || state.skiLiftRide || ((player.position.x - SKI_RESORT.x) ** 2 + (player.position.z - SKI_RESORT.z) ** 2) < 400 * 400);
+  if (state.skiing || state.skiLiftRide) return true;
+  const px = player.position.x, pz = player.position.z;
+  if ((px - SKI_RESORT.x) ** 2 + (pz - SKI_RESORT.z) ** 2 < 400 * 400) return true;
+  if (typeof CENTROS_ESQUI !== 'undefined') {
+    for (const c of CENTROS_ESQUI) if ((px - c.x) ** 2 + (pz - c.z) ** 2 < 320 * 320) return true;
+  }
+  return false;
 }
 function nearIslandNow(r) {
   const rr = r || 520;
@@ -6949,25 +6960,83 @@ function mountainHeightAt(x, z) {
   }
   return best;
 }
+// La malla que se ve (tierra gruesa, bioma, cerro) no coincide con la fórmula:
+// un bulto dibujado puede quedar varios metros por encima del suelo que pisa
+// el jugador. Fuera de la ciudad y de los lagos, el piso es esa malla.
+function alturaEnMalla(mesh, x, z) {
+  const geo = mesh.geometry;
+  const p = geo.parameters;
+  if (!p || p.widthSegments == null || !geo.attributes.position) return null;
+  const pos = geo.attributes.position;
+  const sx = p.widthSegments, sy = p.heightSegments, cols = sx + 1;
+  const hw = p.width / 2, hh = p.height / 2;
+  const rotado = Math.abs(mesh.rotation.x) > 1;
+  const lx = x - mesh.position.x;
+  const lz = rotado ? -(z - mesh.position.z) : (z - mesh.position.z);
+  if (lx < -hw || lx > hw || lz < -hh || lz > hh) return null;
+  const fx = ((lx + hw) / p.width) * sx;
+  const fz = ((lz + hh) / p.height) * sy;
+  const ix = Math.max(0, Math.min(sx - 1, Math.floor(fx)));
+  const iz = Math.max(0, Math.min(sy - 1, Math.floor(fz)));
+  const tx = Math.min(1, Math.max(0, fx - ix));
+  const tz = Math.min(1, Math.max(0, fz - iz));
+  const leer = rotado
+    ? (i, j) => pos.getZ(i + j * cols)
+    : (i, j) => pos.getY(i + j * cols);
+  const y00 = leer(ix, iz), y10 = leer(ix + 1, iz), y01 = leer(ix, iz + 1), y11 = leer(ix + 1, iz + 1);
+  return (y00 * (1 - tx) + y10 * tx) * (1 - tz) + (y01 * (1 - tx) + y11 * tx) * tz;
+}
+let mallasDeSuelo = null;
+function alturaMalla(x, z) {
+  if (!mallasDeSuelo) {
+    mallasDeSuelo = [];
+    scene.traverse(o => { if (o.isMesh && o.userData.sueloReal) mallasDeSuelo.push(o); });
+  }
+  let top = null;
+  for (const m of mallasDeSuelo) {
+    const h = alturaEnMalla(m, x, z);
+    if (h == null || h < -0.2) continue;
+    if (top == null || h > top) top = h;
+  }
+  return top;
+}
+// Altura para sentar casas y andariveles mientras el mundo se construye.
+// No mira el estado del juego: en ese momento todavía no existe.
+function alturaDeApoyo(x, z) {
+  if (Math.abs(x) < 260 && Math.abs(z) < 260) return groundHeightAt(x, z);
+  if (typeof lakeAt === 'function' && lakeAt(x, z)) return groundHeightAt(x, z);
+  const vis = alturaMalla(x, z);
+  if (vis == null) return groundHeightAt(x, z);
+  return vis;
+}
+function sueloReal(x, z) {
+  const anal = mountainHeightAt(x, z);
+  if (state.planet === 'platus' || state.country) return anal;
+  if (Math.abs(x) < 260 && Math.abs(z) < 260) return anal;
+  if (typeof lakeAt === 'function' && lakeAt(x, z)) return anal;
+  const vis = alturaMalla(x, z);
+  if (vis == null) return anal;
+  return vis;
+}
 // La montaña es SÓLIDA: volar o pilotar nunca atraviesa el volumen de roca.
 // Chocar de frente detiene el XZ (no te sube de golpe a la cumbre). Bajar sobre
 // la ladera te apoya en la nieve.
 function resolveMountainSolid(pos, fromX, fromZ, fromY, eye) {
   if (state.underground || state.inCastle || state.inRuins || state.inArena) return false;
   const midX = (pos.x + fromX) / 2, midZ = (pos.z + fromZ) / 2;
-  const snowMid = mountainHeightAt(midX, midZ);
+  const snowMid = sueloReal(midX, midZ);
   if (snowMid > 0 && pos.y < snowMid + eye - 0.04 && !(pos.y < fromY - 0.02)) {
     pos.x = fromX; pos.z = fromZ; return true;
   }
-  const snow = mountainHeightAt(pos.x, pos.z);
+  const snow = sueloReal(pos.x, pos.z);
   if (!(snow > 0)) return false;
   const floorY = snow + eye;
   if (pos.y >= floorY - .04) return false;
   // Bajar sobre la ladera: te apoyas. Si chocas de frente, NO te sube (no atraviesas).
   if (pos.y < fromY - .02 && floorY <= fromY + 3) { pos.y = floorY; return false; }
-  const snowZ = mountainHeightAt(fromX, pos.z);
+  const snowZ = sueloReal(fromX, pos.z);
   if (!(snowZ > 0) || pos.y >= snowZ + eye - .04) { pos.x = fromX; return true; }
-  const snowX = mountainHeightAt(pos.x, fromZ);
+  const snowX = sueloReal(pos.x, fromZ);
   if (!(snowX > 0) || pos.y >= snowX + eye - .04) { pos.z = fromZ; return true; }
   pos.x = fromX; pos.z = fromZ;
   return true;
@@ -7003,6 +7072,7 @@ function mcMountain(parent, cx, cz, r, h, rock, cap, seed, planet, opts) {
   const slope = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }));
   slope.receiveShadow = true;
   slope.userData.walkSurface = true;
+  slope.userData.sueloReal = true;
   slope.position.set(cx, 0, cz);
   parent.add(slope);
   // Piedras sueltas repartidas por la ladera
@@ -7146,7 +7216,7 @@ function buildSkiRoad() {
   const line = new THREE.Mesh(new THREE.TubeGeometry(curve, 64, .12, 5, false), mat(0xfde68a));
   line.scale.y = .03; line.position.y = .12; skiResortGroup.add(line);
   skiBox(skiResortGroup, SKI_RESORT.gate.x, .9, SKI_RESORT.gate.z - 5, 12, 1.8, .5, 0x0f172a);
-  const sign = makeSign('❄️ CENTRO DE ESQUÍ · TARJETA $500', 0xe0f2fe); sign.scale.set(.72, .72, .72); sign.position.set(SKI_RESORT.gate.x, 4.2, SKI_RESORT.gate.z - 5.5); skiResortGroup.add(sign);
+  const sign = makeSign('❄️ VALLE NEVADO · TARJETA $500', 0xe0f2fe); sign.scale.set(.72, .72, .72); sign.position.set(SKI_RESORT.gate.x, 4.2, SKI_RESORT.gate.z - 5.5); sign.material.fog = false; skiResortGroup.add(sign);
   for (const sx of [SKI_RESORT.gate.x - 5.5, SKI_RESORT.gate.x + 5.5]) skiBox(skiResortGroup, sx, 2, SKI_RESORT.gate.z - 5, .45, 4, .45, 0x64748b);
 }
 function buildSkiResort() {
@@ -7280,6 +7350,8 @@ function buildSkiResort() {
   const summitCable = new THREE.Mesh(new THREE.CylinderGeometry(.2, .2, 72, 8), mat(0x111827)); summitCable.rotation.x = Math.PI / 2; summitCable.position.set(0, summitTop + 34, -36); summitLift.add(summitCable);
   for (let i = 0; i < 4; i++) { const z = -10 - i * 18, hanger = skiBox(summitLift, 0, summitTop + 30, z, .12, 8, .12, 0x334155); skiBox(summitLift, 0, summitTop + 25.5, z, 1.6, .22, .7, 0xf97316); }
   const summitLiftSign = makeSign('🚠 ANDARIVEL A LA CUMBRE', 0xfef08a); summitLiftSign.scale.set(.34, .34, .34); summitLiftSign.position.set(SKI_SUMMIT_LIFT_BOTTOM.x + 8, summitTop + 4, SKI_SUMMIT_LIFT_BOTTOM.z + 2); skiResortGroup.add(summitLiftSign);
+  // Cuerda del andarivel, a la altura de las manos, pegada a la nieve.
+  cuerdaSobreNieve(skiResortGroup, SKI_RESORT.x + 25, SKI_RESORT.z + 58, SKI_RESORT.x + 25, SKI_RESORT.z - 62, skiSlopeHeight);
   // Mucha gente esperando y bajando por las pistas.
   for (let i = 0; i < 34; i++) {
     const n = makePerson(i % 2 ? 0x2563eb : 0xdc2626, i % 3 ? 0xf1c27d : 0x8d5524);
@@ -7294,14 +7366,23 @@ function updateSkiVisitors(dt) {
     if (n.userData.skiPhase === 'lift') {
       n.userData.liftT += dt * (.045 + n.userData.skiSpeed * .35);
       const lt = Math.min(1, n.userData.liftT), x = SKI_RESORT.x + 25, z = SKI_RESORT.z + 58 - lt * 120;
-      n.position.set(x, skiSlopeHeight(x, z) + 3.2, z); n.rotation.y = Math.PI / 2;
-      if (lt >= 1) { n.userData.skiPhase = 'down'; n.userData.skiT = 0; }
+      apoyarEsquiador(n, x, z, 0, -1, skiSlopeHeight);
+      if (lt >= 1) { n.userData.skiPhase = 'down'; n.userData.skiT = 0; agarrarCuerda(n, false); }
       continue;
     }
     n.userData.skiT += dt * n.userData.skiSpeed;
     if (n.userData.skiT >= 1) { n.userData.skiPhase = 'lift'; n.userData.liftT = 0; continue; }
     const t = n.userData.skiT, side = n.userData.skiSide, x = SKI_RESORT.x + side * (8 + t * 34) + Math.sin(t * 8 + n.userData.skiLane) * 5, z = SKI_RESORT.z - 54 + t * 106;
-    n.position.set(x, skiSlopeHeight(x, z) + Math.abs(Math.sin(n.userData.skiBob)) * .04, z); n.rotation.y = side * .18 + Math.sin(n.userData.skiBob) * .04;
+    apoyarEnNieve(n, x, z, side * 0.15, 1, skiSlopeHeight);
+    n.position.y += Math.abs(Math.sin(n.userData.skiBob)) * .04;
+    agarrarCuerda(n, false);
+  }
+  for (const n of esquiadoresExtra) {
+    n.userData.t = (n.userData.t + dt * 0.08) % 1;
+    const t = n.userData.t;
+    const x = n.userData.x0 + (n.userData.x1 - n.userData.x0) * t;
+    const z = n.userData.z0 + (n.userData.z1 - n.userData.z0) * t;
+    apoyarEsquiador(n, x, z, n.userData.x1 - n.userData.x0, n.userData.z1 - n.userData.z0, alturaDeApoyo);
   }
 }
 buildSkiResort();
@@ -7331,6 +7412,120 @@ function buildPlazaCentral() {
   return g;
 }
 buildPlazaCentral(); buildCondoPark(); buildFunPark(); buildWaterPark(); buildEarthMountains();
+function rotarCuerpo(rx, ry, rz, x, y, z) {
+  const a = Math.cos(rx), b = Math.sin(rx);
+  const c = Math.cos(ry), d = Math.sin(ry);
+  const e = Math.cos(rz), f = Math.sin(rz);
+  const te0 = c * e + d * b * f, te4 = -c * f + d * b * e, te8 = d * a;
+  const te1 = a * f, te5 = a * e, te9 = -b;
+  const te2 = -d * e + c * b * f, te6 = d * f + c * b * e, te10 = c * a;
+  return [te0 * x + te4 * y + te8 * z, te1 * x + te5 * y + te9 * z, te2 * x + te6 * y + te10 * z];
+}
+// Manos juntas en la cuerda, con el cuerpo perpendicular a la nieve.
+function manoEnLaCuerda(altura, x, z, dx, dz) {
+  const L = Math.hypot(dx, dz) || 1;
+  const ux = dx / L, uz = dz / L;
+  const y0 = altura(x, z);
+  const y1 = altura(x + ux, z + uz);
+  const alfa = Math.atan2(y1 - y0, 1);
+  const yaw = Math.atan2(ux, uz);
+  const h = rotarCuerpo(-alfa, yaw, 0, 0, 1.621, 0.729);
+  return { x: x + h[0], y: y0 + h[1], z: z + h[2], alfa, yaw, pies: y0 };
+}
+function agarrarCuerda(n, si) {
+  const brazos = n.userData.limbs;
+  if (!brazos) return;
+  if (!si) {
+    brazos.armL.rotation.set(0, 0, 0);
+    brazos.armR.rotation.set(0, 0, 0);
+    return;
+  }
+  brazos.armL.rotation.set(-1.78, 0.733, 0.593);
+  brazos.armR.rotation.set(-1.78, -0.733, -0.593);
+}
+function apoyarEsquiador(n, x, z, dx, dz, altura) {
+  const mano = manoEnLaCuerda(altura, x, z, dx, dz);
+  n.position.set(x, mano.pies, z);
+  n.rotation.order = 'YXZ';
+  n.rotation.y = mano.yaw;
+  n.rotation.x = -mano.alfa;
+  n.rotation.z = 0;
+  agarrarCuerda(n, true);
+  return mano;
+}
+function apoyarEnNieve(n, x, z, dx, dz, altura) {
+  const L = Math.hypot(dx, dz) || 1;
+  const y0 = altura(x, z);
+  const y1 = altura(x + dx / L, z + dz / L);
+  n.position.set(x, y0, z);
+  n.rotation.order = 'YXZ';
+  n.rotation.y = Math.atan2(dx, dz);
+  n.rotation.x = -Math.atan2(y1 - y0, 1);
+  n.rotation.z = 0;
+}
+function cuerdaSobreNieve(parent, x0, z0, x1, z1, altura) {
+  const pts = [];
+  const n = 16;
+  const dx = x1 - x0, dz = z1 - z0;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const x = x0 + dx * t, z = z0 + dz * t;
+    const mano = manoEnLaCuerda(altura, x, z, dx, dz);
+    pts.push(new THREE.Vector3(mano.x, mano.y, mano.z));
+  }
+  const tubo = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), n, 0.07, 5, false), new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.55 }));
+  tubo.userData.noBake = true;
+  parent.add(tubo);
+  const marca = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), n, 0.035, 4, false), new THREE.MeshBasicMaterial({ color: 0xfbbf24, fog: false }));
+  marca.userData.noBake = true;
+  parent.add(marca);
+  return pts;
+}
+const CENTROS_ESQUI = [
+  { name: 'Valle Nevado', x: SKI_RESORT.x, z: SKI_RESORT.z, principal: true },
+  { name: 'El Colorado', x: 1560, z: 30, picoX: 1560, picoZ: -80 },
+  { name: 'La Parva', x: -1040, z: 340, picoX: -1040, picoZ: 260 },
+  { name: 'Portillo', x: -460, z: -600, picoX: -460, picoZ: -680 },
+  { name: 'Nevados de Chillán', x: 1040, z: 960, picoX: 1040, picoZ: 880 },
+];
+const esquiadoresExtra = [];
+function ponerCentrosEsqui() {
+  mallasDeSuelo = null;
+  const g = new THREE.Group();
+  g.name = 'centros-esqui';
+  scene.add(g);
+  for (const c of CENTROS_ESQUI) {
+    if (c.principal) continue;
+    const y = alturaDeApoyo(c.x, c.z);
+    mcBox(g, c.x, y + 1.5, c.z, 9, 3, 6, 0xf8fafc);
+    mcBox(g, c.x, y + 3.15, c.z, 9.6, 0.3, 6.6, 0x0f172a);
+    addObstacle(c.x, c.z, 9, 6, y + 3.3, 'esqui');
+    const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.4, 9, 6), mat(0x334155));
+    poste.position.set(c.x, y + 4.5, c.z + 5.2);
+    g.add(poste);
+    const cartel = makeSign('⛷️ ' + c.name, 0xe0f2fe);
+    cartel.material.fog = false;
+    cartel.scale.set(1.7, 1.7, 1.7);
+    cartel.position.set(c.x, y + 9.2, c.z + 5.2);
+    g.add(cartel);
+    const x1 = c.x + (c.picoX - c.x) * 0.72, z1 = c.z + (c.picoZ - c.z) * 0.72;
+    const x0 = c.x, z0 = c.z + 2;
+    cuerdaSobreNieve(g, x0, z0, x1, z1, alturaDeApoyo);
+    for (let i = 0; i < 4; i++) {
+      const n = makePerson(i % 2 ? 0x1d4ed8 : 0xb91c1c, 0xf1c27d);
+      const ski = new THREE.Mesh(smoothBox(0.7, 0.06, 1.6), mat(0x111827));
+      ski.position.set(0, 0.05, 0.1);
+      n.add(ski);
+      n.userData.t = i / 4;
+      n.userData.x0 = x0; n.userData.z0 = z0; n.userData.x1 = x1; n.userData.z1 = z1;
+      const t0 = i / 4;
+      apoyarEsquiador(n, x0 + (x1 - x0) * t0, z0 + (z1 - z0) * t0, x1 - x0, z1 - z0, alturaDeApoyo);
+      esquiadoresExtra.push(n);
+      g.add(n);
+    }
+  }
+}
+ponerCentrosEsqui();
 function buildSkiBeacon() {
   const y = mountainProfile(SKI_MOUNTAIN_PROFILE, 0, 0);
   const g = new THREE.Group();
@@ -7346,8 +7541,8 @@ function buildSkiBeacon() {
   const cv = document.createElement('canvas'); cv.width = 512; cv.height = 160;
   const ctx = cv.getContext('2d');
   ctx.fillStyle = '#0369a1'; ctx.fillRect(0, 0, 512, 160);
-  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 78px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('ESQUÍ', 256, 82);
+  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 52px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('VALLE NEVADO', 256, 82);
   const tex = new THREE.CanvasTexture(cv);
   const cartelMat = new THREE.MeshBasicMaterial({ map: tex, fog: false, side: THREE.DoubleSide });
   for (const giro of [0, Math.PI / 2]) {
@@ -8336,7 +8531,7 @@ function sitioConstruible(x, z, margen, ancho, fondo) {
   return true;
 }
 function makeHotel(x, z, rot, baseY) {
-  baseY = Math.max(baseY || 0, sueloFirme(x, z, 18, 14));
+  baseY = (Math.abs(x) > 260 || Math.abs(z) > 260) ? sueloFirme(x, z, 18, 14) : Math.max(baseY || 0, sueloFirme(x, z, 18, 14));
   const g = new THREE.Group();
   g.name = 'hotel-mundo';
   g.position.set(x, baseY, z);
@@ -8367,7 +8562,7 @@ function makeHotel(x, z, rot, baseY) {
   return g;
 }
 function makeCondoCompound(x, z, baseY) {
-  baseY = Math.max(baseY || 0, sueloFirme(x, z, 36, 28));
+  baseY = (Math.abs(x) > 260 || Math.abs(z) > 260) ? sueloFirme(x, z, 36, 28) : Math.max(baseY || 0, sueloFirme(x, z, 36, 28));
   const g = new THREE.Group();
   g.name = 'condominio-mundo';
   g.position.set(x, baseY, z);
@@ -8394,6 +8589,7 @@ function makeCondoCompound(x, z, baseY) {
   return g;
 }
 function buildWildSettlements() {
+  mallasDeSuelo = null;
   const ocupados = [];
   const libreDeOtros = (x, z, radio) => ocupados.every(p => Math.hypot(p.x - x, p.z - z) > radio);
   const tomar = (x, z, radio) => { ocupados.push({ x, z, r: radio }); };
@@ -8422,7 +8618,7 @@ function buildWildSettlements() {
   const usar = (p) => { usados.add(p); tomar(p.x, p.z, 48); };
   const ponerHotel = (p, rot) => {
     if (!p || usados.has(p)) return false;
-    const y = groundHeightAt(p.x, p.z);
+    const y = alturaDeApoyo(p.x, p.z);
     makeHotel(p.x, p.z, rot || 0, y);
     usar(p);
     return true;
@@ -8441,7 +8637,7 @@ function buildWildSettlements() {
     if (WORLD_PLACES.condominios.length >= condoN) break;
     if (usados.has(p) || !libreDeOtros(p.x, p.z, 80)) continue;
     if (!sitioConstruible(p.x, p.z, 18, 36, 28)) continue;
-    const y = groundHeightAt(p.x, p.z);
+    const y = alturaDeApoyo(p.x, p.z);
     makeCondoCompound(p.x, p.z, y);
     usar(p);
   }
@@ -8450,7 +8646,7 @@ function buildWildSettlements() {
     if (hamlets >= hamletN) break;
     if (usados.has(p) || !libreDeOtros(p.x, p.z, 56)) continue;
     if (!sitioConstruible(p.x, p.z, 12, 22, 16)) continue;
-    const y = groundHeightAt(p.x, p.z);
+    const y = alturaDeApoyo(p.x, p.z);
     const puestos = [[-6, -4], [6, -3], [-5, 6], [7, 6]];
     let n = 0;
     puestos.forEach(([lx, lz], i) => {
@@ -8496,24 +8692,24 @@ function poblarAlrededor(cx, cz, anillos, gente) {
       if (!sitioPueblo(x, z) || lugarOcupado(x, z, 11)) continue;
       const plan = planDeCasa(6.2, 5.8);
       if (!plan) continue;
-      const casa = makeCityHouse(x, z, false, Math.atan2(cx - x, cz - z), plan.w, plan.d, plan, groundHeightAt(x, z), 'casa-mundo');
+      const casa = makeCityHouse(x, z, false, Math.atan2(cx - x, cz - z), plan.w, plan.d, plan, alturaDeApoyo(x, z), 'casa-mundo');
       const y = casa.position.y;
       WORLD_PLACES.casas.push({ x, z, y });
       casas++;
       if (casas % 2 === 0) {
         const lx = x + 3.2, lz = z + 1.6;
-        const poste = new THREE.Group(); poste.position.set(lx, Math.max(y, groundHeightAt(lx, lz)), lz); scene.add(poste);
+        const poste = new THREE.Group(); poste.position.set(lx, Math.max(y, alturaDeApoyo(lx, lz)), lz); scene.add(poste);
         mcLamp(poste, 0, 0, 0xfff0b0);
       }
       if (casas % 3 === 0) {
         const lx = x - 3.1, lz = z + 1.2;
-        const arb = new THREE.Group(); arb.position.set(lx, Math.max(y, groundHeightAt(lx, lz)), lz); scene.add(arb);
+        const arb = new THREE.Group(); arb.position.set(lx, Math.max(y, alturaDeApoyo(lx, lz)), lz); scene.add(arb);
         mcBush(arb, 0, 0, 0.85);
       }
     }
   }
   if (sitioPueblo(cx + 2, cz)) {
-    const y = Math.max(groundHeightAt(cx, cz), sueloFirme(cx, cz, 8, 8));
+    const y = Math.max(alturaDeApoyo(cx, cz), sueloFirme(cx, cz, 8, 8));
     const plaza = new THREE.Group(); plaza.position.set(cx, y, cz); scene.add(plaza);
     mcBench(plaza, 0, 3.2, 0);
     mcFlowers(plaza, 2.4, -1.6, 0.75);
@@ -8524,9 +8720,9 @@ function poblarAlrededor(cx, cz, anillos, gente) {
     const x = cx + Math.cos(a) * 9, z = cz + Math.sin(a) * 9;
     if (!sitioPueblo(x, z)) continue;
     const persona = makePerson([0x9333ea, 0x0891b2, 0xca8a04, 0xdc2626, 0x16a34a][i % 5], 0xf1c27d);
-    persona.position.set(x, groundHeightAt(x, z), z);
+    persona.position.set(x, alturaDeApoyo(x, z), z);
     persona.userData.wild = true;
-    initCitizenBrain(persona, new THREE.Vector3(cx, groundHeightAt(cx, cz), cz), 12);
+    initCitizenBrain(persona, new THREE.Vector3(cx, alturaDeApoyo(cx, cz), cz), 12);
     scene.add(persona); npcs.push(persona);
   }
   return casas;
@@ -8566,7 +8762,7 @@ function poblarAlrededor(cx, cz, anillos, gente) {
       const x = Math.cos(a) * rad, z = Math.sin(a) * rad * 0.84;
       if (!sitioPueblo(x, z) || lugarOcupado(x, z, 96)) continue;
       const casas = poblarAlrededor(x, z, preferLowPerf ? 1 : 2, preferLowPerf ? 3 : 5);
-      if (sitioConstruible(x + 24, z, 8, 18, 14)) makeHotel(x + 24, z, a, groundHeightAt(x + 24, z));
+      if (sitioConstruible(x + 24, z, 8, 18, 14)) makeHotel(x + 24, z, a, alturaDeApoyo(x + 24, z));
       CIUDADES.push({ name: nombresCiudad[i % nombresCiudad.length], x, z, casas });
       puesto = true;
     }
@@ -17640,7 +17836,7 @@ function updateSkiLiftRide(dt) {
   const base = ride.kind === 'arrastre' ? SKI_TOW_BOTTOM : ride.kind === 'andarivel2' ? SKI_LIFT2_BOTTOM : ride.kind === 'cumbre' ? SKI_SUMMIT_LIFT_BOTTOM : SKI_LIFT_BOTTOM;
   const distance = ride.kind === 'cumbre' ? 72 : 340;
   const x = base.x, z = base.z - ride.t * distance;
-  player.position.set(x, skiSlopeHeight(x, z) + (ride.kind === 'arrastre' ? 1.4 : 3.2), z);
+  player.position.set(x, skiSlopeHeight(x, z) + PLAYER_EYE, z);
   grounded = true; vy = 0; camera.rotation.y = yaw; camera.rotation.x = pitch;
   if (ride.t >= 1) {
     state.skiLiftRide = null;
@@ -20070,8 +20266,8 @@ function updateVineRide(dt) {
 function frenarSueloDeVuelo(pos, fromX, fromZ, fromY, holgura, minimo) {
   if (state.underground || state.inCastle || state.inRuins || state.inArena) return;
   if (state.planet !== 'tierra' || state.country) return;
-  const suelo = mountainHeightAt(pos.x, pos.z);
-  const medio = mountainHeightAt((pos.x + fromX) / 2, (pos.z + fromZ) / 2);
+  const suelo = sueloReal(pos.x, pos.z);
+  const medio = sueloReal((pos.x + fromX) / 2, (pos.z + fromZ) / 2);
   let techo = Math.max(suelo, medio);
   if (inTreasureIsland(pos.x, pos.z)) techo = Math.max(techo, TREASURE_ISLAND.surface);
   if (minimo != null) techo = Math.max(techo, minimo);
@@ -20187,9 +20383,9 @@ function updateMovement(dt) {
     return;
   }
   if (state.planet === 'tierra' && !state.underground && !state.skiing && !state.skiLiftRide && !state.inCastle && !state.inRuins && !state.inArena) {
-    const prevH = mountainHeightAt(moveStartX, moveStartZ);
-    const nextH = mountainHeightAt(player.position.x, player.position.z);
-    const midH = mountainHeightAt((player.position.x + moveStartX) / 2, (player.position.z + moveStartZ) / 2);
+    const prevH = sueloReal(moveStartX, moveStartZ);
+    const nextH = sueloReal(player.position.x, player.position.z);
+    const midH = sueloReal((player.position.x + moveStartX) / 2, (player.position.z + moveStartZ) / 2);
     const horiz = Math.hypot(player.position.x - moveStartX, player.position.z - moveStartZ);
     if (Math.max(nextH, midH) > prevH + Math.max(0.42, horiz * 1.35 + 0.05)) {
       player.position.x = moveStartX;
@@ -20316,7 +20512,7 @@ function updateMovement(dt) {
   const floor2Y = secondFloorSupportY(crouch ? CROUCH_EYE : PLAYER_EYE);
   if (floor2Y != null) { floorY = Math.max(floorY, floor2Y); if (grounded && vy <= 0) player.position.y = floorY; }
   if (!state.underground && !state.inCastle && !state.inRuins && !state.inArena && !inSkiTopHollow()) {   // ¡las montañas se suben!
-    const cerro = mountainHeightAt(player.position.x, player.position.z);
+    const cerro = sueloReal(player.position.x, player.position.z);
     const eyeH = crouch ? CROUCH_EYE : PLAYER_EYE;
     if (cerro > 0.02) { floorY = Math.max(floorY, cerro + eyeH); if (grounded && vy <= 0) player.position.y = floorY; }
     else if (cerro < -0.05 && floorY <= standY + 0.25) { floorY = cerro + eyeH; if (grounded && vy <= 0) player.position.y = floorY; }
