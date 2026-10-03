@@ -1538,7 +1538,7 @@ const BIOMES = [
   { id: 'canon', name: 'Cañón rojo', icon: '🏜️', x: 1700, z: 700, r: 160, kind: 'canyon', ground: 0xc2410c, bed: 0x7c2d12 },
 ];
 const BIOME_LAKES = [
-  { biome: 'pantano', cx: 650, cz: -828, rx: 62, rz: 44, depth: 6.5, surface: 0.35, bottom: -5.4, color: 0x123524, opacity: 0.86 },
+  { biome: 'pantano', cx: 650, cz: -828, rx: 62, rz: 44, depth: 6.5, surface: 0.35, bottom: -5.4, color: 0x1a7f8a, opacity: 0.7 },
   { biome: 'vergel', cx: -724, cz: 640, rx: 34, rz: 26, depth: 4.2, surface: 0.4, bottom: -3.2, color: 0x22d3ee, opacity: 0.55 },
   { biome: 'lagos', cx: -568, cz: 1186, rx: 86, rz: 58, depth: 10, surface: 0.42, bottom: -8.6, color: 0x0284c7, opacity: 0.62 },
   { biome: 'lagos', cx: -390, cz: 1088, rx: 52, rz: 38, depth: 7.5, surface: 0.38, bottom: -6.2, color: 0x0369a1, opacity: 0.66 },
@@ -1706,7 +1706,6 @@ function biomeShape(b, x, z) {
     const across = Math.abs(-dx * 0.84 + dz * 0.55);
     h = 9 + n * 8 + Math.max(0, n2) * 6 - Math.exp(-(across * across) / (26 * 26)) * 18;
   }
-  for (const w of BIOME_LAKES) if (w.biome === b.id) h -= waterDip(w, x, z);
   return h;
 }
 function terrainHeightAt(x, z) {
@@ -1714,9 +1713,13 @@ function terrainHeightAt(x, z) {
   const m = terrainMask(x, z);
   const wild = m <= 0 ? 0 : wildHeight(x, z) * m;
   const b = biomeAtPoint(x, z);
-  if (!b) return wild;
-  const w = biomeWeight(b, x, z);
-  return biomeShape(b, x, z) * w + wild * (1 - w);
+  let h = wild;
+  if (b) {
+    const w = biomeWeight(b, x, z);
+    h = biomeShape(b, x, z) * w + wild * (1 - w);
+  }
+  for (const lake of BIOME_LAKES) h -= waterDip(lake, x, z);
+  return h;
 }
 function groundHeightAt(x, z) {
   const city = cityReliefAt(x, z);
@@ -1772,14 +1775,33 @@ function biomeTint(x, z, h, out) {
   out.lerp(_biomeCity, (1 - m) * 0.12);
 }
 const EARTH_SIZE = 4600;
+sembrarLagos();
+nivelarLagos();
 const earthSeg = preferLowPerf ? 96 : 188;
 const earthGeo = new THREE.PlaneGeometry(EARTH_SIZE, EARTH_SIZE, earthSeg, earthSeg);
 const earthPos = earthGeo.attributes.position;
 const earthColors = new Float32Array(earthPos.count * 3);
 const earthTint = new THREE.Color();
+function bajarTapa(x, z, h) {
+  let out = h;
+  for (const w of BIOME_LAKES) {
+    const radio = Math.max(w.rx, w.rz);
+    const alcance = radio + 38;
+    const dist = Math.hypot(x - w.cx, z - w.cz);
+    if (dist >= alcance) continue;
+    const boca = radio + 28;
+    const suelo = Math.min(h, w.bottom - 2);
+    if (dist <= boca) out = Math.min(out, suelo);
+    else {
+      const u = (dist - boca) / (alcance - boca);
+      out = Math.min(out, suelo * (1 - u) + h * u);
+    }
+  }
+  return out;
+}
 for (let i = 0; i < earthPos.count; i++) {
   const x = earthPos.getX(i), z = -earthPos.getY(i);
-  const h = terrainHeightAt(x, z);
+  const h = bajarTapa(x, z, terrainHeightAt(x, z));
   earthPos.setZ(i, h);
   biomeTint(x, z, h, earthTint);
   earthColors[i * 3] = earthTint.r; earthColors[i * 3 + 1] = earthTint.g; earthColors[i * 3 + 2] = earthTint.b;
@@ -5349,7 +5371,107 @@ function placeSavanna(g, spots) {
     addObstacle(x, z, 1.2, 1.2, y + 3.3, 'arbol');
   }
 }
+function cerroCerca(x, z) {
+  if (Math.abs(x - 520) < 250 && Math.abs(z - 500) < 400) return true;
+  for (const c of CERROS) if (Math.hypot(x - c.x, z - c.z) < c.r + 36) return true;
+  const fijos = [[1560, -80, 110], [1475, 20, 74], [1665, -25, 80], [1515, -175, 66], [1690, -145, 60], [1385, -35, 72], [1765, 30, 68], [1420, -120, 58], [-1040, 260, 84], [260, -900, 90], [1040, 880, 86], [-460, -680, 78], [720, -560, 74], [-200, 1040, 80]];
+  for (const [cx, cz, r] of fijos) if (Math.hypot(x - cx, z - cz) < r + 28) return true;
+  for (let i = 0; i < 30; i++) {
+    const a = i * 2.399963, rad = 520 + (i % 8) * 160;
+    const rr = 52 + (i % 4) * 16;
+    if (Math.hypot(x - Math.cos(a) * rad, z - Math.sin(a) * rad) < rr + 24) return true;
+  }
+  return false;
+}
+function sembrarLagos() {
+  if (BIOME_LAKES._listos) return;
+  BIOME_LAKES._listos = true;
+  let semilla = 900001;
+  const rnd = () => { semilla = (semilla * 16807) % 2147483647; return (semilla - 1) / 2147483646; };
+  const quieren = ['orange', 'green', 'jungle', 'savanna', 'pine', 'red', 'sunset', 'gray', 'desert', 'steppe', 'giant', 'lakes'];
+  const colorDe = {
+    orange: 0x2b9fd4, green: 0x1a9ec4, jungle: 0x1497a4, savanna: 0x2aa3c8,
+    pine: 0x1d84b4, red: 0x3a94c4, sunset: 0x3aa8cc, gray: 0x6aa4be,
+    desert: 0x35a8d0, steppe: 0x3a98b8, giant: 0x1787a8, lakes: 0x0284c7,
+  };
+  const lista = BIOMES.filter(b => quieren.includes(b.kind));
+  for (let i = lista.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    const t = lista[i]; lista[i] = lista[j]; lista[j] = t;
+  }
+  const porTipo = {};
+  let n = 0;
+  const intentar = (b) => {
+    for (let t = 0; t < 16; t++) {
+      const ang = rnd() * Math.PI * 2;
+      const rad = (0.16 + rnd() * 0.28) * b.r;
+      const x = b.x + Math.cos(ang) * rad, z = b.z + Math.sin(ang) * rad;
+      if (biomeWeight(b, x, z) < 0.55) continue;
+      if (Math.hypot(x, z) < 340) continue;
+      if (x < -160 && z > -500 && z < 160) continue;
+      if (cerroCerca(x, z)) continue;
+      if (Math.hypot(x + 1060, z + 155) < 300) continue;
+      if (enCalle(x, z, 8)) continue;
+      if (BIOME_LAKES.some(w => Math.hypot(w.cx - x, w.cz - z) < Math.max(w.rx, w.rz) + 80)) continue;
+      const rx = 22 + rnd() * 16, rz = 16 + rnd() * 12;
+      if (x - rx < -760 || x + rx > 1980 || z - rz < -1520 || z + rz > 1980) continue;
+      const muestras = [];
+      for (let k = 0; k < 8; k++) {
+        const a = k / 8 * Math.PI * 2;
+        muestras.push(terrainHeightAt(x + Math.cos(a) * rx, z + Math.sin(a) * rz));
+      }
+      const centro = terrainHeightAt(x, z);
+      const min = Math.min(centro, ...muestras), max = Math.max(centro, ...muestras);
+      if (max - min > 3.2 || centro < 1 || centro > 22) continue;
+      BIOME_LAKES.push({
+        biome: b.id, kind: b.kind, cx: x, cz: z, rx, rz,
+        depth: 4.2 + rnd() * 1.6, surface: 0, bottom: 0,
+        color: colorDe[b.kind] || 0x1a9fd0, opacity: 0.64, lake: true,
+      });
+      porTipo[b.kind] = (porTipo[b.kind] || 0) + 1;
+      n++;
+      return true;
+    }
+    return false;
+  };
+  for (const b of lista) {
+    if (n >= 12) break;
+    if (porTipo[b.kind]) continue;
+    intentar(b);
+  }
+  for (const b of lista) {
+    if (n >= 12) break;
+    if ((porTipo[b.kind] || 0) >= 2) continue;
+    intentar(b);
+  }
+}
+function nivelarLagos() {
+  for (const w of BIOME_LAKES) {
+    const b = BIOMES.find(o => o.id === w.biome);
+    if (!w.kind && b) w.kind = b.kind;
+    const orilla = [];
+    const c = Math.cos(w.rot || 0), s = Math.sin(w.rot || 0);
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2;
+      const lx = Math.cos(a) * w.rx * 1.05, lz = Math.sin(a) * w.rz * 1.05;
+      orilla.push(terrainHeightAt(w.cx + lx * c - lz * s, w.cz + lx * s + lz * c));
+    }
+    orilla.sort((a, b2) => a - b2);
+    const borde = orilla[0];
+    let surface = borde - 0.12;
+    const centro0 = terrainHeightAt(w.cx, w.cz);
+    const sinHueco = centro0 + w.depth;
+    const dip = sinHueco - surface + 2.5;
+    if (dip > w.depth) w.depth = Math.min(14, dip);
+    const centro = terrainHeightAt(w.cx, w.cz);
+    w.bottom = Math.min(centro + 0.18, surface - 1.35);
+    if (surface > borde - 0.06) surface = borde - 0.06;
+    w.surface = surface;
+  }
+}
 function buildWorldBiomes() {
+  sembrarLagos();
+  nivelarLagos();
   const g = new THREE.Group();
   g.name = 'biomas';
   scene.add(g);
@@ -5480,12 +5602,36 @@ function buildWorldBiomes() {
     side: THREE.DoubleSide, depthWrite: false,
   });
   for (const w of BIOME_LAKES) {
-    const water = new THREE.Mesh(new THREE.CircleGeometry(1, 40), waterMat(w.color, w.opacity));
-    water.scale.set(w.rx, w.rz, 1);
-    water.rotation.y = w.rot || 0;
-    water.rotateX(-Math.PI / 2);
-    water.position.set(w.cx, w.surface, w.cz);
-    g.add(water);
+    const alcance = Math.max(w.rx, w.rz) + 38;
+    const cuenca = new THREE.PlaneGeometry(alcance * 2, alcance * 2, 18, 18);
+    cuenca.rotateX(-Math.PI / 2);
+    if (w.rot) cuenca.rotateY(w.rot);
+    const attr = cuenca.attributes.position;
+    const colores = new Float32Array(attr.count * 3);
+    for (let i = 0; i < attr.count; i++) {
+      const x = w.cx + attr.getX(i), z = w.cz + attr.getZ(i);
+      const h = terrainHeightAt(x, z);
+      attr.setY(i, h + 0.07);
+      biomeTint(x, z, h, tint);
+      colores[i * 3] = tint.r; colores[i * 3 + 1] = tint.g; colores[i * 3 + 2] = tint.b;
+    }
+    cuenca.setAttribute('color', new THREE.BufferAttribute(colores, 3));
+    cuenca.computeVertexNormals();
+    const suelo = new THREE.Mesh(cuenca, new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.94, metalness: 0,
+      polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -8,
+    }));
+    suelo.position.set(w.cx, 0, w.cz);
+    suelo.receiveShadow = true;
+    suelo.userData.walkSurface = true;
+    g.add(suelo);
+    const agua = new THREE.Mesh(new THREE.CircleGeometry(1, 40), waterMat(w.color || 0x1a9fd0, w.opacity || 0.62));
+    agua.scale.set(w.rx * 0.9, w.rz * 0.9, 1);
+    agua.rotation.y = w.rot || 0;
+    agua.rotateX(-Math.PI / 2);
+    agua.position.set(w.cx, w.surface + 0.05, w.cz);
+    agua.userData.noBake = true;
+    g.add(agua);
   }
   for (const block of cityBlocks()) {
     const seg = preferLowPerf ? 8 : 12;
@@ -8174,6 +8320,7 @@ function sitioConstruible(x, z, margen, ancho, fondo) {
   if (h < 0.7 || h > 18) return false;
   if (enCalle(x, z, margen) || distritoEn(x, z, margen)) return false;
   if (lakeAt(x, z) || cityPondAt(x, z)) return false;
+  if (lakeAt(x + ancho / 2, z) || lakeAt(x - ancho / 2, z) || lakeAt(x, z + fondo / 2) || lakeAt(x, z - fondo / 2)) return false;
   if (Math.hypot(x - SKI_RESORT.x, z - SKI_RESORT.z) < SKI_RESORT.r + 50) return false;
   if (Math.hypot(x - TREASURE_ISLAND.x, z - TREASURE_ISLAND.z) < 280) return false;
   if (x < -180 && z > -430 && z < 90) return false;
@@ -8319,6 +8466,7 @@ function sitioPueblo(x, z) {
   if (Math.abs(x) < 250 && Math.abs(z) < 250) return false;
   if (enCalle(x, z, 6) || distritoEn(x, z, 8)) return false;
   if (lakeAt(x, z) || cityPondAt(x, z)) return false;
+  if (lakeAt(x + 5, z) || lakeAt(x - 5, z) || lakeAt(x, z + 5) || lakeAt(x, z - 5)) return false;
   if (x < -200 && z > -450 && z < 100) return false;
   if (Math.hypot(x - SKI_RESORT.x, z - SKI_RESORT.z) < 190) return false;
   if (Math.hypot(x - TREASURE_ISLAND.x, z - TREASURE_ISLAND.z) < 260) return false;
@@ -20417,6 +20565,16 @@ try { if (new URLSearchParams(location.search).has('debug')) {
   timDump.paintMap = () => drawMinimap();
   timDump.sueloFirme = (x, z, w, d) => sueloFirme(x, z, w, d);
   timDump.horno = () => hornoStats;
+  timDump.lagos = () => BIOME_LAKES.map(w => {
+    const b = BIOMES.find(o => o.id === w.biome);
+    return {
+      kind: w.kind || (b && b.kind) || w.biome,
+      name: (b && b.name) || w.biome,
+      x: +w.cx.toFixed(1), z: +w.cz.toFixed(1),
+      surface: +w.surface.toFixed(2), bottom: +w.bottom.toFixed(2),
+      rx: +w.rx.toFixed(1), rz: +w.rz.toFixed(1),
+    };
+  });
   timDump.moveLiving = (e, x, z, step) => moveToward(e, { x, z }, step == null ? 1 : step);
   // Revisa que ningún edificio haya quedado encima de una calle, fuera de su
   // manzana, o metido dentro de otro edificio.
