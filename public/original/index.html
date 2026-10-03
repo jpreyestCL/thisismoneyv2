@@ -1431,6 +1431,7 @@ const groundMat = new THREE.MeshStandardMaterial({
 });
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(1800, 1800), groundMat);
 ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
+ground.userData.walkSurface = true;
 scene.add(ground);
 ground.visible = false;
 
@@ -1465,12 +1466,44 @@ const WILD_PEAKS = [
   { x: -980, z: 820, h: 72, r: 200 },
   { x: 860, z: -1100, h: 78, r: 220 },
   { x: -1200, z: -900, h: 64, r: 190 },
+  { x: 420, z: -860, h: 70, r: 180 },
+  { x: -640, z: -480, h: 58, r: 160 },
+  { x: 980, z: 720, h: 66, r: 170 },
+  { x: -1180, z: 180, h: 62, r: 150 },
+  { x: 200, z: 980, h: 74, r: 190 },
+  { x: 1480, z: 420, h: 88, r: 200 },
+  { x: -300, z: -1100, h: 68, r: 170 },
+  { x: 700, z: 200, h: 36, r: 120 },
 ];
+function terrainSeed(ix, iz) {
+  const v = Math.sin(ix * 127.1 + iz * 311.7) * 43758.5453;
+  return v - Math.floor(v);
+}
+// Lomas repartidas por todo el campo: el mundo deja de ser una losa.
+function moundHeight(x, z) {
+  const cell = 92;
+  const gx = Math.floor(x / cell), gz = Math.floor(z / cell);
+  let h = 0;
+  for (let ix = gx - 1; ix <= gx + 1; ix++) {
+    for (let iz = gz - 1; iz <= gz + 1; iz++) {
+      if (terrainSeed(ix, iz) < 0.38) continue;
+      const cx = ix * cell + (terrainSeed(ix, iz + 3) - 0.5) * 46;
+      const cz = iz * cell + (terrainSeed(ix + 5, iz) - 0.5) * 46;
+      const rad = 32 + terrainSeed(ix + 2, iz + 7) * 34;
+      const amp = 6 + terrainSeed(ix + 9, iz + 1) * 16;
+      const d = Math.hypot(x - cx, z - cz);
+      if (d < rad) h += amp * Math.pow(1 - d / rad, 1.65);
+    }
+  }
+  return h;
+}
 function wildHeight(x, z) {
   const n = terrainField(x, z), n2 = terrainField(x + 500, z - 300);
-  let h = 3 + n * 8 + Math.max(0, n2) * 16;
+  let h = 3 + n * 10 + Math.max(0, n2) * 18 + moundHeight(x, z);
   const ridge = 1 - Math.abs(terrainWave(x, z, 0.0031));
-  h += Math.pow(Math.max(0, ridge), 3) * 26 * Math.max(0, n2 + 0.15);
+  h += Math.pow(Math.max(0, ridge), 3) * 30 * Math.max(0, n2 + 0.15);
+  const ripple = Math.sin(x * 0.021) * Math.cos(z * 0.017);
+  h += Math.max(0, ripple) * 7;
   for (const p of WILD_PEAKS) {
     const d = Math.hypot(x - p.x, z - p.z);
     if (d < p.r) h += p.h * Math.pow(1 - d / p.r, 1.55);
@@ -1493,11 +1526,11 @@ function terrainMask(x, z) {
 // Biomas lejos de la ciudad: el suelo grande los pinta, y un parche fino
 // (más abajo) les da lagos, naranjos y nieve que se notan al caminar.
 const BIOMES = [
-  { id: 'naranjal', name: 'Naranjal', icon: '🍊', x: 920, z: 240, r: 145, kind: 'orange', ground: 0xe08a2c, bed: 0xc2410c },
+  { id: 'naranjal', name: 'Naranjal', icon: '🍊', x: 920, z: 240, r: 210, kind: 'orange', ground: 0xff6a00, bed: 0xc2410c },
   { id: 'vergel', name: 'Vergel', icon: '🌿', x: -760, z: 620, r: 165, kind: 'green', ground: 0x16a34a, bed: 0x166534 },
   { id: 'pantano', name: 'Pantano oscuro', icon: '🌑', x: 640, z: -820, r: 155, kind: 'dark', ground: 0x102018, bed: 0x0b1410 },
   { id: 'gigantes', name: 'Bosque gigante', icon: '🌳', x: -900, z: -860, r: 175, kind: 'giant', ground: 0x166534, bed: 0x14532d },
-  { id: 'nieve', name: 'Bioma de nieve', icon: '❄️', x: 1560, z: -80, r: 185, kind: 'snow', ground: 0xe7eef6, bed: 0xd5dee8 },
+  { id: 'nieve', name: 'Bioma de nieve', icon: '❄️', x: 1560, z: -80, r: 260, kind: 'snow', ground: 0xf8fafc, bed: 0xe2e8f0 },
   { id: 'lagos', name: 'Lagos', icon: '🏞️', x: -560, z: 1180, r: 180, kind: 'lakes', ground: 0x4d7c0f, bed: 0x1e3a5f },
   { id: 'canon', name: 'Cañón rojo', icon: '🏜️', x: 1700, z: 700, r: 160, kind: 'canyon', ground: 0xc2410c, bed: 0x7c2d12 },
 ];
@@ -1594,15 +1627,20 @@ function biomeShape(b, x, z) {
   const n = terrainField(x, z);
   const n2 = terrainWave(x, z, 0.018);
   let h = 2 + n * 4;
-  if (b.kind === 'orange') h = 1.6 + n * 5.5 + n2 * 2.2 + Math.max(0, terrainWave(x, z, 0.04)) * 3.2;
-  else if (b.kind === 'green') h = 3.2 + Math.max(0, n) * 9 + n2 * 3.6;
-  else if (b.kind === 'dark') h = 0.55 + n2 * 1.5 + Math.max(0, -n) * 0.9;
-  else if (b.kind === 'giant') h = 5 + n * 7 + Math.max(0, n2) * 12;
+  if (b.kind === 'orange') h = 2.4 + n * 8 + n2 * 4.2 + Math.max(0, terrainWave(x, z, 0.04)) * 5.5 + moundHeight(x, z) * 1.15;
+  else if (b.kind === 'green') h = 3.2 + Math.max(0, n) * 9 + n2 * 3.6 + moundHeight(x, z) * 0.8;
+  else if (b.kind === 'dark') h = 0.8 + n2 * 2.2 + Math.max(0, -n) * 1.2 + moundHeight(x, z) * 0.45;
+  else if (b.kind === 'giant') h = 5 + n * 7 + Math.max(0, n2) * 12 + moundHeight(x, z) * 0.7;
   else if (b.kind === 'snow') {
-    const u = Math.max(0, 1 - Math.hypot(x - b.x, z - b.z) / (b.r * 0.78));
-    const ridges = Math.pow(Math.max(0, 1 - Math.abs(terrainWave(x, z, 0.011))), 2) * 14 * u;
-    h = 6 + Math.pow(u, 1.45) * 70 + ridges + n * 4;
-  } else if (b.kind === 'lakes') h = 2.2 + n * 3.2 + n2 * 1.8;
+    const u = Math.max(0, 1 - Math.hypot(x - b.x, z - b.z) / (b.r * 0.82));
+    const ridges = Math.pow(Math.max(0, 1 - Math.abs(terrainWave(x, z, 0.011))), 2) * 18 * u;
+    h = 8 + Math.pow(u, 1.35) * 78 + ridges + n * 6 + moundHeight(x, z) * 0.55;
+    const snowPeaks = [[0, 0, 78, 52], [70, -24, 52, 36], [-48, 36, 46, 30], [24, 62, 40, 26], [-72, -40, 44, 28], [110, 20, 36, 22]];
+    for (const [ox, oz, rad, amp] of snowPeaks) {
+      const d = Math.hypot(x - (b.x + ox), z - (b.z + oz));
+      if (d < rad) h += amp * Math.pow(1 - d / rad, 1.55);
+    }
+  } else if (b.kind === 'lakes') h = 2.2 + n * 3.2 + n2 * 1.8 + moundHeight(x, z) * 0.35;
   else if (b.kind === 'canyon') {
     const dx = x - b.x, dz = z - b.z;
     const across = Math.abs(-dx * 0.84 + dz * 0.55);
@@ -1631,11 +1669,14 @@ function biomeTint(x, z, h, out) {
     const w = biomeWeight(b, x, z);
     if (w > 0.18) {
       let hex = b.ground;
-      if (b.kind === 'snow') hex = h > 24 ? 0xf8fafc : 0xdbe7f2;
+      if (b.kind === 'orange') {
+        const tone = terrainField(x * 1.6, z * 1.6);
+        hex = tone > 0.2 ? 0xff8c1a : tone < -0.18 ? 0xe85d04 : 0xff6a00;
+      } else if (b.kind === 'snow') hex = h > 28 ? 0xffffff : 0xf8fafc;
       else if (h < 0.25) hex = b.bed;
       else if (h > 40) hex = 0xf1f5f9;
       out.setHex(hex);
-      if (w < 0.9) out.lerp(_biomeCity, 1 - w);
+      if (w < 0.9) out.lerp(_biomeCity, (1 - w) * (b.kind === 'orange' || b.kind === 'snow' ? 0.22 : 1));
       return;
     }
   }
@@ -1656,7 +1697,7 @@ function biomeTint(x, z, h, out) {
   out.setHex(hex).lerp(_biomeCity, 1 - m);
 }
 const EARTH_SIZE = 4600;
-const earthSeg = preferLowPerf ? 72 : 148;
+const earthSeg = preferLowPerf ? 96 : 188;
 const earthGeo = new THREE.PlaneGeometry(EARTH_SIZE, EARTH_SIZE, earthSeg, earthSeg);
 const earthPos = earthGeo.attributes.position;
 const earthColors = new Float32Array(earthPos.count * 3);
@@ -1673,6 +1714,7 @@ earthGeo.computeVertexNormals();
 const earthTerrain = new THREE.Mesh(earthGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0 }));
 earthTerrain.rotation.x = -Math.PI / 2;
 earthTerrain.receiveShadow = true;
+earthTerrain.userData.walkSurface = true;
 scene.add(earthTerrain);
 function showEarthGround(earth) {
   earthTerrain.visible = !!earth;
@@ -3105,7 +3147,7 @@ function placeYardPool(parent, lx, lz, rot, ox, oz) {
   });
 }
 let houseSerial = 0;
-function makeCityHouse(x, z, golden, rot = 0, maxW = 7.5, maxD = 7.5, plan = null) {
+function makeCityHouse(x, z, golden, rot = 0, maxW = 7.5, maxD = 7.5, plan = null, baseY = 0, tag = '') {
   plan = plan || planDeCasa(maxW, maxD) || planDeCasa(4, 4);
   const g = new THREE.Group();
   g.rotation.y = rot;   // la puerta mira a la calle de su manzana
@@ -3124,7 +3166,8 @@ function makeCityHouse(x, z, golden, rot = 0, maxW = 7.5, maxD = 7.5, plan = nul
     // TESORO adentro: cofre + monedas de oro brillantes
     const chest = new THREE.Mesh(smoothBox(1.3, 0.9, 0.9), mat(0x7c4a1e)); chest.position.set(0, 0.55, -1.3); chest.castShadow = true; g.add(chest);
     for (let i = 0; i < 8; i++) { const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.12, 12), new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.9, roughness: 0.25 })); coin.position.set((Math.random() - 0.5) * 1.4, 0.18 + Math.random() * 0.4, -0.3 + (Math.random() - 0.5) * 1.2); coin.rotation.set(Math.random(), Math.random(), Math.random()); g.add(coin); }
-    g.position.set(x, 0, z); scene.add(g);
+    g.userData.noSolid = true;   // la casa secreta se entra: no la sella el pase de colisiones
+    g.position.set(x, baseY || 0, z); scene.add(g);
     return g;   // sin obstáculo: entras caminando por la puerta y cobras el oro con E
   }
   const detalle = !preferLowPerf;   // en celular/equipos lentos la casa va simple (si no, son miles de piezas)
@@ -3217,8 +3260,9 @@ function makeCityHouse(x, z, golden, rot = 0, maxW = 7.5, maxD = 7.5, plan = nul
     }
     caja(bx, h1 + .1, pz, bw * .98, .34, 2.1, plan.tejas);
   }
-  if (w >= 4.2 && d >= 3.6) placeYardPool(g, bx, bz - bd / 2 - 1.2, rot, x, z);
-  g.position.set(x, 0, z); scene.add(g);
+  if (!baseY && w >= 4.2 && d >= 3.6) placeYardPool(g, bx, bz - bd / 2 - 1.2, rot, x, z);
+  g.position.set(x, baseY || 0, z); scene.add(g);
+  if (tag) g.name = tag;
   // pista secreta: la del tesoro es la ÚNICA en la que puedes entrar (las demás te bloquean)
   if (!golden) {
     const grupo = 'casa' + (++houseSerial);   // las piezas de UNA misma casa sí pueden tocarse
@@ -3226,8 +3270,8 @@ function makeCityHouse(x, z, golden, rot = 0, maxW = 7.5, maxD = 7.5, plan = nul
     for (const c of cuerpos) {
       const wx = x + c.x * cs + c.z * sn, wz = z - c.x * sn + c.z * cs;   // el grupo va rotado en Y
       const cw = girada ? c.d : c.w, cd = girada ? c.w : c.d;
-      addObstacle(wx, wz, cw, cd, c.top, grupo);
-      addLandingSurface(wx, wz, cw * 1.08, cd * 1.08, c.top + .2, g);   // te puedes parar en el techo
+      addObstacle(wx, wz, cw, cd, c.top + (baseY || 0), grupo);
+      addLandingSurface(wx, wz, cw * 1.08, cd * 1.08, c.top + (baseY || 0) + .2, g);   // te puedes parar en el techo
     }
   }
   g.userData.plan = plan;
@@ -3429,8 +3473,10 @@ function buildDarkAlley() {
   root.add(makeDumpster(ALLEY.x0 - 7.6, ALLEY.z + 1.28, 3.05, 2));
   root.add(makeDumpster(ALLEY.x0 - 13.2, ALLEY.z - 1.26, -0.08, 3));
   for (let i = 0; i < 5; i++) {
+    const bx = ALLEY.x0 - 4 - i * 3.1, bz = ALLEY.z + (i % 2 ? 1.55 : -1.55);
     const box = new THREE.Mesh(smoothBox(0.38, 0.26, 0.32), mat(0x8b5a2b));
-    box.position.set(ALLEY.x0 - 4 - i * 3.1, 0.16, ALLEY.z + (i % 2 ? 1.55 : -1.55)); root.add(box);
+    box.position.set(bx, 0.16, bz); root.add(box);
+    alleyAddObs(bx, bz, 0.42, 0.38, 0.4);
   }
   for (const lx of [ALLEY.x0 - 4, ALLEY.x0 - 14]) {
     const arm = new THREE.Mesh(smoothBox(0.08, 0.08, 0.55), mat(0x292524));
@@ -4992,13 +5038,56 @@ function buildTrees() {   // árboles INSTANCIADOS: ~100 árboles en solo 2 draw
     pos.set(x, base + 3.4 * alto, z); esc.set(anchoA, alto, anchoA); m4.compose(pos, q, esc); leaves.setMatrixAt(i, m4);
     pos.set(x, base + 4.6 * alto, z); esc.set(anchoA, alto, anchoA); m4.compose(pos, q, esc); leaves2.setMatrixAt(i, m4);
     pos.set(x, base + 5.6 * alto, z); esc.set(anchoA, alto, anchoA); m4.compose(pos, q, esc); leaves3.setMatrixAt(i, m4);
-    worldTreeObs.push(addObstacle(x, z, 0.9, 0.9, base + 2.35, 'arbol'));
+    worldTreeObs.push(addObstacle(x, z, 1.15, 1.15, base + 2.5, 'arbol'));
   });
   scene.add(trunks); scene.add(leaves); scene.add(leaves2); scene.add(leaves3);
   decor.push(trunks, leaves, leaves2, leaves3);
 }
 buildTrees();
 
+function placeSnowFirs(g, spots) {
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.9 });
+  const snowMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72 });
+  const iceMat = new THREE.MeshStandardMaterial({ color: 0xe0f2fe, roughness: 0.55 });
+  const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.28, 0.46, 2.2, 7), trunkMat, spots.length);
+  const low = new THREE.InstancedMesh(new THREE.ConeGeometry(2.35, 3.6, 8), snowMat, spots.length);
+  const mid = new THREE.InstancedMesh(new THREE.ConeGeometry(1.7, 3.1, 8), iceMat, spots.length);
+  const tip = new THREE.InstancedMesh(new THREE.ConeGeometry(0.95, 2.3, 8), snowMat, spots.length);
+  trunks.castShadow = low.castShadow = mid.castShadow = tip.castShadow = true;
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), esc = new THREE.Vector3(1, 1, 1);
+  spots.forEach(([x, z, y], i) => {
+    const s = 1.15 + Math.random() * 0.55;
+    q.identity();
+    pos.set(x, y + 1.1 * s, z); esc.set(1, s, 1); m4.compose(pos, q, esc); trunks.setMatrixAt(i, m4);
+    pos.set(x, y + 2.7 * s, z); esc.set(s, s, s); m4.compose(pos, q, esc); low.setMatrixAt(i, m4);
+    pos.set(x, y + 4.35 * s, z); esc.set(s, s, s); m4.compose(pos, q, esc); mid.setMatrixAt(i, m4);
+    pos.set(x, y + 5.7 * s, z); esc.set(s, s, s); m4.compose(pos, q, esc); tip.setMatrixAt(i, m4);
+    const ancho = 2.5 * s;
+    addObstacle(x, z, ancho, ancho, y + 6.2 * s, 'arbol');
+  });
+  g.add(trunks, low, mid, tip);
+}
+function placeGlaciers(g, b) {
+  const iceMat = new THREE.MeshStandardMaterial({ color: 0xd7f6ff, roughness: 0.16, metalness: 0.12, transparent: true, opacity: 0.9 });
+  const coreMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.42 });
+  const bloques = [
+    [130, 16, 30, 9, 16], [-120, -18, 26, 11, 14], [18, 150, 22, 8, 18],
+    [-28, -140, 28, 10, 15], [78, -100, 18, 13, 12], [-90, 70, 20, 8, 14],
+    [40, 40, 16, 14, 12], [-10, -30, 24, 7, 20],
+  ];
+  for (const [ox, oz, w, h, d] of bloques) {
+    const x = b.x + ox, z = b.z + oz;
+    if (biomeWeight(b, x, z) < 0.2) continue;
+    const y = terrainHeightAt(x, z);
+    const ice = new THREE.Mesh(smoothBox(w, h, d), iceMat);
+    ice.position.set(x, y + h / 2, z); ice.castShadow = true; ice.userData.noSolid = true; g.add(ice);
+    const core = new THREE.Mesh(smoothBox(w * 0.62, h * 0.72, d * 0.62), coreMat);
+    core.position.set(x, y + h * 0.42, z); core.castShadow = true; core.userData.noSolid = true; g.add(core);
+    const serac = new THREE.Mesh(new THREE.ConeGeometry(Math.min(w, d) * 0.28, h * 0.85, 5), coreMat);
+    serac.position.set(x + w * 0.2, y + h * 0.9, z - d * 0.1); serac.castShadow = true; serac.userData.noSolid = true; g.add(serac);
+    addObstacle(x, z, w, d, y + h, 'glaciar');
+  }
+}
 function buildWorldBiomes() {
   const g = new THREE.Group();
   g.name = 'biomas';
@@ -5026,6 +5115,7 @@ function buildWorldBiomes() {
     }));
     mesh.position.set(b.x, 0, b.z);
     mesh.receiveShadow = true;
+    mesh.userData.walkSurface = true;
     g.add(mesh);
     const dir = Math.hypot(b.x, b.z) || 1;
     const sx = b.x - (b.x / dir) * b.r * 0.86, sz = b.z - (b.z / dir) * b.r * 0.86;
@@ -5034,11 +5124,11 @@ function buildWorldBiomes() {
     g.add(sign);
   }
   const styles = {
-    orange: { n: 64, scale: 1.15, leaf: 0xf97316, leaf2: 0xc2410c, trunk: 0x6b3a1f, fruit: 0xfde047, spread: 0.76 },
+    orange: { n: 42, scale: 2.55, leaf: 0xff6a00, leaf2: 0xff8c1a, trunk: 0x7c3f12, fruit: 0xffe14a, spread: 0.8, fat: 1.85 },
     green: { n: 48, scale: 1.35, leaf: 0x22c55e, leaf2: 0x15803d, trunk: 0x5c3a1e, spread: 0.8 },
     dark: { n: 36, scale: 1.55, leaf: 0x1c3324, leaf2: 0x0b140e, trunk: 0x1c1410, spread: 0.7 },
     giant: { n: 16, scale: 3.7, leaf: 0x166534, leaf2: 0x052e16, trunk: 0x4a2c14, spread: 0.68, fat: 2.5 },
-    snow: { n: 26, scale: 1.75, leaf: 0xf8fafc, leaf2: 0xdbeafe, trunk: 0xe7e5e4, spread: 0.6 },
+    snow: { n: 46, scale: 1.7, leaf: 0xffffff, leaf2: 0xe0f2fe, trunk: 0x6b4423, spread: 0.72 },
     lakes: { n: 20, scale: 1.2, leaf: 0x4ade80, leaf2: 0x166534, trunk: 0x6b4423, spread: 0.82 },
     canyon: { n: 12, scale: 0.95, leaf: 0xb45309, leaf2: 0x7c2d12, trunk: 0x57534e, spread: 0.5 },
   };
@@ -5056,9 +5146,15 @@ function buildWorldBiomes() {
       const y = terrainHeightAt(x, z);
       if (y < 0.45) continue;
       let near = false;
-      for (const s of spots) if ((s[0] - x) ** 2 + (s[1] - z) ** 2 < (st.fat ? 64 : 16)) { near = true; break; }
+      const minSep = b.kind === 'snow' ? 42 : b.kind === 'orange' ? 78 : (st.fat ? 64 : 16);
+      for (const s of spots) if ((s[0] - x) ** 2 + (s[1] - z) ** 2 < minSep) { near = true; break; }
       if (near) continue;
       spots.push([x, z, y]);
+    }
+    if (b.kind === 'snow') {
+      if (spots.length) placeSnowFirs(g, spots);
+      placeGlaciers(g, b);
+      continue;
     }
     if (!spots.length) continue;
     const leafCol = new THREE.Color(st.leaf);
@@ -5084,7 +5180,8 @@ function buildWorldBiomes() {
         pos.set(x + Math.cos(ang) * ancho * 1.15, y + 3.05 * alto, z + Math.sin(ang) * ancho * 1.15);
         esc.set(1.4, 1.4, 1.4); m4.compose(pos, q, esc); fruit.setMatrixAt(i, m4);
       }
-      addObstacle(x, z, 0.9 * fat, 0.9 * fat, y + 2.4 * Math.min(alto, 2.2), 'arbol');
+      const tronco = Math.max(1.2, 0.72 * fat * Math.min(alto, 3.1));
+      addObstacle(x, z, tronco, tronco, y + Math.min(7.2, 2.15 * alto), 'arbol');
     });
     g.add(trunks); g.add(leaves); g.add(leaves2);
     if (fruit) g.add(fruit);
@@ -5123,6 +5220,7 @@ function buildWorldBiomes() {
     }));
     mesh.position.set(block.x, 0, block.z);
     mesh.receiveShadow = true;
+    mesh.userData.walkSurface = true;
     g.add(mesh);
     if (block.kind === 'pond') {
       EXTRA_WATER.push({ cx: block.x, cz: block.z, rx: block.w * 0.22, rz: block.d * 0.22, surface: 0.5, bottom: 0.12, lake: true });
@@ -5153,7 +5251,7 @@ function buildDesert(cx, cz) {
       const armRu = new THREE.Mesh(smoothBox(0.4, 0.6, 0.4), cactusMat); armRu.position.set(0.55, (h - 1.5) * 0.9 + 0.5, 0); cac.add(armRu);
     }
     cac.position.set(x, 0, z); scene.add(cac); decor.push(cac);
-    addObstacle(x, z, 0.7, 0.7);
+    addObstacle(x, z, 1.5, 0.9, 0.45 + h * 0.9, 'cactus');
   }
 }
 buildDesert(LUGARES.desiertoEste.x, LUGARES.desiertoEste.z);           // afueras del este
@@ -5343,7 +5441,8 @@ function buildOceanExpedition() {
       const crown = new THREE.Mesh(new THREE.SphereGeometry(5.5 + Math.random() * 2.4, 10, 8), mat(c % 2 ? 0x2f8a46 : 0x247a3c));
       crown.position.set((c - 1) * 3.6, 18 + Math.random() * 4, (Math.random() - .5) * 5); g.add(crown);
     }
-    g.position.set(x, TREASURE_ISLAND.surface, z); scene.add(g); islandTrees.push(g);
+    g.position.set(x, TREASURE_ISLAND.surface, z); g.userData.sealedProp = true; scene.add(g); islandTrees.push(g);
+    addObstacle(x, z, 3.4, 3.4, TREASURE_ISLAND.surface + 16, 'arbol');
   }
   // Las vetas se crean después, dentro de minas profundas; en la superficie solo están las entradas.
   for (const [tx, tz] of [[-125, -115], [65, -125], [125, 35], [-55, 125], [20, 20], [145, -75], [-145, 45]]) buildIslandTemple(tx, tz);
@@ -5832,7 +5931,7 @@ function mcBox(parent, x, y, z, w, h, d, color) {
 const _mcFloorV = new THREE.Vector3();
 function mcFloor(parent, x, z, w, d, color, y) {   // loza/pasto/camino
   const m = new THREE.Mesh(smoothBox(w, .3, d), mcMat(color));
-  m.position.set(x, (y != null ? y : .05) - .15, z); m.receiveShadow = true; parent.add(m);
+  m.position.set(x, (y != null ? y : .05) - .15, z); m.receiveShadow = true; m.userData.walkSurface = true; parent.add(m);
   parent.updateWorldMatrix(true, false);            // por si el grupo está desplazado
   _mcFloorV.set(x, 0, z).applyMatrix4(parent.matrixWorld);
   addNoGrassZone(_mcFloorV.x, _mcFloorV.z, w, d);
@@ -5842,10 +5941,10 @@ function mcTree(parent, x, z, h, leaf, baseY) {     // árbol de parque: tronco 
   const t = h || 4, y0 = baseY || 0;
   const tronco = new THREE.Mesh(new THREE.CylinderGeometry(.28, .45, t, 7), mat(0x6b4423));
   tronco.position.set(x, y0 + t / 2, z); tronco.castShadow = true; parent.add(tronco);
-  if (typeof addLandingSurface === 'function') addLandingSurface(x, z, 3, 3, y0 + t + 1.5, parent);   // te puedes parar sobre la copa
   parent.updateWorldMatrix(true, false);
-  _mcFloorV.set(x, 0, z).applyMatrix4(parent.matrixWorld);
-  addObstacle(_mcFloorV.x, _mcFloorV.z, 0.95, 0.95, y0 + 2.35, 'arbol');
+  _mcFloorV.set(x, y0, z).applyMatrix4(parent.matrixWorld);
+  if (typeof addLandingSurface === 'function') addLandingSurface(_mcFloorV.x, _mcFloorV.z, 3, 3, _mcFloorV.y + t + 1.5, parent);   // te puedes parar sobre la copa
+  addObstacle(_mcFloorV.x, _mcFloorV.z, 0.95, 0.95, _mcFloorV.y + 2.35, 'arbol');
   const L = leaf || 0x3f8f29;
   const capa = (y, s, giro) => {
     const c = new THREE.Mesh(smoothBox(s, s * .38, s), mat(L));
@@ -5863,6 +5962,9 @@ function mcDeadTree(parent, x, z, h, baseY) {       // árbol SECO: tronco pelad
     mcBox(parent, x + dx * .9, y, z + dz * .9, 1.5 * Math.abs(dx) + .28, .28, 1.5 * Math.abs(dz) + .28, 0x3b2b1f);
     mcBox(parent, x + dx * 1.6, y + .5, z + dz * 1.6, .28, .9, .28, 0x3b2b1f);
   }
+  parent.updateWorldMatrix(true, false);
+  _mcFloorV.set(x, y0, z).applyMatrix4(parent.matrixWorld);
+  addObstacle(_mcFloorV.x, _mcFloorV.z, 0.95, 0.95, _mcFloorV.y + t, 'arbol');
 }
 function mcBench(parent, x, z, rot) {              // banca de plaza: tablas, respaldo y patas de fierro
   const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot || 0; parent.add(g);
@@ -5877,7 +5979,7 @@ function mcBench(parent, x, z, rot) {              // banca de plaza: tablas, re
   parent.updateWorldMatrix(true, true);
   _mcFloorV.set(0, 0, 0).applyMatrix4(g.matrixWorld);
   const girada = Math.abs(Math.cos(rot || 0)) < 0.5;
-  addObstacle(_mcFloorV.x, _mcFloorV.z, girada ? 0.7 : 2.2, girada ? 2.2 : 0.7, 0.95, 'banca');
+  addObstacle(_mcFloorV.x, _mcFloorV.z, girada ? 0.7 : 2.2, girada ? 2.2 : 0.7, _mcFloorV.y + 0.95, 'banca');
   return g;
 }
 function mcLamp(parent, x, z, color) {             // farol de parque: base, poste, farola de vidrio y remate
@@ -5892,7 +5994,7 @@ function mcLamp(parent, x, z, color) {             // farol de parque: base, pos
   const perilla = new THREE.Mesh(new THREE.SphereGeometry(.08, 6, 5), mat(0x52525b)); perilla.position.y = 4.68; g.add(perilla);
   parent.updateWorldMatrix(true, false);
   _mcFloorV.set(x, 0, z).applyMatrix4(parent.matrixWorld);
-  addObstacle(_mcFloorV.x, _mcFloorV.z, 0.5, 0.5, 2.2, 'farol');
+  addObstacle(_mcFloorV.x, _mcFloorV.z, 0.55, 0.55, _mcFloorV.y + 2.2, 'farol');
   return g;
 }
 function mcFlowers(parent, x, z, r) {   // macizo de flores de colores
@@ -5907,6 +6009,11 @@ function mcFlowers(parent, x, z, r) {   // macizo de flores de colores
     const flor = new THREE.Mesh(new THREE.SphereGeometry(.12, 6, 5), mat(cols[i % cols.length]));
     flor.position.set(fx, .58, fz); flor.scale.y = .7; g.add(flor);
   }
+  g.userData.sealedProp = true;
+  parent.updateWorldMatrix(true, false);
+  _mcFloorV.set(x, 0, z).applyMatrix4(parent.matrixWorld);
+  const cama = Math.max(0.7, (r || 1) * 2);
+  addObstacle(_mcFloorV.x, _mcFloorV.z, cama, cama, _mcFloorV.y + 0.7, 'flores');
   return g;
 }
 function mcBush(parent, x, z, r) {   // arbusto redondeado
@@ -5917,9 +6024,10 @@ function mcBush(parent, x, z, r) {   // arbusto redondeado
     b.position.set((Math.random() - .5) * r, (r || 1) * (.45 + Math.random() * .3), (Math.random() - .5) * r);
     b.castShadow = true; g.add(b);
   }
+  g.userData.sealedProp = true;
   parent.updateWorldMatrix(true, false);
   _mcFloorV.set(x, 0, z).applyMatrix4(parent.matrixWorld);
-  addObstacle(_mcFloorV.x, _mcFloorV.z, Math.max(0.8, (r || 1) * 1.1), Math.max(0.8, (r || 1) * 1.1), 1.15, 'arbusto');
+  addObstacle(_mcFloorV.x, _mcFloorV.z, Math.max(0.8, (r || 1) * 1.1), Math.max(0.8, (r || 1) * 1.1), _mcFloorV.y + 1.15, 'arbusto');
   return g;
 }
 function mcFence(parent, cx, cz, w, d, color, gapW, gapNorte, gapSide) {   // reja: se ve y no se atraviesa
@@ -5970,7 +6078,7 @@ function mcFence(parent, cx, cz, w, d, color, gapW, gapNorte, gapSide) {   // re
   parent.updateWorldMatrix(true, false);
   const muro = (lx, lz, bw, bd) => {
     _mcFloorV.set(lx, 0, lz).applyMatrix4(parent.matrixWorld);
-    addObstacle(_mcFloorV.x, _mcFloorV.z, bw, bd, 1.35, 'valla');
+    addObstacle(_mcFloorV.x, _mcFloorV.z, bw, bd, _mcFloorV.y + 1.35, 'valla');
   };
   const lado = (eje, pos, largo) => {
     const t = 0.42;
@@ -6446,13 +6554,16 @@ function mcMountain(parent, cx, cz, r, h, rock, cap, seed, planet, opts) {
   geo.computeVertexNormals();
   const slope = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 }));
   slope.receiveShadow = true;
+  slope.userData.walkSurface = true;
   slope.position.set(cx, 0, cz);
   parent.add(slope);
   // Piedras sueltas repartidas por la ladera
   for (let i = 0; i < 10; i++) {
     const a = rand() * 6.28, d = r * (.2 + rand() * .7);
     const px = Math.cos(a) * d, pz = Math.sin(a) * d;
-    mcBox(parent, cx + px, mountainProfile(m, px, pz) + .8, cz + pz, 2.2, 1.8, 2.2, rock);
+    const yRoca = mountainProfile(m, px, pz);
+    mcBox(parent, cx + px, yRoca + .8, cz + pz, 2.2, 1.8, 2.2, rock);
+    addObstacle(cx + px, cz + pz, 2.2, 2.2, yRoca + 1.8, 'roca');
   }
   // ÁRBOLES sembrados en la ladera (hasta media montaña; arriba queda pelado)
   for (let i = 0; i < treeN; i++) {
@@ -6473,6 +6584,17 @@ function buildEarthMountains() {
   const g = new THREE.Group(); scene.add(g);
   // Los cerros viven fuera del anillo de la ciudad (ver src/city-map.js).
   CERROS.forEach((cerro, i) => mcMountain(g, cerro.x, cerro.z, cerro.r, cerro.h, 0x6b7280, 0xf8fafc, i + 1));   // roca gris con nieve arriba
+  // Cordillera extra: el bioma de nieve y el resto del mapa tienen muchos más cerros.
+  const masCerros = [
+    [1560, -80, 110, 130], [1475, 20, 74, 92], [1665, -25, 80, 104],
+    [1515, -175, 66, 78], [1690, -145, 60, 72], [1385, -35, 72, 84],
+    [1765, 30, 68, 88], [1420, -120, 58, 70],
+    [-1040, 260, 84, 74], [260, -900, 90, 80], [1040, 880, 86, 76],
+    [-460, -680, 78, 68], [720, -560, 74, 64], [-200, 1040, 80, 70],
+  ];
+  masCerros.forEach((p, i) => mcMountain(g, p[0], p[1], p[2], p[3], 0x94a3b8, 0xffffff, 40 + i, 'tierra', {
+    grass: 0xe8eef5, soil: 0xcbd5e1, leaf: 0xf8fafc, trees: preferLowPerf ? 3 : 7,
+  }));
   return g;
 }
 
@@ -7637,7 +7759,8 @@ function buildCondominio() {
   mcTree(g, comun.x - 2.4, comun.z + 5.4, 4.6);
   mcTree(g, comun.x + 2.8, comun.z - 5.2, 4.2);
   mcBench(g, comun.x, comun.z + 1.6, 0);
-  mcFlowers(g, comun.x - 2.6, comun.z - 1.8, 1.3);
+  // En la explanada, separado del spawn, del papá, de la mamá y de la reja.
+  mcFlowers(g, comun.x + 1, comun.z - 2.25, 0.7);
 
   // Los lotes: reja bajita, número en el buzón y, si hay vecino, su casa.
   CONDOMINIO.lotes.forEach((l, i) => {
@@ -7680,6 +7803,226 @@ function buildCondominio() {
 }
 buildCondominio();
 
+// Más condominios, casas y hoteles fuera de la ciudad. Cada uno lleva su caja de choque.
+const WORLD_PLACES = { hotels: [], condominios: [], casas: [] };
+function sitioConstruible(x, z, margen, ancho, fondo) {
+  const h = groundHeightAt(x, z);
+  if (h < 0.7 || h > 18) return false;
+  if (enCalle(x, z, margen) || distritoEn(x, z, margen)) return false;
+  if (lakeAt(x, z) || cityPondAt(x, z)) return false;
+  if (Math.hypot(x - SKI_RESORT.x, z - SKI_RESORT.z) < SKI_RESORT.r + 50) return false;
+  if (Math.hypot(x - TREASURE_ISLAND.x, z - TREASURE_ISLAND.z) < 280) return false;
+  if (x < -180 && z > -430 && z < 90) return false;
+  const muestras = [[0, 0], [ancho / 2, 0], [-ancho / 2, 0], [0, fondo / 2], [0, -fondo / 2]];
+  for (const [dx, dz] of muestras) {
+    if (Math.abs(groundHeightAt(x + dx, z + dz) - h) > 3.2) return false;
+    if (distritoEn(x + dx, z + dz, 4) || enCalle(x + dx, z + dz, 3)) return false;
+  }
+  return true;
+}
+function makeHotel(x, z, rot, baseY) {
+  const g = new THREE.Group();
+  g.name = 'hotel-mundo';
+  g.position.set(x, baseY, z);
+  g.rotation.y = rot || 0;
+  const w = 16, d = 11, floors = 4, fh = 3.05, h = floors * fh;
+  mcBox(g, 0, h / 2, 0, w, h, d, 0xf7f1e6);
+  mcBox(g, 0, 0.28, 0, w + 0.8, 0.5, d + 0.8, 0xc4b8a8);
+  for (let f = 0; f < floors; f++) {
+    mcBox(g, 0, f * fh + 1.7, d / 2 + 0.06, w * 0.82, 1.15, 0.12, 0x7dd3fc);
+    mcBox(g, 0, f * fh + 1.7, -d / 2 - 0.06, w * 0.72, 1.05, 0.1, 0xbae6fd);
+    mcBox(g, 0, (f + 1) * fh, 0, w + 0.35, 0.16, d + 0.35, f % 2 ? 0xe11d48 : 0xf8fafc);
+  }
+  mcBox(g, 0, h + 0.35, 0, w + 0.9, 0.45, d + 0.9, 0xb91c1c);
+  mcBox(g, 0, h + 1.15, 0, 3.2, 1.3, 3.2, 0xf8fafc);
+  mcBox(g, 0, 3.15, d / 2 + 1.35, 8.4, 0.22, 2.5, 0xe11d48);
+  for (const sx of [-2.4, 2.4]) mcBox(g, sx, 1.55, d / 2 + 1.15, 0.38, 3.1, 0.38, 0xf8fafc);
+  mcBox(g, 0, 1.05, d / 2 + 0.08, 2.1, 2.15, 0.16, 0x5b3a1a);
+  const sign = makeSign('HOTEL', 0xfde68a);
+  sign.position.set(0, h + 2.3, d / 2 + 0.3);
+  sign.scale.set(0.72, 0.72, 0.72);
+  g.add(sign);
+  scene.add(g);
+  const cs = Math.cos(rot || 0), sn = Math.sin(rot || 0), girada = Math.abs(cs) < 0.5;
+  addObstacle(x, z, girada ? d : w, girada ? w : d, baseY + h + 1.6, 'hotel');
+  const lx = 0, lz = d / 2 + 1.3;
+  addObstacle(x + lx * cs + lz * sn, z - lx * sn + lz * cs, girada ? 2.6 : 8.6, girada ? 8.6 : 2.6, baseY + 3.4, 'hotel');
+  WORLD_PLACES.hotels.push({ x, z, y: baseY });
+  return g;
+}
+function makeCondoCompound(x, z, baseY) {
+  const g = new THREE.Group();
+  g.name = 'condominio-mundo';
+  g.position.set(x, baseY, z);
+  scene.add(g);
+  const W = 34, D = 26;
+  mcFloor(g, 0, 0, W - 1, D - 1, 0x4f9c3a, 0.04);
+  mcFence(g, 0, 0, W, D, 0x7c8798, 6, false, 's');
+  const sign = makeSign('CONDOMINIO', 0xfde68a);
+  sign.position.set(0, 3.5, -D / 2 - 0.4);
+  sign.scale.set(0.48, 0.48, 0.48);
+  g.add(sign);
+  mcLamp(g, 0, -2, 0xfff0b0);
+  mcBench(g, 0, -7, 0);
+  mcFlowers(g, -4, 1, 1.15);
+  mcTree(g, 5, 1, 4.4, 0x3f8f29, 0);
+  const lots = [[-8, -5], [8, -5], [-8, 7], [8, 7]];
+  lots.forEach(([lx, lz]) => {
+    const plan = planDeCasa(6.4, 6.2);
+    if (!plan) return;
+    makeCityHouse(x + lx, z + lz, false, lz < 0 ? Math.PI : 0, plan.w, plan.d, plan, baseY, 'casa-mundo');
+    WORLD_PLACES.casas.push({ x: x + lx, z: z + lz, y: baseY });
+  });
+  WORLD_PLACES.condominios.push({ x, z, y: baseY });
+  return g;
+}
+function buildWildSettlements() {
+  const ocupados = [];
+  const libreDeOtros = (x, z, radio) => ocupados.every(p => Math.hypot(p.x - x, p.z - z) > radio);
+  const tomar = (x, z, radio) => { ocupados.push({ x, z, r: radio }); };
+  const anillo = [];
+  const fijos = [[250, -20], [280, 180], [-250, 200], [40, -250], [-40, 280], [320, -180], [-320, -40], [180, -280]];
+  for (const [x, z] of fijos) anillo.push({ x, z });
+  for (let ring = 0; ring < 16; ring++) {
+    const rad = 360 + ring * 78;
+    const n = 7 + (ring % 4);
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2 + ring * 0.37;
+      anillo.push({ x: Math.cos(a) * rad, z: Math.sin(a) * rad });
+    }
+  }
+  const candidatos = anillo.filter(p => sitioConstruible(p.x, p.z, 16, 28, 22) && libreDeOtros(p.x, p.z, 70));
+  const naranja = BIOMES.find(b => b.kind === 'orange');
+  const nieve = BIOMES.find(b => b.kind === 'snow');
+  const cercaDe = (b) => candidatos
+    .map(p => ({ p, d: Math.hypot(p.x - b.x, p.z - b.z) }))
+    .filter(o => o.d > b.r * 0.35 && o.d < b.r + 220)
+    .sort((a, c) => a.d - c.d);
+  const hotelN = preferLowPerf ? 4 : 7;
+  const condoN = preferLowPerf ? 5 : 8;
+  const hamletN = preferLowPerf ? 6 : 12;
+  const usados = new Set();
+  const usar = (p) => { usados.add(p); tomar(p.x, p.z, 48); };
+  const ponerHotel = (p, rot) => {
+    if (!p || usados.has(p)) return false;
+    const y = groundHeightAt(p.x, p.z);
+    makeHotel(p.x, p.z, rot || 0, y);
+    usar(p);
+    return true;
+  };
+  const naranjaCerca = cercaDe(naranja);
+  const nieveCerca = cercaDe(nieve);
+  if (naranjaCerca[0]) ponerHotel(naranjaCerca[0].p, 0.4);
+  if (nieveCerca[0]) ponerHotel(nieveCerca[0].p, -0.6);
+  for (const p of candidatos) {
+    if (WORLD_PLACES.hotels.length >= hotelN) break;
+    if (usados.has(p)) continue;
+    if (!sitioConstruible(p.x, p.z, 14, 20, 16)) continue;
+    ponerHotel(p, ((WORLD_PLACES.hotels.length % 4) * Math.PI) / 2);
+  }
+  for (const p of candidatos) {
+    if (WORLD_PLACES.condominios.length >= condoN) break;
+    if (usados.has(p) || !libreDeOtros(p.x, p.z, 80)) continue;
+    if (!sitioConstruible(p.x, p.z, 18, 36, 28)) continue;
+    const y = groundHeightAt(p.x, p.z);
+    makeCondoCompound(p.x, p.z, y);
+    usar(p);
+  }
+  let hamlets = 0;
+  for (const p of candidatos) {
+    if (hamlets >= hamletN) break;
+    if (usados.has(p) || !libreDeOtros(p.x, p.z, 56)) continue;
+    if (!sitioConstruible(p.x, p.z, 12, 22, 16)) continue;
+    const y = groundHeightAt(p.x, p.z);
+    const puestos = [[-6, -4], [6, -3], [-5, 6], [7, 6]];
+    let n = 0;
+    puestos.forEach(([lx, lz], i) => {
+      if (!sitioConstruible(p.x + lx, p.z + lz, 6, 8, 8)) return;
+      const plan = planDeCasa(6.6, 6.4);
+      if (!plan) return;
+      makeCityHouse(p.x + lx, p.z + lz, false, i < 2 ? Math.PI : 0, plan.w, plan.d, plan, y, 'casa-mundo');
+      WORLD_PLACES.casas.push({ x: p.x + lx, z: p.z + lz, y });
+      n++;
+    });
+    if (n) { usar(p); hamlets++; mcTree(scene, p.x, p.z + 1, 4.2, 0x3f8f29, y); }
+  }
+}
+buildWildSettlements();
+
+function sealLooseProps() {
+  const skip = new Set([player, camera, dad, mom, butler, playerAvatar]);
+  for (const list of [npcs, victims, traffic, parkedCars, police]) {
+    if (!list) continue;
+    for (const item of list) skip.add(item);
+  }
+  const actorOrFlag = (obj) => {
+    let o = obj;
+    while (o) {
+      if (skip.has(o)) return true;
+      const ud = o.userData;
+      if (ud && (ud.noSolid || ud.sealedProp || ud.limbs || ud.walkSurface || ud.billboard)) return true;
+      o = o.parent;
+    }
+    return false;
+  };
+  const chainVisible = (obj) => {
+    let o = obj;
+    while (o) { if (o.visible === false) return false; o = o.parent; }
+    return true;
+  };
+  const cell = 8;
+  const grid = new Map();
+  const bucket = (x, z) => (Math.floor(x / cell) + ',' + Math.floor(z / cell));
+  const indexObstacle = (o) => {
+    const x0 = Math.floor(o.minX / cell), x1 = Math.floor(o.maxX / cell);
+    const z0 = Math.floor(o.minZ / cell), z1 = Math.floor(o.maxZ / cell);
+    for (let ix = x0; ix <= x1; ix++) for (let iz = z0; iz <= z1; iz++) {
+      const k = ix + ',' + iz;
+      let arr = grid.get(k);
+      if (!arr) grid.set(k, arr = []);
+      arr.push(o);
+    }
+  };
+  for (const o of obstacles) indexObstacle(o);
+  const covered = (x, z) => {
+    const arr = grid.get(bucket(x, z));
+    if (!arr) return false;
+    for (const o of arr) if (x > o.minX + 0.15 && x < o.maxX - 0.15 && z > o.minZ + 0.15 && z < o.maxZ - 0.15) return true;
+    return false;
+  };
+  const box = new THREE.Box3(), size = new THREE.Vector3();
+  scene.traverse((obj) => {
+    if (!obj.isMesh || obj.isInstancedMesh) return;
+    if (!chainVisible(obj) || actorOrFlag(obj)) return;
+    const material = obj.material;
+    const mats = Array.isArray(material) ? material : [material];
+    if (mats.some(m => m && m.transparent && m.opacity < 0.92)) return;
+    box.setFromObject(obj);
+    if (!Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) return;
+    box.getSize(size);
+    if (size.x > 28 || size.z > 28) return;
+    if (size.y < 0.2 && Math.max(size.x, size.z) > 1.3) return;
+    const cx = (box.min.x + box.max.x) / 2;
+    const cz = (box.min.z + box.max.z) / 2;
+    if (covered(cx, cz)) return;
+    if (box.min.y > 2.2) {
+      let suelo = groundHeightAt(cx, cz);
+      for (const m of mountains) {
+        if (m.planet && m.planet !== 'tierra') continue;
+        const extentZ = m.ski ? m.r * 1.8 : m.r;
+        if (Math.abs(cx - m.x) > m.r || Math.abs(cz - m.z) > extentZ) continue;
+        const hh = mountainProfile(m, cx - m.x, cz - m.z);
+        if (hh > suelo) suelo = hh;
+      }
+      if (box.min.y > suelo + 2.15) return;
+    }
+    const w = Math.min(18, Math.max(0.42, size.x));
+    const d = Math.min(18, Math.max(0.42, size.z));
+    indexObstacle(addObstacle(cx, cz, w, d, box.max.y, 'prop'));
+  });
+}
+sealLooseProps();
+
 // ---- Cierre del "mundo de la Tierra": todo lo agregado desde el marcador es terrestre ----
 scene.children.forEach(o => { if (!_preEarthChildren.has(o)) earthMeshes.push(o); });
 obstacles.slice(_preEarthObsN).forEach(o => earthObstacles.push(o));
@@ -7701,6 +8044,7 @@ const platusKeepers = [];   // posiciones del/los vendedor(es) zombi de Platus (
 let platusNuclear = null;
 let platusTrunkMat = null, platusBranchMat = null;   // materiales de los árboles muertos (se recolorean por planeta)
 function buildPlatus() {
+  const antesObs = obstacles.length;
   // árboles MUERTOS instanciados (troncos secos + ramas peladas): 2 draw calls
   const spots = [];
   for (let i = 0; i < 60; i++) {
@@ -7716,6 +8060,7 @@ function buildPlatus() {
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), eu = new THREE.Euler(), off = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
   spots.forEach(([x, z], i) => {
     m4.makeTranslation(x, 1.8, z); trunks.setMatrixAt(i, m4);
+    addObstacle(x, z, 0.9, 0.9, 3.6, 'arbol');
     for (let b = 0; b < 3; b++) {
       eu.set(0, Math.random() * 6.28, 0.7 + Math.random() * 0.9); q.setFromEuler(eu);
       off.set(0, 0.7, 0).applyQuaternion(q); off.x += x; off.y += 2.3 + b * 0.5; off.z += z;
@@ -7729,10 +8074,10 @@ function buildPlatus() {
     const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.9 + Math.random() * 0.5), new THREE.MeshStandardMaterial({ color: 0x1f2430, roughness: .9 }));
     rock.position.set(Math.cos(a) * r, 0.55, Math.sin(a) * r); rock.castShadow = true;
     rock.visible = false; scene.add(rock); platusStuff.push(rock); coalRocks.push(rock);
+    addObstacle(rock.position.x, rock.position.z, 1.5, 1.5, 1.4, 'roca');
   }
   // MONTAÑAS del planeta: cerros de bloques con la cima brillante (cristal alien)
   const cerros = new THREE.Group(); cerros.visible = false; scene.add(cerros); platusStuff.push(cerros);
-  const antesObs = obstacles.length;
   for (const [mx, mz, mr, mh, seed] of [[-150, -120, 32, 38, 7], [165, -160, 30, 34, 8], [60, 190, 28, 30, 9], [-95, 185, 26, 28, 10], [180, 120, 30, 32, 11]])
     // Como las de la Tierra (roca gris y nieve arriba), pero SIN NADA VERDE: en Platus
     // la falda es tierra seca del planeta y los árboles van pelados.
@@ -7778,6 +8123,13 @@ function buildPlatus() {
 buildPlatus();
 // Empiezas en la Tierra: las montañas de Platus todavía no deben bloquear el paso
 for (const o of platusObstacles) { const i = obstacles.indexOf(o); if (i >= 0) obstacles.splice(i, 1); }
+function addPlatusBlock(x, z, w, d, top) {
+  const o = addObstacle(x, z, w, d, top, 'platus');
+  platusObstacles.push(o);
+  const i = obstacles.indexOf(o);
+  if (i >= 0) obstacles.splice(i, 1);
+  return o;
+}
 // FIEBRE DE CRISTALES: formaciones brillantes que valen MUCHA plata (Platus = hacerse rico rápido)
 const crystals = [];
 function buildCrystals() {
@@ -7796,6 +8148,7 @@ function buildCrystals() {
     }
     // (sin PointLight: los cristales brillan por material emisivo; muchas luces dinámicas laguean el móvil)
     g.visible = false; scene.add(g);
+    addPlatusBlock(g.position.x, g.position.z, 1.35, 1.35, 1.8);
     const c = { group: g, gems: rare ? 2 + Math.floor(Math.random() * 2) : 3 + Math.floor(Math.random() * 3), value: rare ? 400 + Math.floor(Math.random() * 300) : 80 + Math.floor(Math.random() * 90), rare };
     c.maxGems = c.gems; crystals.push(c);
   }
@@ -7814,6 +8167,7 @@ function buildMushrooms() {
     const cap = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: .85, roughness: .4 })); cap.position.y = 0.6; cap.scale.y = 0.7; g.add(cap);
     // (sin PointLight: el hongo brilla por su material emisivo; evitamos decenas de luces dinámicas)
     g.visible = false; scene.add(g);
+    addPlatusBlock(g.position.x, g.position.z, 0.7, 0.7, 0.9);
     mushrooms.push({ group: g, ready: true, regrow: 0, col });
   }
 }
@@ -8085,6 +8439,7 @@ const geodes = [];
     // (sin PointLight: la geoda brilla por su núcleo emisivo)
     const a = Math.random() * Math.PI * 2, r = 20 + Math.random() * 160;
     g.position.set(Math.cos(a) * r, 1.4, Math.sin(a) * r); g.visible = false; scene.add(g);
+    addPlatusBlock(g.position.x, g.position.z, 3.2, 3.2, 3.3);
     geodes.push({ group: g, rock, hp: 12, maxhp: 12, ready: true });
   }
 })();
