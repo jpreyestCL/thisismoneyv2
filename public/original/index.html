@@ -6878,6 +6878,28 @@ let skiBeacon = null;
 const skiVisitors = [], skiObstacles = [], skiRamps = [], skiPisteWalls = [];
 const skiWallWorld = new THREE.Vector3();
 let skiGearMesh = null;
+function colocarRampaEsqui(x, z) {
+  const hw = 4, largo = 14, sube = 5.5, grosor = 0.5;
+  const z0 = z - largo / 2, z1 = z + largo / 2;
+  const y0 = skiSlopeHeight(x, z0), y1 = y0 + sube;
+  const alfa = Math.atan2(y1 - y0, z1 - z0);
+  const cos = Math.cos(alfa), sin = Math.sin(alfa);
+  const d = (z1 - z0) / cos;
+  const meshY = y0 - (grosor / 2) * cos + (d / 2) * sin;
+  const meshZ = (z0 + z1) / 2 + (grosor / 2) * sin;
+  const ramp = skiBox(skiResortGroup, x, meshY, meshZ, hw * 2, grosor, d, 0xf97316, false);
+  ramp.rotation.x = -alfa;
+  skiRamps.push({ x, z, z0, z1, y0, y1, hw });
+  const rampSign = makeSign('⬆️ RAMPA', 0xfef08a); rampSign.scale.set(.28, .28, .28); rampSign.position.set(x, y1 + 2.2, z1); skiResortGroup.add(rampSign);
+}
+function rampaBajoEsqui(x, z) {
+  for (const r of skiRamps) {
+    if (Math.abs(x - r.x) > r.hw || z < r.z0 || z > r.z1) continue;
+    const t = (z - r.z0) / (r.z1 - r.z0);
+    return { ramp: r, surface: r.y0 + (r.y1 - r.y0) * t, t };
+  }
+  return null;
+}
 function skiBox(parent, x, y, z, w, h, d, color, obstacle = false) {
   const m = new THREE.Mesh(smoothBox(w, h, d), mat(color)); m.position.set(x, y, z); parent.add(m);
   if (obstacle) skiObstacles.push(addObstacle(x, z, w, d, y + h / 2));
@@ -7021,12 +7043,10 @@ function buildSkiResort() {
     skiBox(skiResortGroup, x, y + .7, z, 2.8, 1.4, .45, i % 2 ? 0xf97316 : 0x22c55e, true);
     skiBox(skiResortGroup, x - 1.4, y + .8, z, .18, 1.6, .18, 0xef4444); skiBox(skiResortGroup, x + 1.4, y + .8, z, .18, 1.6, .18, 0xef4444);
   }
-  // Rampas altas entre las pistas: al pasar con velocidad lanzan al esquiador.
+  // Rampas entre las pistas. El labio de abajo queda a ras de la nieve (no es un muro)
+  // y el de arriba sube: se recorren y, al salir, la inercia lanza el salto.
   for (const [xOffset, zOffset] of [[-82, 452], [82, 488], [-42, 548], [44, 612], [-60, 680], [50, 740]]) {
-    const x = SKI_RESORT.x + xOffset, z = SKI_RESORT.z + zOffset - SKI_RESORT.z, y = skiSlopeHeight(x, z) + 1.7;
-    const ramp = skiBox(skiResortGroup, x, y, z, 7.5, 3.4, 12, 0xf97316, true);
-    ramp.rotation.x = -.38; skiRamps.push({ x, z, radius: 5 });
-    const rampSign = makeSign('⬆️ RAMPA', 0xfef08a); rampSign.scale.set(.28, .28, .28); rampSign.position.set(x, y + 3.2, z); skiResortGroup.add(rampSign);
+    colocarRampaEsqui(SKI_RESORT.x + xOffset, zOffset);
   }
   // Andarivel y arrastre: torres, cable y sillas que suben la montaña.
   const lift = new THREE.Group(); lift.position.set(SKI_RESORT.x + 25, 0, SKI_RESORT.z); skiResortGroup.add(lift);
@@ -19647,9 +19667,9 @@ function ensurePlayerSkiVisual() {
 }
 function beginSkiCarve() {
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
-  skiVelX = fx * 6; skiVelZ = fz * 6; skiRampBoost = 0;
+  skiVelX = fx * 6; skiVelZ = fz * 6; skiRampBoost = 0; skiRampRide = null;
 }
-function stopSkiCarve() { skiVelX = 0; skiVelZ = 0; skiRampBoost = 0; }
+function stopSkiCarve() { skiVelX = 0; skiVelZ = 0; skiRampBoost = 0; skiRampRide = null; }
 function updateSkiMovement(dt) {
   if (!state.skiPass || !state.skiGear) { if (skiGearMesh) skiGearMesh.visible = false; return false; }
   const gearVisual = ensurePlayerSkiVisual(); gearVisual.visible = !!state.skiGearWorn || !!state.skiing; gearVisual.userData.board.visible = state.skiGear === 'snowboard';
@@ -19701,26 +19721,32 @@ function updateSkiMovement(dt) {
   player.position.z += skiVelZ * dt;
   player.position.x = THREE.MathUtils.clamp(player.position.x, SKI_RESORT.x - 210, SKI_RESORT.x + 210);
   player.position.z = THREE.MathUtils.clamp(player.position.z, SKI_RESORT.z - 520, SKI_RESORT.z + 300);
-  const snowY = mountainHeightAt(player.position.x, player.position.z), skiFloor = snowY + PLAYER_EYE;
+  resolveSkiPisteWalls();
+  resolveCollisions();
+  const snowY = mountainHeightAt(player.position.x, player.position.z);
+  let skiFloor = snowY + PLAYER_EYE;
+  const contacto = rampaBajoEsqui(player.position.x, player.position.z);
+  const pies = player.position.y - PLAYER_EYE;
+  const tocaRampa = !!(contacto && contacto.surface >= snowY - 0.15 && (grounded || pies <= contacto.surface + 0.6));
+  if (tocaRampa) skiFloor = contacto.surface + PLAYER_EYE;
   const jumpPressed = keys['Space'] || touch.jump;
   touch.jump = false;
   const wasAirborne = !grounded;
-  if (grounded && spd > 4) {
-    const ramp = skiRamps.find(r => Math.hypot(player.position.x - r.x, player.position.z - r.z) < r.radius);
-    if (ramp) {
-      skiJumpVy = 40;
-      skiRampBoost = 36;
-      skiVelX += skiFwdX * 28; skiVelZ += skiFwdZ * 34;
+  if (skiRampRide && !tocaRampa) {
+    const r = skiRampRide;
+    skiRampRide = null;
+    if (grounded && player.position.z >= r.z1 - 0.2 && skiVelZ > 1.2) {
+      skiJumpVy = Math.max(skiJumpVy, skiVelZ * (r.y1 - r.y0) / (r.z1 - r.z0));
       grounded = false;
-      toast('⬆️ ¡Rampa! ¡Salto larguísimo!');
+      toast('⬆️ ¡Saltaste la rampa!');
     }
-  }
+  } else if (tocaRampa) skiRampRide = contacto.ramp;
   if (jumpPressed && !skiJumpHeld && grounded) { skiJumpVy = 11; grounded = false; }
   skiJumpHeld = !!jumpPressed;
   if (!grounded || skiJumpVy > 0) {
     skiJumpVy -= (skiRampBoost > 0 ? 18 : 25) * dt;
     player.position.y += skiJumpVy * dt;
-    if (player.position.y <= skiFloor) { player.position.y = skiFloor; skiJumpVy = 0; skiRampBoost = 0; grounded = true; }
+    if (player.position.y <= skiFloor) { player.position.y = skiFloor; skiJumpVy = 0; skiRampBoost = 0; grounded = true; if (tocaRampa) skiRampRide = contacto.ramp; }
   } else {
     player.position.y = skiFloor;
   }
@@ -19728,14 +19754,18 @@ function updateSkiMovement(dt) {
   if (!grounded && trickDir) { gearVisual.rotation.y += trickDir * 8 * dt; skiTrickActive = true; }
   if (wasAirborne && grounded && skiTrickActive) { skiTrickActive = false; toast('✨ ¡Truco 360!'); }
   vy = 0;
-  resolveSkiPisteWalls();
-  resolveCollisions();   // también las cajas de las casetas y postes
-  if (grounded) player.position.y = mountainHeightAt(player.position.x, player.position.z) + PLAYER_EYE;
+  if (grounded) {
+    const suelo = mountainHeightAt(player.position.x, player.position.z);
+    const rampa = rampaBajoEsqui(player.position.x, player.position.z);
+    let piso = suelo;
+    if (rampa && skiRampRide === rampa.ramp && rampa.surface >= suelo - 0.15) piso = rampa.surface;
+    player.position.y = piso + PLAYER_EYE;
+  }
   if (player.position.z > SKI_RESORT.z + 278) { player.position.z = SKI_RESORT.z + 278; state.skiing = false; stopSkiCarve(); toast('🏁 Llegaste al final de las pistas · E en la entrada para volver a subir'); }
   camera.rotation.y = yaw; camera.rotation.x = pitch;
   return true;
 }
-let skiRemoveHold = 0, skiAccessWarnAt = 0, skiJumpVy = 0, skiJumpHeld = false, skiTrickActive = false, skiRampBoost = 0, skiVelX = 0, skiVelZ = 0;
+let skiRemoveHold = 0, skiAccessWarnAt = 0, skiJumpVy = 0, skiJumpHeld = false, skiTrickActive = false, skiRampBoost = 0, skiVelX = 0, skiVelZ = 0, skiRampRide = null;
 function updateSkiGearHold(dt) {
   if (!state.skiGear) { skiRemoveHold = 0; return; }
   if (keys['KeyE'] && !state.skiing && !state.skiLiftRide) {
