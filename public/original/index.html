@@ -67,7 +67,7 @@
   #toastStack { position: absolute; top: auto; left: auto; right: 14px; bottom: calc(26% + 50px); transform: none; z-index: 7; display: flex; flex-direction: column-reverse; gap: 4px; align-items: flex-end; pointer-events: none; }
   #toastStack > div { max-width: min(340px, 34vw) !important; text-align: left; }
   /* Durante la cinemática del cohete se oculta el HUD para ver el planeta partirse (queda el toast) */
-  body.cine #parkBusinessBtn, body.cine .topbar, body.cine #minimap, body.cine #missions, body.cine #objective, body.cine #dadhud, body.cine #gearhud, body.cine #buildbar, body.cine #blueprintBtn, body.cine #blueprintPanel, body.cine #rotateBtn, body.cine #deleteBtn, body.cine #floor2RotBtn, body.cine #floor2DelBtn, body.cine #floor2WPlusBtn, body.cine #floor2WMinusBtn, body.cine #floor2DPlusBtn, body.cine #floor2DMinusBtn, body.cine #buyring, body.cine #crosshair, body.cine #bowcharge, body.cine #touchBtns, body.cine #moveBtns, body.cine #joystick, body.cine #helpBtn, body.cine #soundBtn, body.cine #exitBtn, body.cine #fotoBtn, body.cine #aimDot, body.cine #scopeMask, body.cine #jobBtn, body.cine #questBtn, body.cine #questbox, body.cine #keypadbox, body.cine #blackbox, body.cine #chatFeed, body.cine #chatReply { display: none !important; }
+  body.cine #parkBusinessBtn, body.cine .topbar, body.cine #minimap, body.cine #missions, body.cine #objective, body.cine #dadhud, body.cine #gearhud, body.cine #buildbar, body.cine #blueprintBtn, body.cine #blueprintPanel, body.cine #rotateBtn, body.cine #deleteBtn, body.cine #floor2RotBtn, body.cine #floor2DelBtn, body.cine #floor2WPlusBtn, body.cine #floor2WMinusBtn, body.cine #floor2DPlusBtn, body.cine #floor2DMinusBtn, body.cine #buyring, body.cine #crosshair, body.cine #bowcharge, body.cine #touchBtns, body.cine #moveBtns, body.cine #joystick, body.cine #helpBtn, body.cine #soundBtn, body.cine #exitBtn, body.cine #homeBtn, body.cine #fotoBtn, body.cine #aimDot, body.cine #scopeMask, body.cine #jobBtn, body.cine #questBtn, body.cine #questbox, body.cine #keypadbox, body.cine #blackbox, body.cine #chatFeed, body.cine #chatReply { display: none !important; }
   body.alley-mission #jobBtn, body.alley-mission #minimap, body.alley-mission #parkBusinessBtn, body.alley-mission #buildbar, body.alley-mission #blueprintBtn, body.alley-mission #objective, body.alley-mission #missions { display: none !important; }
   #cineCaption { position:absolute; left:50%; bottom:max(34px,env(safe-area-inset-bottom)); z-index:19; display:none; transform:translateX(-50%); width:min(680px,88vw); padding:10px 18px; border-top:2px solid #f97316; background:linear-gradient(90deg,transparent,rgba(2,6,23,.86) 12%,rgba(2,6,23,.86) 88%,transparent); color:#f8fafc; font:900 clamp(14px,2.5vw,20px)/1.25 ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:.08em; text-align:center; text-transform:uppercase; text-shadow:0 2px 8px #000; }
   body.cine #cineCaption { display:block; }
@@ -238,6 +238,7 @@
   body.touch #helpBtn  { top: 46px; left: 6px;  width: 34px; height: 34px; font-size: 15px; }
   body.touch #soundBtn { top: 46px; left: 44px; width: 34px; height: 34px; font-size: 15px; }
   body.touch #exitBtn  { top: 46px; left: 82px; height: 34px; font-size: 10px; padding: 0 8px; }
+  body.touch #homeBtn  { top: 86px; left: 6px; height: 34px; font-size: 11px; padding: 0 8px; }
   body.touch #minimap  { top: 46px !important; right: 6px !important; width: 100px !important; height: 100px !important; }
   body.touch #questBtn { top: 152px; right: 6px; height: 34px; font-size: 12px; padding: 0 10px; }
   body.touch #questbox, body.touch #keypadbox, body.touch #blackbox { width: min(96vw, 440px); }
@@ -303,6 +304,7 @@
   body.watch #helpBtn  { top: 28px; left: 4px;  width: 26px; height: 26px; font-size: 12px; }
   body.watch #soundBtn { top: 28px; left: 32px; width: 26px; height: 26px; font-size: 12px; }
   body.watch #exitBtn  { top: 28px; left: 60px; height: 26px; font-size: 8px; padding: 0 5px; }
+  body.watch #homeBtn  { top: 58px; left: 4px; height: 26px; font-size: 8px; padding: 0 5px; }
   body.watch #fotoBtn  { display: none; }
   body.watch #questBtn { top: 92px; right: 4px; height: 22px; font-size: 8px; padding: 0 6px; }
   body.watch #minimap  { top: 28px !important; right: 4px !important; width: 60px !important; height: 60px !important; }
@@ -1003,6 +1005,7 @@
 <button id="helpBtn" aria-label="Abrir guía" style="position:fixed; top:58px; left:12px; z-index:6; pointer-events:all; cursor:pointer; background:rgba(0,0,0,.55); color:#fff; border:2px solid rgba(255,255,255,.3); border-radius:10px; font-size:18px; width:40px; height:40px; display:none;">❓</button>
 <button id="soundBtn" aria-label="Silenciar sonido" style="position:fixed; top:58px; left:58px; z-index:6; pointer-events:all; cursor:pointer; background:rgba(0,0,0,.55); color:#fff; border:2px solid rgba(255,255,255,.3); border-radius:10px; font-size:18px; width:40px; height:40px; display:none;">🔊</button>
 <button id="exitBtn" style="position:fixed; top:58px; left:104px; z-index:6; pointer-events:all; cursor:pointer; background:rgba(0,0,0,.55); color:#fff; border:2px solid rgba(255,255,255,.3); border-radius:10px; font-size:12px; font-weight:700; height:40px; padding:0 10px; display:none;">💾 Salir</button>
+<button id="homeBtn" style="position:fixed; top:104px; left:12px; z-index:6; pointer-events:all; cursor:pointer; background:rgba(20,60,30,.82); color:#fff; border:2px solid rgba(134,239,172,.65); border-radius:10px; font-size:12px; font-weight:800; height:40px; padding:0 12px; display:none;">🏠 Volver a casa</button>
 <button id="parkBusinessBtn" aria-label="Comprar y administrar parque de diversiones" style="position:fixed;top:58px;left:242px;z-index:6;pointer-events:all;background:#143344;color:white;border:2px solid #69c9cf;border-radius:10px;height:40px;cursor:pointer;display:none">🎡 Parque</button>
 <dialog aria-labelledby="parkBusinessTitle" id="parkBusinessDialog" style="color:#e2e8f0;background:#0b202d;border:1px solid #69c9cf;border-radius:16px;padding:20px;width:min(900px,94vw);max-height:85vh;overflow:auto;position:fixed;inset:0;margin:auto;pointer-events:all">
   <div style="display:flex;justify-content:space-between;gap:16px"><h2 id="parkBusinessTitle">🎡 Tu parque de diversiones</h2><button class="bankBtn" id="parkClose">Cerrar</button></div>
@@ -1547,14 +1550,23 @@ const _biomeNear = new THREE.Color();
 (function sembrarBiomas() {
   let semilla = 424242;
   const rnd = () => { semilla = (semilla * 16807) % 2147483647; return (semilla - 1) / 2147483646; };
-  const plan = [['orange', 6, 240], ['blue', 6, 230], ['red', 6, 230], ['sunset', 6, 220], ['snow', 3, 210], ['green', 2, 150]];
+  const plan = [
+    ['orange', 5, 220], ['blue', 6, 200], ['red', 5, 210], ['sunset', 5, 200], ['snow', 3, 200], ['green', 2, 140],
+    ['gray', 4, 190], ['jungle', 4, 200], ['desert', 4, 190], ['savanna', 4, 190], ['pine', 3, 180], ['steppe', 3, 180],
+  ];
   const nombres = {
     orange: ['Naranjal', '🍊', 0xff6a00, 0xc2410c],
-    blue: ['Valle azul', '🔵', 0x1d4ed8, 0x1e3a8a],
-    red: ['Tierra roja', '🔴', 0xe11d48, 0x9f1239],
-    sunset: ['Atardecer', '🌇', 0xf97316, 0x9d174d],
+    blue: ['Cumbre nevada', '🏔️', 0xf8fafc, 0xbae6fd],
+    red: ['Tierra roja', '🟠', 0xd4783a, 0x6b8f3a],
+    sunset: ['Atardecer', '🌇', 0xfb923c, 0xf9a8d4],
     snow: ['Nieve', '❄️', 0xf8fafc, 0xe2e8f0],
     green: ['Pradera', '🌿', 0x16a34a, 0x166534],
+    gray: ['Bosque gris', '🪨', 0x6b7280, 0x374151],
+    jungle: ['Jungla', '🌴', 0x166534, 0x14532d],
+    desert: ['Desierto', '🏜️', 0xe7c07a, 0xc4a15a],
+    savanna: ['Sabana', '🦁', 0xc4b15a, 0x854d0e],
+    pine: ['Pinar', '🌲', 0x3f6212, 0x365314],
+    steppe: ['Estepa', '🌾', 0xc2b280, 0xa89060],
   };
   let n = 0;
   for (const [kind, count, radio] of plan) {
@@ -1661,12 +1673,22 @@ function biomeShape(b, x, z) {
   const n2 = terrainWave(x, z, 0.018);
   let h = 2 + n * 4;
   if (b.kind === 'orange') h = 2.4 + n * 8 + n2 * 4.2 + Math.max(0, terrainWave(x, z, 0.04)) * 5.5 + moundHeight(x, z) * 1.15;
-  else if (b.kind === 'blue') h = 3 + Math.max(0, n) * 10 + n2 * 4 + moundHeight(x, z) * 1.05;
-  else if (b.kind === 'red') {
+  else if (b.kind === 'blue') {
+    const u = Math.max(0, 1 - Math.hypot(x - b.x, z - b.z) / (b.r * 0.92));
+    const d0 = Math.hypot(x - b.x, z - b.z);
+    h = 6 + Math.pow(u, 1.25) * 108 + Math.max(0, n) * 8 + moundHeight(x, z) * 0.35;
+    if (d0 < b.r * 0.28) h += 18 * Math.pow(1 - d0 / (b.r * 0.28), 1.4);
+  } else if (b.kind === 'red') {
     const mesa = Math.pow(Math.max(0, terrainWave(x, z, 0.02)), 2);
     h = 4 + n * 6 + mesa * 16 + moundHeight(x, z) * 0.9;
   } else if (b.kind === 'sunset') h = 2.2 + Math.abs(n) * 7 + Math.max(0, n2) * 9 + moundHeight(x, z) * 1.2;
   else if (b.kind === 'green') h = 3.2 + Math.max(0, n) * 9 + n2 * 3.6 + moundHeight(x, z) * 0.8;
+  else if (b.kind === 'gray') h = 3 + Math.abs(n) * 6 + n2 * 2 + moundHeight(x, z) * 0.7;
+  else if (b.kind === 'jungle') h = 2.6 + Math.max(0, n) * 5 + n2 * 2 + moundHeight(x, z) * 0.5;
+  else if (b.kind === 'desert') h = 1.4 + Math.abs(n2) * 4 + moundHeight(x, z) * 0.85;
+  else if (b.kind === 'savanna') h = 2 + n * 3 + moundHeight(x, z) * 0.4;
+  else if (b.kind === 'pine') h = 4 + Math.max(0, n) * 8 + moundHeight(x, z) * 0.6;
+  else if (b.kind === 'steppe') h = 1.6 + Math.abs(n) * 2.5 + moundHeight(x, z) * 0.3;
   else if (b.kind === 'dark') h = 0.8 + n2 * 2.2 + Math.max(0, -n) * 1.2 + moundHeight(x, z) * 0.45;
   else if (b.kind === 'giant') h = 5 + n * 7 + Math.max(0, n2) * 12 + moundHeight(x, z) * 0.7;
   else if (b.kind === 'snow') {
@@ -1710,14 +1732,20 @@ function biomeTint(x, z, h, out) {
       const tone = terrainField(x * 1.6, z * 1.6);
       if (b.kind === 'orange') hex = tone > 0.2 ? 0xff8c1a : tone < -0.18 ? 0xe85d04 : 0xff6a00;
       else if (b.kind === 'snow') hex = h > 28 ? 0xffffff : 0xf8fafc;
-      else if (b.kind === 'blue') hex = h > 18 ? 0xbfdbfe : (tone > 0.12 ? 0x38bdf8 : 0x1d4ed8);
-      else if (b.kind === 'red') hex = tone > 0.34 ? 0xfbbf24 : tone > 0.12 ? 0xfb7185 : tone < -0.16 ? 0x9f1239 : 0xe11d48;
-      else if (b.kind === 'sunset') hex = h > 16 ? 0xfde68a : (tone > 0.05 ? 0xfb923c : 0xc026d3);
+      else if (b.kind === 'blue') hex = h > 42 ? 0xffffff : h > 26 ? 0xe0f2fe : h > 14 ? 0xcbd5e1 : 0x94a3b8;
+      else if (b.kind === 'red') hex = tone > 0.18 ? 0xc4a035 : tone > -0.05 ? 0xd4783a : 0x6b8f3a;
+      else if (b.kind === 'sunset') hex = h > 16 ? 0xfde68a : (tone > 0.05 ? 0xfb923c : 0xf9a8d4);
       else if (b.kind === 'green') hex = tone > 0.15 ? 0x4ade80 : 0x16a34a;
+      else if (b.kind === 'gray') hex = tone > 0.1 ? 0x9ca3af : 0x4b5563;
+      else if (b.kind === 'jungle') hex = tone > 0.1 ? 0x15803d : 0x14532d;
+      else if (b.kind === 'desert') hex = tone > 0.15 ? 0xf5d7a1 : 0xd6b36a;
+      else if (b.kind === 'savanna') hex = tone > 0.1 ? 0xc4b15a : 0xa3a04a;
+      else if (b.kind === 'pine') hex = 0x3f6212;
+      else if (b.kind === 'steppe') hex = tone > 0.1 ? 0xd6c48a : 0xc2b280;
       else if (h < 0.25) hex = b.bed;
       else if (h > 40) hex = 0xf1f5f9;
       out.setHex(hex);
-      const vivo = b.kind === 'orange' || b.kind === 'snow' || b.kind === 'blue' || b.kind === 'red' || b.kind === 'sunset' || b.kind === 'green';
+      const vivo = b.kind === 'orange' || b.kind === 'snow' || b.kind === 'blue' || b.kind === 'red' || b.kind === 'sunset' || b.kind === 'green' || b.kind === 'gray' || b.kind === 'jungle' || b.kind === 'desert' || b.kind === 'savanna' || b.kind === 'pine' || b.kind === 'steppe';
       if (w < 0.9) out.lerp(_biomeCity, (1 - w) * (vivo ? 0.16 : 0.45));
       return;
     }
@@ -1730,11 +1758,13 @@ function biomeTint(x, z, h, out) {
   const sorteo = terrainSeed(ix + 3, iz - 7);
   let hex = 0xff6a00;
   if (h > 48) hex = 0xf8fafc;
-  else if (sorteo < 0.18) hex = 0x1d4ed8;
-  else if (sorteo < 0.36) hex = 0xff6a00;
-  else if (sorteo < 0.54) hex = 0xe11d48;
-  else if (sorteo < 0.70) hex = sorteo < 0.62 ? 0xf97316 : 0xc026d3;
-  else if (sorteo < 0.86) hex = 0xe2e8f0;
+  else if (sorteo < 0.16) hex = 0xe7c07a;
+  else if (sorteo < 0.32) hex = 0xd4783a;
+  else if (sorteo < 0.48) hex = 0xff6a00;
+  else if (sorteo < 0.62) hex = 0xfb923c;
+  else if (sorteo < 0.74) hex = 0xf9a8d4;
+  else if (sorteo < 0.86) hex = 0x6b7280;
+  else if (sorteo < 0.93) hex = 0xe2e8f0;
   else hex = 0x16a34a;
   const cerca = biomeAtPoint(x, z);
   out.setHex(hex);
@@ -3938,10 +3968,21 @@ function initCitizenBrain(n, center, radius) {
     id: 'citizen-' + id, name: CITIZEN_NAMES[id % CITIZEN_NAMES.length], job: CITIZEN_JOBS[id % CITIZEN_JOBS.length], trust: 0,
   };
 }
-function citizenPointBlocked(x, z, wild) {
+function citizenPointBlocked(x, z, wild, feetY) {
   if (!wild && (Math.abs(x) > 228 || Math.abs(z) > 228)) return true;
   if (typeof insidePlayerStructure === 'function' && insidePlayerStructure(x,z,.35)) return true;
-  return obstacles.some(o => x > o.minX - .48 && x < o.maxX + .48 && z > o.minZ - .48 && z < o.maxZ + .48);
+  const feet = feetY == null ? 0 : feetY;
+  return obstacles.some(o => {
+    if (o.top != null && feet >= o.top - 0.05) return false;
+    if (o.bottom != null && feet + 1.8 < o.bottom) return false;
+    return x > o.minX - .48 && x < o.maxX + .48 && z > o.minZ - .48 && z < o.maxZ + .48;
+  });
+}
+function terrenoAbrupto(x0, z0, x1, z1) {
+  const h0 = groundHeightAt(x0, z0);
+  const h1 = groundHeightAt(x1, z1);
+  const hm = groundHeightAt((x0 + x1) / 2, (z0 + z1) / 2);
+  return Math.max(h1, hm) > h0 + 0.72;
 }
 function chooseCitizenGoal(n) {
   const b = n.userData.brain;
@@ -4002,9 +4043,10 @@ function updateNPCs(dt) {
       const len = Math.hypot(dx, dz) || 1; dx /= len; dz /= len;
       const speed = b.speed * (b.activity === 'flee' ? 2.8 : 1), step = speed * dt;
       let nx = n.position.x + dx * step, nz = n.position.z + dz * step;
-      if (citizenPointBlocked(nx, nz, n.userData.wild)) {
+      const pies = n.position.y;
+      if (citizenPointBlocked(nx, nz, n.userData.wild, pies) || terrenoAbrupto(n.position.x, n.position.z, nx, nz)) {
         const sx = n.position.x - dz * step, sz = n.position.z + dx * step;
-        if (!citizenPointBlocked(sx, sz, n.userData.wild)) { nx = sx; nz = sz; }
+        if (!citizenPointBlocked(sx, sz, n.userData.wild, pies) && !terrenoAbrupto(n.position.x, n.position.z, sx, sz)) { nx = sx; nz = sz; }
         else { b.thinkIn = 0; nx = n.position.x; nz = n.position.z; }
       }
       moved = nx !== n.position.x || nz !== n.position.z;
@@ -4014,7 +4056,7 @@ function updateNPCs(dt) {
       if (b.wait <= 0 && distance <= .7) b.thinkIn = 0;
     }
     if (state.phase === 'NIGHT' && dist2D(n.position, b.home) < 1.2) n.visible = false;
-    if (n.userData.wild) n.position.y = groundHeightAt(n.position.x, n.position.z);
+    if (!state.country) n.position.y = groundHeightAt(n.position.x, n.position.z);
     if (moved) swingLimbs(n, dt); else swingLimbs(n, 0);
     n.userData.activity = b.activity;
   }
@@ -5095,6 +5137,8 @@ buildTrees();
 const BIOME_TREES = [];
 const SNOW_FIRS = [];
 const GLACIER_SPOTS = [];
+const VINE_CHAINS = [];
+let vineRide = null;
 function placeSnowFirs(g, spots) {
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.9 });
   const snowMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72 });
@@ -5118,7 +5162,9 @@ function placeSnowFirs(g, spots) {
   });
   g.add(trunks, low, mid, tip);
 }
-function placeGlaciers(g, b) {
+function placeGlaciers(g, b, tune) {
+  const s = tune && tune.scale ? tune.scale : 1;
+  const hs = tune && tune.hScale ? tune.hScale : 1;
   const iceMat = new THREE.MeshStandardMaterial({ color: 0xd7f6ff, roughness: 0.16, metalness: 0.12, transparent: true, opacity: 0.9 });
   const coreMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.42 });
   const bloques = [
@@ -5127,17 +5173,123 @@ function placeGlaciers(g, b) {
     [40, 40, 16, 14, 12], [-10, -30, 24, 7, 20],
   ];
   for (const [ox, oz, w, h, d] of bloques) {
-    const x = b.x + ox, z = b.z + oz;
+    const x = b.x + ox * s, z = b.z + oz * s;
+    const hh = h * hs, ww = w * (s < 1 ? 0.72 : 1), dd = d * (s < 1 ? 0.72 : 1);
     if (biomeWeight(b, x, z) < 0.2) continue;
     const y = terrainHeightAt(x, z);
-    const ice = new THREE.Mesh(smoothBox(w, h, d), iceMat);
-    ice.position.set(x, y + h / 2, z); ice.castShadow = true; ice.userData.noSolid = true; g.add(ice);
-    const core = new THREE.Mesh(smoothBox(w * 0.62, h * 0.72, d * 0.62), coreMat);
-    core.position.set(x, y + h * 0.42, z); core.castShadow = true; core.userData.noSolid = true; g.add(core);
-    const serac = new THREE.Mesh(new THREE.ConeGeometry(Math.min(w, d) * 0.28, h * 0.85, 5), coreMat);
-    serac.position.set(x + w * 0.2, y + h * 0.9, z - d * 0.1); serac.castShadow = true; serac.userData.noSolid = true; g.add(serac);
-    addObstacle(x, z, w, d, y + h, 'glaciar');
+    const ice = new THREE.Mesh(smoothBox(ww, hh, dd), iceMat);
+    ice.position.set(x, y + hh / 2, z); ice.castShadow = true; ice.userData.noSolid = true; g.add(ice);
+    const core = new THREE.Mesh(smoothBox(ww * 0.62, hh * 0.72, dd * 0.62), coreMat);
+    core.position.set(x, y + hh * 0.42, z); core.castShadow = true; core.userData.noSolid = true; g.add(core);
+    const serac = new THREE.Mesh(new THREE.ConeGeometry(Math.min(ww, dd) * 0.28, hh * 0.85, 5), coreMat);
+    serac.position.set(x + ww * 0.2, y + hh * 0.9, z - dd * 0.1); serac.castShadow = true; serac.userData.noSolid = true; g.add(serac);
+    addObstacle(x, z, ww, dd, y + hh, 'glaciar');
     GLACIER_SPOTS.push({ x, z, cd: 0 });
+  }
+}
+function placeGrayTrees(g, spots) {
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x374151, roughness: 0.95 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x4b5563, roughness: 0.9 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.92 });
+  for (const [x, z, y] of spots) {
+    const h = 4.2 + Math.random() * 4.5;
+    const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.7, h, 0.55), trunkMat);
+    trunk.position.set(x, y + h / 2, z);
+    trunk.rotation.y = Math.random() * Math.PI;
+    trunk.rotation.z = (Math.random() - 0.5) * 0.18;
+    trunk.castShadow = true; g.add(trunk);
+    for (let k = 0; k < 4; k++) {
+      const box = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.42, 2.6), k % 2 ? darkMat : leafMat);
+      box.position.set(x + (k - 1.5) * 0.15, y + h * 0.7 + k * 0.62, z);
+      box.rotation.y = k * 0.9 + 0.4;
+      box.rotation.z = (k - 1.5) * 0.42;
+      box.rotation.x = (k % 2 ? 0.35 : -0.2);
+      box.castShadow = true; g.add(box);
+    }
+    const oct = new THREE.Mesh(new THREE.OctahedronGeometry(1.25, 0), darkMat);
+    oct.position.set(x, y + h + 1.15, z);
+    oct.rotation.set(0.4, 0.6, 0.2);
+    oct.castShadow = true; g.add(oct);
+    addObstacle(x, z, 1.7, 1.7, y + h + 2.4, 'arbol');
+  }
+}
+function colgarLiana(g, a, b, mat) {
+  const steps = 8;
+  for (let t = 0; t <= steps; t++) {
+    const u = t / steps;
+    const x = a.x + (b.x - a.x) * u;
+    const z = a.z + (b.z - a.z) * u;
+    const y = a.y + (b.y - a.y) * u - Math.sin(u * Math.PI) * 2.6;
+    const bit = new THREE.Mesh(new THREE.SphereGeometry(0.16, 5, 4), mat);
+    bit.position.set(x, y, z); bit.userData.noSolid = true; g.add(bit);
+    if (t === 3 || t === 6) {
+      const hang = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 3.2, 4), mat);
+      hang.position.set(x, y - 1.7, z); hang.userData.noSolid = true; g.add(hang);
+    }
+  }
+}
+function placeJungle(g, spots) {
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x166534, roughness: 0.72 });
+  const vineMat = new THREE.MeshStandardMaterial({ color: 0x3f6212, roughness: 0.8 });
+  spots.forEach(([x, z, y]) => {
+    const h = 9 + Math.random() * 4;
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.85, h, 7), trunkMat);
+    trunk.position.set(x, y + h / 2, z); trunk.castShadow = true; g.add(trunk);
+    const copa = new THREE.Mesh(new THREE.SphereGeometry(3.4, 8, 6), leafMat);
+    copa.position.set(x, y + h * 0.92, z); copa.castShadow = true; g.add(copa);
+    addObstacle(x, z, 1.8, 1.8, y + h, 'arbol');
+  });
+  const usados = new Set();
+  const antes = VINE_CHAINS.length;
+  const armar = (idxs) => {
+    if (idxs.length < 4) return;
+    const pts = idxs.map(i => ({ x: spots[i][0], y: spots[i][2] + 11, z: spots[i][1] }));
+    VINE_CHAINS.push({ pts });
+    for (let s = 0; s < pts.length - 1; s++) colgarLiana(g, pts[s], pts[s + 1], vineMat);
+  };
+  for (let i = 0; i < spots.length; i++) {
+    if (usados.has(i)) continue;
+    const chain = [i]; usados.add(i);
+    let cur = i;
+    for (let k = 0; k < 4; k++) {
+      let best = -1, bd = 46;
+      for (let j = 0; j < spots.length; j++) {
+        if (usados.has(j)) continue;
+        const d = Math.hypot(spots[j][0] - spots[cur][0], spots[j][1] - spots[cur][1]);
+        if (d > 8 && d < bd) { bd = d; best = j; }
+      }
+      if (best < 0) break;
+      usados.add(best); chain.push(best); cur = best;
+    }
+    armar(chain);
+  }
+  if (!spots.length) return;
+  if (VINE_CHAINS.length === antes && spots.length >= 4) {
+    const orden = spots.map((s, i) => i).sort((a, b) => spots[a][0] - spots[b][0]);
+    armar(orden.slice(0, Math.min(5, orden.length)));
+  }
+}
+function placeDesert(g, spots) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0x4d7c0f, roughness: 0.72 });
+  for (const [x, z, y] of spots) {
+    const h = 3.2 + Math.random() * 2.8;
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, h, 7), mat);
+    body.position.set(x, y + h / 2, z); body.castShadow = true; g.add(body);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 1.5, 6), mat);
+    arm.position.set(x + 0.75, y + h * 0.62, z); arm.rotation.z = Math.PI / 2; arm.castShadow = true; g.add(arm);
+    addObstacle(x, z, 1.4, 1.4, y + h, 'cactus');
+  }
+}
+function placeSavanna(g, spots) {
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x84cc16, roughness: 0.75 });
+  for (const [x, z, y] of spots) {
+    const tronco = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.42, 2.6, 6), trunkMat);
+    tronco.position.set(x, y + 1.3, z); tronco.castShadow = true; g.add(tronco);
+    const copa = new THREE.Mesh(new THREE.SphereGeometry(2.5, 8, 5), leafMat);
+    copa.scale.set(1.7, 0.32, 1.7); copa.position.set(x, y + 2.9, z); copa.castShadow = true; g.add(copa);
+    addObstacle(x, z, 1.2, 1.2, y + 3.3, 'arbol');
   }
 }
 function buildWorldBiomes() {
@@ -5177,10 +5329,16 @@ function buildWorldBiomes() {
   }
   const styles = {
     orange: { n: 42, scale: 2.55, leaf: 0xff6a00, leaf2: 0xff8c1a, trunk: 0x7c3f12, fruit: 0xffe14a, spread: 0.8, fat: 1.85 },
-    blue: { n: 34, scale: 1.85, leaf: 0x38bdf8, leaf2: 0x1d4ed8, trunk: 0x1e3a8a, fruit: 0xe0f2fe, spread: 0.78, fat: 1.35 },
-    red: { n: 34, scale: 1.95, leaf: 0xef4444, leaf2: 0xfb7185, trunk: 0x7f1d1d, fruit: 0xfde68a, spread: 0.78, fat: 1.4 },
-    sunset: { n: 32, scale: 2.05, leaf: 0xf97316, leaf2: 0xc026d3, trunk: 0x7c2d12, fruit: 0xfde68a, spread: 0.76, fat: 1.45 },
+    blue: { n: 28, scale: 1.7, leaf: 0xffffff, leaf2: 0xe0f2fe, trunk: 0x6b4423, spread: 0.42 },
+    red: { n: 34, scale: 1.95, leaf: 0xd97706, leaf2: 0x65a30d, trunk: 0x7c4a2d, fruit: 0xfde68a, spread: 0.78, fat: 1.4 },
+    sunset: { n: 32, scale: 2.05, leaf: 0xf97316, leaf2: 0xf9a8d4, trunk: 0x7c2d12, fruit: 0xfde68a, spread: 0.76, fat: 1.45 },
     green: { n: 28, scale: 1.35, leaf: 0x22c55e, leaf2: 0x15803d, trunk: 0x5c3a1e, spread: 0.72 },
+    gray: { n: 22, scale: 1.6, leaf: 0x4b5563, leaf2: 0x374151, trunk: 0x1f2937, spread: 0.74 },
+    jungle: { n: 18, scale: 3.1, leaf: 0x166534, leaf2: 0x14532d, trunk: 0x5c4033, spread: 0.7, fat: 2.1 },
+    desert: { n: 16, scale: 1.4, leaf: 0x4d7c0f, leaf2: 0x3f6212, trunk: 0x4d7c0f, spread: 0.78 },
+    savanna: { n: 14, scale: 1.2, leaf: 0x84cc16, leaf2: 0x65a30d, trunk: 0x78350f, spread: 0.8 },
+    pine: { n: 20, scale: 1.8, leaf: 0x166534, leaf2: 0x14532d, trunk: 0x44403c, spread: 0.74 },
+    steppe: { n: 16, scale: 0.7, leaf: 0xc2b280, leaf2: 0xa89060, trunk: 0x854d0e, spread: 0.85, fat: 0.8 },
     dark: { n: 36, scale: 1.55, leaf: 0x1c3324, leaf2: 0x0b140e, trunk: 0x1c1410, spread: 0.7 },
     giant: { n: 16, scale: 3.7, leaf: 0x166534, leaf2: 0x052e16, trunk: 0x4a2c14, spread: 0.68, fat: 2.5 },
     snow: { n: 46, scale: 1.7, leaf: 0xffffff, leaf2: 0xe0f2fe, trunk: 0x6b4423, spread: 0.72 },
@@ -5189,6 +5347,7 @@ function buildWorldBiomes() {
   };
   for (const b of BIOMES) {
     const st = styles[b.kind];
+    if (!st) continue;
     const n = preferLowPerf ? Math.ceil(st.n * 0.4) : st.n;
     const spots = [];
     let guard = 0;
@@ -5201,7 +5360,7 @@ function buildWorldBiomes() {
       const y = terrainHeightAt(x, z);
       if (y < 0.45) continue;
       let near = false;
-      const minSep = b.kind === 'snow' ? 28 : b.kind === 'orange' ? 46 : (st.fat ? 36 : 16);
+      const minSep = b.kind === 'snow' || b.kind === 'blue' ? 22 : b.kind === 'orange' ? 46 : b.kind === 'jungle' ? 16 : (st.fat ? 36 : 16);
       for (const s of spots) if ((s[0] - x) ** 2 + (s[1] - z) ** 2 < minSep) { near = true; break; }
       if (near) continue;
       spots.push([x, z, y]);
@@ -5211,7 +5370,24 @@ function buildWorldBiomes() {
       placeGlaciers(g, b);
       continue;
     }
+    if (b.kind === 'blue') {
+      const high = spots.filter(s => s[2] > 18 || Math.hypot(s[0] - b.x, s[1] - b.z) < b.r * 0.38);
+      if (high.length < 4) {
+        for (let k = 0; k < 6; k++) {
+          const a = k / 6 * Math.PI * 2, rad = b.r * 0.16;
+          const x = b.x + Math.cos(a) * rad, z = b.z + Math.sin(a) * rad;
+          high.push([x, z, terrainHeightAt(x, z)]);
+        }
+      }
+      if (high.length) placeSnowFirs(g, high);
+      placeGlaciers(g, b, { scale: 0.26, hScale: 0.62 });
+      continue;
+    }
     if (!spots.length) continue;
+    if (b.kind === 'gray') { placeGrayTrees(g, spots); continue; }
+    if (b.kind === 'jungle') { placeJungle(g, spots); continue; }
+    if (b.kind === 'desert') { placeDesert(g, spots); continue; }
+    if (b.kind === 'savanna') { placeSavanna(g, spots); continue; }
     const leafCol = new THREE.Color(st.leaf);
     const leafCol2 = new THREE.Color(st.leaf2 || st.leaf);
     const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(.34, .52, 3.4, 8), new THREE.MeshStandardMaterial({ color: st.trunk, roughness: 0.9 }), spots.length);
@@ -6570,6 +6746,11 @@ function mountainHeightAt(x, z) {
 // la ladera te apoya en la nieve.
 function resolveMountainSolid(pos, fromX, fromZ, fromY, eye) {
   if (state.underground || state.inCastle || state.inRuins || state.inArena) return false;
+  const midX = (pos.x + fromX) / 2, midZ = (pos.z + fromZ) / 2;
+  const snowMid = mountainHeightAt(midX, midZ);
+  if (snowMid > 0 && pos.y < snowMid + eye - 0.04 && !(pos.y < fromY - 0.02)) {
+    pos.x = fromX; pos.z = fromZ; return true;
+  }
   const snow = mountainHeightAt(pos.x, pos.z);
   if (!(snow > 0)) return false;
   const floorY = snow + eye;
@@ -7909,6 +8090,7 @@ buildCondominio();
 
 // Más condominios, casas y hoteles fuera de la ciudad. Cada uno lleva su caja de choque.
 const WORLD_PLACES = { hotels: [], condominios: [], casas: [] };
+const CIUDADES = [{ name: 'Ciudad principal', x: 14, z: 8, principal: true }];
 function sitioConstruible(x, z, margen, ancho, fondo) {
   const h = groundHeightAt(x, z);
   if (h < 0.7 || h > 18) return false;
@@ -8140,6 +8322,21 @@ function poblarAlrededor(cx, cz, anillos, gente) {
     if (!sitioPueblo(x, z) || lugarOcupado(x, z, 70)) continue;
     poblarAlrededor(x, z, 1, 3);
   }
+  const nombresCiudad = ['Puerto Norte', 'Villa del Lago', 'Pueblo Gris', 'Oasis', 'Sabana Alta', 'Costa Roja', 'Aldea del Abeto', 'Mercado Sur', 'Cerro Bajo', 'Estación Este', 'Quebrada', 'Llano Verde'];
+  const ciudadesN = preferLowPerf ? 6 : 12;
+  for (let i = 0; i < ciudadesN; i++) {
+    let puesto = false;
+    for (let t = 0; t < 8 && !puesto; t++) {
+      const a = (i / ciudadesN) * Math.PI * 2 + 0.4 + t * 0.2;
+      const rad = 1020 + (i % 4) * 250 + t * 36;
+      const x = Math.cos(a) * rad, z = Math.sin(a) * rad * 0.84;
+      if (!sitioPueblo(x, z) || lugarOcupado(x, z, 96)) continue;
+      const casas = poblarAlrededor(x, z, preferLowPerf ? 1 : 2, preferLowPerf ? 3 : 5);
+      if (sitioConstruible(x + 24, z, 8, 18, 14)) makeHotel(x + 24, z, a, groundHeightAt(x + 24, z));
+      CIUDADES.push({ name: nombresCiudad[i % nombresCiudad.length], x, z, casas });
+      puesto = true;
+    }
+  }
 })();
 
 const HOTEL_IN = { x: 1980, z: -1480 };
@@ -8257,7 +8454,26 @@ function tryWorldSites() {
       return true;
     }
   }
+  const liana = nearestVine(3.6);
+  if (liana) { startVine(liana); return true; }
   return false;
+}
+function nearestVine(maxD) {
+  let best = null, bd = maxD;
+  for (const c of VINE_CHAINS) {
+    for (let i = 0; i < c.pts.length; i++) {
+      const p = c.pts[i];
+      const d = Math.hypot(player.position.x - p.x, player.position.z - p.z);
+      if (d < bd) { bd = d; best = { chain: c, i }; }
+    }
+  }
+  return best;
+}
+function startVine(hit) {
+  const last = hit.chain.pts.length - 1;
+  vineRide = { chain: hit.chain, i: Math.max(0, Math.min(hit.i, last - 1)), t: 0, dir: 1, swings: 0 };
+  creativeFlying = false; vy = 0; grounded = false;
+  toast('🌿 Te agarras de la liana y pasas a la siguiente');
 }
 function worldSitePrompt() {
   if (state.inHotel) {
@@ -8272,6 +8488,7 @@ function worldSitePrompt() {
     if (cosa.tipo === 'abeto') return { key: 'E', touch: '❄️', text: 'Sacudir el abeto nevado' };
     return { key: 'E', touch: '🧊', text: 'Arrancar hielo del glaciar' };
   }
+  if (nearestVine(3.6)) return { key: 'E', touch: '🌿', text: 'Balancearte por las lianas' };
   if (!inSkiResort() && nearestSnowMountain()) return { key: 'E', touch: '⛰️', text: 'Cerro nevado · se sube caminando' };
   return null;
 }
@@ -8348,6 +8565,34 @@ function sealLooseProps() {
     indexObstacle(addObstacle(cx, cz, w, d, box.max.y, 'prop'));
   });
 }
+function sellarBultos() {
+  for (const block of cityBlocks()) {
+    if (block.kind === 'pond') continue;
+    const step = 7;
+    for (let x = block.x - block.w / 2 + 3; x < block.x + block.w / 2; x += step) {
+      for (let z = block.z - block.d / 2 + 3; z < block.z + block.d / 2; z += step) {
+        const h = cityReliefAt(x, z);
+        if (h == null || h < 2.4) continue;
+        addObstacle(x, z, step * 0.9, step * 0.9, h, 'bulto');
+      }
+    }
+  }
+  for (const b of BIOMES) {
+    if (b.kind !== 'orange' && b.kind !== 'red' && b.kind !== 'sunset') continue;
+    const step = 18;
+    for (let x = b.x - b.r; x <= b.x + b.r; x += step) {
+      for (let z = b.z - b.r; z <= b.z + b.r; z += step) {
+        if (biomeWeight(b, x, z) < 0.4) continue;
+        const loma = moundHeight(x, z);
+        if (loma < 6) continue;
+        const alrededor = moundHeight(x + 9, z) + moundHeight(x - 9, z) + moundHeight(x, z + 9) + moundHeight(x, z - 9);
+        if (loma * 4 < alrededor + 1.5) continue;
+        addObstacle(x, z, 11, 11, terrainHeightAt(x, z), 'bulto');
+      }
+    }
+  }
+}
+sellarBultos();
 sealLooseProps();
 
 // ---- Cierre del "mundo de la Tierra": todo lo agregado desde el marcador es terrestre ----
@@ -13097,7 +13342,7 @@ addEventListener('keydown', e => {
         state.skiing = true; beginSkiCarve();
         toast('❄️ Aterrizaste con los esquís puestos · ¡sigue esquiando!');
       }
-      toast(creativeFlying ? '🪽 Vuelo creativo · 3 bloques · los de tierra no te pegan · la policía no te atrapa' : '🛬 Vuelo creativo desactivado');
+      toast(creativeFlying ? '🪽 Vuelo creativo · mira arriba y avanza, o Espacio, para subir · sin tope de altura' : '🛬 Vuelo creativo desactivado');
       lastCreativeZTap = 0;
     } else lastCreativeZTap = now;
     toggleDadRest();
@@ -13733,6 +13978,7 @@ document.querySelectorAll('.guide-tab').forEach(tab => tab.onclick = () => {
 ui('touchToggle').onclick = () => setTouchMode(!document.body.classList.contains('touch'));
 ui('soundBtn').onclick = () => toggleSound();
 ui('exitBtn').onclick = () => saveAndExit();
+ui('homeBtn').onclick = () => volverACasa();
 ui('fotoBtn').onclick = () => takePhoto();
 if (ui('questBtn')) ui('questBtn').onclick = () => { if (ui('questbox').style.display === 'flex') closeQuestPanel(); else openQuestPanel(); };
 if (ui('questList')) ui('questList').onclick = e => {
@@ -13969,7 +14215,26 @@ function setWatchMode(on) { watchForced = on; try { localStorage.setItem('tim_wa
   bindButtons(ui('moveBtns'));
 }
 
-function hideScreens() { ['start', 'jail', 'over', 'win'].forEach(s => ui(s).classList.add('hidden')); ui('hud').style.display = 'block'; ui('helpBtn').style.display = 'block'; ui('soundBtn').style.display = 'block'; ui('exitBtn').style.display = 'block'; ui('fotoBtn').style.display = 'block'; if (ui('questBtn')) ui('questBtn').style.display = 'block'; ui('parkBusinessBtn').style.display = 'block'; startMusic(); }
+function hideScreens() { ['start', 'jail', 'over', 'win'].forEach(s => ui(s).classList.add('hidden')); ui('hud').style.display = 'block'; ui('helpBtn').style.display = 'block'; ui('soundBtn').style.display = 'block'; ui('exitBtn').style.display = 'block'; ui('homeBtn').style.display = 'block'; ui('fotoBtn').style.display = 'block'; if (ui('questBtn')) ui('questBtn').style.display = 'block'; ui('parkBusinessBtn').style.display = 'block'; startMusic(); }
+function volverACasa() {
+  if (vineRide) vineRide = null;
+  if (state.inHotel) leaveHotel();
+  if (state.skiing) { state.skiing = false; stopSkiCarve(); }
+  if (state.driving) state.driving = false;
+  state.underground = false; state.groundY = 0; state.shelterHole = null;
+  creativeFlying = false; state.jetOn = false; vy = 0;
+  abortFlight();
+  if (state.country) { state.country = null; setCountryVisible(false); }
+  if (state.planet !== 'tierra') { state.planet = 'tierra'; setPlatusVisible(false); }
+  setEarthWorld(true);
+  showEarthGround(true);
+  scene.fog.near = 40; scene.fog.far = 1800;
+  const x = CONDOMINIO.comun.x, z = CONDOMINIO.comun.z;
+  player.position.set(x, (groundHeightAt(x, z) || 0) + PLAYER_EYE, z);
+  yaw = 0; pitch = 0; grounded = true;
+  if (dad && dad.visible && !dad.userData.resting) dad.position.set(x + 1.8, groundHeightAt(x + 1.8, z + 1.2) || 0, z + 1.2);
+  toast('🏠 Volviste a tu condominio, en la ciudad donde está la cárcel');
+}
 // Guardar y salir al menú (botón 💾 Salir)
 function saveAndExit() {
   leaveParkRide(true); if (state.inFlight) endFlight(); standUp(true);   // si estabas en una atracción o en el avión, te bajas antes de guardar
@@ -13980,7 +14245,7 @@ function saveAndExit() {
   if (musicTimer) { clearInterval(musicTimer); musicTimer = null; }
   if (speakerMusicTimer) { clearInterval(speakerMusicTimer); speakerMusicTimer = null; } activeGamerSpeaker = null;
   if (engineGain) engineGain.gain.value = 0;
-  ui('hud').style.display = 'none'; ui('helpBtn').style.display = 'none'; ui('soundBtn').style.display = 'none'; ui('exitBtn').style.display = 'none'; ui('fotoBtn').style.display = 'none'; if (ui('questBtn')) ui('questBtn').style.display = 'none'; ui('parkBusinessBtn').style.display = 'none'; closeParkBusiness(); closeQuestPanel(); closeKeypad(); closeBlackMarket();
+  ui('hud').style.display = 'none'; ui('helpBtn').style.display = 'none'; ui('soundBtn').style.display = 'none'; ui('exitBtn').style.display = 'none'; ui('homeBtn').style.display = 'none'; ui('fotoBtn').style.display = 'none'; if (ui('questBtn')) ui('questBtn').style.display = 'none'; ui('parkBusinessBtn').style.display = 'none'; closeParkBusiness(); closeQuestPanel(); closeKeypad(); closeBlackMarket();
   ['jail', 'over'].forEach(s => ui(s).classList.add('hidden'));
   ui('start').classList.remove('hidden');
   ui('start').classList.add('has-save');
@@ -16220,7 +16485,7 @@ function updateDriving(dt) {
   if (car.helicopter && inTreasureIsland(car.group.position.x, car.group.position.z)) noteIslandArrival('🏝️ Llegaste en helicóptero a la ISLA DEL TESORO');
   if (car.helicopter) {
     const rise = (keys['Space'] || touch.jump || touch.jumpHeld ? 1 : 0) - (keys['ControlLeft'] || keys['ControlRight'] || touch.crouch || touch.heliDown ? 1 : 0);
-    car.group.position.y = THREE.MathUtils.clamp(car.group.position.y + rise * 12 * dt, 0, 180);
+    car.group.position.y = Math.max(0, car.group.position.y + rise * 12 * dt);
     resolveMountainSolid(car.group.position, prevX, prevZ, prevY, 1.4);
     for (const rotor of car.rotors) rotor.rotation.y += dt * (state.driving ? 22 : 5);
     touch.jump = false;   // cada toque del botón ⬆️ da impulso de ascenso también en celular
@@ -16231,7 +16496,10 @@ function updateDriving(dt) {
   }
   // chocar con paredes / edificios cuando el vehículo está cerca del suelo
   const R = 1.5;
-  for (const o of (car.helicopter && car.group.position.y > 5 ? [] : obstacles)) {
+  const piesVehiculo = car.group.position.y;
+  for (const o of obstacles) {
+    if (car.helicopter && o.top != null && piesVehiculo >= o.top) continue;
+    if (o.bottom != null && piesVehiculo + 2.2 < o.bottom) continue;
     if (car.group.position.x > o.minX - R && car.group.position.x < o.maxX + R && car.group.position.z > o.minZ - R && car.group.position.z < o.maxZ + R) {
       car.group.position.x = prevX; car.group.position.z = prevZ; break;
     }
@@ -19265,14 +19533,26 @@ minimapEl.addEventListener('keydown', e => { if (e.code === 'Enter' || e.code ==
 function drawMinimap() {
   const c = minimapEl, g = minimapCtx; if (!c || !g) return;
   g.clearRect(0, 0, 150, 150);
-  const sc = 0.25, cx = 75 - player.position.x * sc, cz = 75 - player.position.z * sc;
+  const mundo = state.planet !== 'platus' && !state.inCastle && !state.country;
+  let sc, cx, cz;
+  if (mundo) {
+    const minX = -2200, maxX = 2200, minZ = -1800, maxZ = 2200;
+    sc = Math.min(142 / (maxX - minX), 142 / (maxZ - minZ));
+    cx = 75 - ((minX + maxX) / 2) * sc;
+    cz = 75 - ((minZ + maxZ) / 2) * sc;
+    g.fillStyle = '#12301c';
+    g.fillRect(cx + minX * sc, cz + minZ * sc, (maxX - minX) * sc, (maxZ - minZ) * sc);
+    for (const b of BIOMES) {
+      g.fillStyle = b.kind === 'blue' || b.kind === 'snow' ? 'rgba(224,242,254,.45)' : b.kind === 'red' ? 'rgba(212,120,58,.4)' : b.kind === 'gray' ? 'rgba(156,163,175,.45)' : b.kind === 'jungle' ? 'rgba(21,128,61,.5)' : 'rgba(255,255,255,.12)';
+      g.beginPath(); g.arc(cx + b.x * sc, cz + b.z * sc, Math.max(1.6, b.r * sc), 0, 7); g.fill();
+    }
+  } else {
+    sc = 0.25; cx = 75 - player.position.x * sc; cz = 75 - player.position.z * sc;
+  }
   const dot = (x, z, col, r) => { g.fillStyle = col; g.beginPath(); g.arc(cx + x * sc, cz + z * sc, r, 0, 7); g.fill(); };
   const icon = (x, z, em, size) => { g.font = (size || 13) + 'px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(em, cx + x * sc, cz + z * sc); };
   // gente y estadios (solo en la Tierra)
-  if (state.planet !== 'platus') {
-    for (const n of npcs) dot(n.position.x, n.position.z, '#94a3b8', 1.5);
-    for (const s of stadiums) icon(s.x, s.z, '🏟️', 12);
-  } else {   // Platus: rocas de carbón, fogatas, el vendedor zombi y el cohete
+  if (state.planet === 'platus') {   // Platus: rocas de carbón, fogatas, el vendedor zombi y el cohete
     for (const r of coalRocks) dot(r.position.x, r.position.z, '#0f172a', 2.5);
     for (const f of campfires) icon(f.position.x, f.position.z, '🔥', 11);
     for (const m of miners) icon(m.position.x, m.position.z, '⛏️', 12);
@@ -19316,8 +19596,20 @@ function drawMinimap() {
       icon(p.position.x, p.position.z, '🚔', 14);
     }
   }
-  g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 1.5;   // tú (centro)
-  g.beginPath(); g.arc(75, 75, 3.5, 0, 7); g.fill(); g.stroke();
+  if (mundo) {
+    for (const h of WORLD_PLACES.casas) dot(h.x, h.z, '#fde68a', 1.15);
+    for (const h of WORLD_PLACES.condominios) icon(h.x, h.z, '🏘️', 8);
+    for (const h of WORLD_PLACES.hotels) icon(h.x, h.z, '🏨', 9);
+    for (const ciudad of CIUDADES) {
+      g.strokeStyle = '#f8fafc'; g.lineWidth = 1;
+      g.beginPath(); g.arc(cx + ciudad.x * sc, cz + ciudad.z * sc, ciudad.principal ? 5 : 3.5, 0, 7); g.stroke();
+      icon(ciudad.x, ciudad.z, '🏙️', ciudad.principal ? 11 : 8);
+    }
+  }
+  g.fillStyle = '#fff'; g.strokeStyle = '#000'; g.lineWidth = 1.5;
+  const px = mundo ? cx + player.position.x * sc : 75;
+  const pz = mundo ? cz + player.position.z * sc : 75;
+  g.beginPath(); g.arc(px, pz, 3.5, 0, 7); g.fill(); g.stroke();
 }
 
 function ensurePlayerSkiVisual() {
@@ -19427,6 +19719,34 @@ function updateSkiGearHold(dt) {
     if (skiRemoveHold >= 1.15) { state.skiGearWorn = !state.skiGearWorn; skiRemoveHold = 0; const visual = ensurePlayerSkiVisual(); visual.visible = state.skiGearWorn; toast(state.skiGearWorn ? '⛷️ Te pusiste los ' + (state.skiGear === 'snowboard' ? 'snowboard' : 'esquís') : '🥾 Te quitaste los ' + (state.skiGear === 'snowboard' ? 'snowboard' : 'esquís')); saveGame(); }
   } else skiRemoveHold = Math.max(0, skiRemoveHold - dt * 2);
 }
+function updateVineRide(dt) {
+  if (!vineRide) return false;
+  const c = vineRide.chain;
+  const siguiente = vineRide.i + vineRide.dir;
+  if (siguiente < 0 || siguiente >= c.pts.length) {
+    if ((vineRide.swings || 0) < 3) { vineRide.dir *= -1; vineRide.t = 0; }
+    else { vineRide = null; grounded = false; vy = 2; toast('🌿 Sueltas la liana'); return false; }
+  }
+  const a = c.pts[vineRide.i], b = c.pts[vineRide.i + vineRide.dir];
+  if (!a || !b) { vineRide = null; return false; }
+  vineRide.t += dt * 0.95;
+  const t = Math.min(1, vineRide.t);
+  player.position.x = a.x + (b.x - a.x) * t;
+  player.position.z = a.z + (b.z - a.z) * t;
+  const yLine = a.y + (b.y - a.y) * t;
+  player.position.y = yLine - Math.sin(t * Math.PI) * 5.2;
+  if (t >= 1) {
+    vineRide.i += vineRide.dir;
+    vineRide.t = 0;
+    vineRide.swings = (vineRide.swings || 0) + 1;
+    if (vineRide.swings >= 4 && (vineRide.i <= 0 || vineRide.i >= c.pts.length - 1)) {
+      vineRide = null; grounded = false; vy = 2; toast('🌿 Sueltas la liana'); return false;
+    }
+  }
+  vy = 0; grounded = false;
+  camera.rotation.y = yaw; camera.rotation.x = pitch;
+  return true;
+}
 function updateCreativeFlight(dt) {
   const lookSpeed = 1.8 * dt;
   if (keys['ArrowLeft']) yaw += lookSpeed;
@@ -19434,33 +19754,33 @@ function updateCreativeFlight(dt) {
   if (keys['ArrowUp']) pitch += lookSpeed;
   if (keys['ArrowDown']) pitch -= lookSpeed;
   pitch = THREE.MathUtils.clamp(pitch, -1.3, 1.3);
-  const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  const horiz = Math.cos(pitch);
+  const forward = new THREE.Vector3(-Math.sin(yaw) * horiz, Math.sin(pitch), -Math.cos(yaw) * horiz);
   const rightV = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
   let ax = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
   let az = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
   const mag = Math.hypot(ax, az); if (mag > 1) { ax /= mag; az /= mag; }
-  const speed = keys['ShiftLeft'] || keys['ShiftRight'] ? 42 : 24;
-  const fromX = player.position.x, fromZ = player.position.z, fromY = player.position.y;
-  const parts = Math.max(1, Math.ceil(speed * dt / 0.32));
+  const speed = keys['ShiftLeft'] || keys['ShiftRight'] ? 48 : 26;
+  const extraUp = (keys['Space'] || touch.jumpHeld ? 1 : 0) - (keys['ControlLeft'] || keys['ControlRight'] || touch.crouch ? 1 : 0);
+  const parts = Math.max(1, Math.ceil(speed * dt / 0.28));
   for (let i = 0; i < parts; i++) {
     const px = player.position.x, pz = player.position.z, py = player.position.y;
     player.position.addScaledVector(forward, az * speed * dt / parts);
     player.position.addScaledVector(rightV, ax * speed * dt / parts);
-    const vertical = (keys['Space'] ? 1 : 0) - (keys['ControlLeft'] || keys['ControlRight'] ? 1 : 0);
-    let minFlyY = PLAYER_EYE;
+    player.position.y += extraUp * speed * dt / parts;
+    let minFlyY = -120;
     if (state.planet === 'tierra' && !state.country) {
       const suelo = mountainHeightAt(player.position.x, player.position.z);
-      if (suelo < 0) minFlyY = suelo + PLAYER_EYE;
+      if (suelo < 0) minFlyY = Math.max(minFlyY, suelo + 0.35);
     }
-    if (state.planet === 'tierra' && inTreasureIsland(player.position.x, player.position.z)) minFlyY = TREASURE_ISLAND.surface + PLAYER_EYE;
-    const flyWater = waterZoneAt(player.position.x, player.position.z);
-    if (flyWater) minFlyY = Math.max(minFlyY, flyWater.surface + PLAYER_EYE);
-    player.position.y = Math.max(minFlyY, player.position.y + vertical * speed * dt / parts);
+    if (state.planet === 'tierra' && inTreasureIsland(player.position.x, player.position.z)) minFlyY = Math.max(minFlyY, TREASURE_ISLAND.surface + 0.4);
+    player.position.y = Math.max(minFlyY, player.position.y);
     player.position.x = THREE.MathUtils.clamp(player.position.x, worldWestLimit(), 2100);
     player.position.z = THREE.MathUtils.clamp(player.position.z, -1600, 2100);
     resolveMountainSolid(player.position, px, pz, py, PLAYER_EYE);
     resolveCollisions();
   }
+  touch.jump = false;
   if (inTreasureIsland(player.position.x, player.position.z)) noteIslandArrival('🏝️ Llegaste volando a la ISLA DEL TESORO');
   grounded = false; vy = 0; camera.rotation.y = yaw; camera.rotation.x = pitch;
 }
@@ -19483,6 +19803,7 @@ function updateMovement(dt) {
   if (parkRide) { camera.rotation.y = yaw; camera.rotation.x = pitch; return; }   // montado en una atracción: te lleva ella
   if (state.driving && car) { updateDriving(dt); return; }   // conduciendo: el auto reemplaza al caminar
   if (state.riding && mount) { updateRiding(dt); return; }   // montando una criatura: reemplaza al caminar
+  if (vineRide && updateVineRide(dt)) return;
   if (state.creative && creativeFlying) { updateCreativeFlight(dt); return; }
   if (updateSkiLiftRide(dt)) return;
   if (updateSkiMovement(dt)) return;
@@ -19522,8 +19843,9 @@ function updateMovement(dt) {
   if (state.planet === 'tierra' && !state.underground && !state.skiing && !state.skiLiftRide && !state.inCastle && !state.inRuins && !state.inArena) {
     const prevH = mountainHeightAt(moveStartX, moveStartZ);
     const nextH = mountainHeightAt(player.position.x, player.position.z);
+    const midH = mountainHeightAt((player.position.x + moveStartX) / 2, (player.position.z + moveStartZ) / 2);
     const horiz = Math.hypot(player.position.x - moveStartX, player.position.z - moveStartZ);
-    if (nextH > prevH + Math.max(0.42, horiz * 1.35 + 0.05)) {
+    if (Math.max(nextH, midH) > prevH + Math.max(0.42, horiz * 1.35 + 0.05)) {
       player.position.x = moveStartX;
       player.position.z = moveStartZ;
     }
@@ -19587,7 +19909,7 @@ function updateMovement(dt) {
   const jumpHeld = keys['Space'] || touch.jumpHeld;   // mantener saltar = empuje del jetpack
   if ((keys['Space'] || touch.jump) && grounded) { vy = jumpV; grounded = false; }
   // JETPACK alien (solo en Platus): mantén saltar en el aire y te elevas volando
-  if (state.hasJetpack && lowG && jumpHeld && !grounded && player.position.y < standY + 42) {
+  if (state.hasJetpack && lowG && jumpHeld && !grounded) {
     vy += 40 * dt; if (vy > 9) vy = 9; state.jetOn = true;
   } else state.jetOn = false;
   touch.jump = false;   // el salto (de piso) es de un solo toque
@@ -19913,6 +20235,11 @@ try { if (new URLSearchParams(location.search).has('debug')) {
     };
   };
   timDump.setFly = (v) => { creativeFlying = !!v; if (!v) grounded = false; };
+  timDump.ciudades = () => CIUDADES;
+  timDump.vineChains = () => VINE_CHAINS;
+  timDump.volverACasa = () => volverACasa();
+  timDump.vineState = () => vineRide;
+  timDump.paintMap = () => drawMinimap();
   // Revisa que ningún edificio haya quedado encima de una calle, fuera de su
   // manzana, o metido dentro de otro edificio.
   timDump.auditCity = () => {
