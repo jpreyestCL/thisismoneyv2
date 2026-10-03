@@ -1290,7 +1290,7 @@ const SKY_DAY = new THREE.Color(0x87ceeb);
 const SKY_NIGHT = new THREE.Color(0x0a1026);
 const SKY_RAIN = new THREE.Color(0x6b7f96), SKY_DUST = new THREE.Color(0xc06a2e), SKY_ECLIPSE = new THREE.Color(0x05060a), _skyBase = new THREE.Color();
 scene.background = SKY_DAY.clone();
-scene.fog = new THREE.Fog(SKY_DAY.getHex(), 40, 160);
+scene.fog = new THREE.Fog(SKY_DAY.getHex(), 40, 1800);
 // Carteles y sprites que miran a cámara. Lista propia: recorrer TODA la escena cada frame laguea.
 const billboards = [];
 function trackBillboard(o) {
@@ -1300,7 +1300,7 @@ function trackBillboard(o) {
   return o;
 }
 
-const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, preferLowPerf ? 800 : 2200);
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.2, 5600);
 
 // Ajuste de tamaño robusto: el canvas SIEMPRE llena la pantalla, aunque Safari cambie el
 // viewport o el usuario haga zoom. Usa visualViewport si existe y NO escribe estilos inline
@@ -1543,6 +1543,39 @@ const BIOME_LAKES = [
 ].map(w => ({ ...w, lake: true }));
 const EXTRA_WATER = [];
 const _biomeCity = new THREE.Color(0x4a7c3a);
+const _biomeNear = new THREE.Color();
+(function sembrarBiomas() {
+  let semilla = 424242;
+  const rnd = () => { semilla = (semilla * 16807) % 2147483647; return (semilla - 1) / 2147483646; };
+  const plan = [['orange', 6, 240], ['blue', 6, 230], ['red', 6, 230], ['sunset', 6, 220], ['snow', 3, 210], ['green', 2, 150]];
+  const nombres = {
+    orange: ['Naranjal', '🍊', 0xff6a00, 0xc2410c],
+    blue: ['Valle azul', '🔵', 0x1d4ed8, 0x1e3a8a],
+    red: ['Tierra roja', '🔴', 0xe11d48, 0x9f1239],
+    sunset: ['Atardecer', '🌇', 0xf97316, 0x9d174d],
+    snow: ['Nieve', '❄️', 0xf8fafc, 0xe2e8f0],
+    green: ['Pradera', '🌿', 0x16a34a, 0x166534],
+  };
+  let n = 0;
+  for (const [kind, count, radio] of plan) {
+    let puestos = 0, guard = 0;
+    while (puestos < count && guard < 500) {
+      guard++;
+      const x = (rnd() * 2 - 1) * 1780, z = (rnd() * 2 - 1) * 1780;
+      if (Math.hypot(x, z) < 430) continue;
+      if (x < -240 && z > -500 && z < 130) continue;
+      if (Math.hypot(x - 520, z - 500) < 300) continue;
+      if (Math.hypot(x + 1060, z + 155) < 340) continue;
+      let chocan = false;
+      for (const b of BIOMES) if (Math.hypot(b.x - x, b.z - z) < (b.r + radio) * 0.7) { chocan = true; break; }
+      if (chocan) continue;
+      const meta = nombres[kind];
+      n++;
+      BIOMES.push({ id: kind + '-' + n, name: meta[0] + ' ' + n, icon: meta[1], x, z, r: radio, kind, ground: meta[2], bed: meta[3] });
+      puestos++;
+    }
+  }
+})();
 let cityReliefBlocks = null;
 function cityBlocks() {
   if (cityReliefBlocks) return cityReliefBlocks;
@@ -1628,6 +1661,11 @@ function biomeShape(b, x, z) {
   const n2 = terrainWave(x, z, 0.018);
   let h = 2 + n * 4;
   if (b.kind === 'orange') h = 2.4 + n * 8 + n2 * 4.2 + Math.max(0, terrainWave(x, z, 0.04)) * 5.5 + moundHeight(x, z) * 1.15;
+  else if (b.kind === 'blue') h = 3 + Math.max(0, n) * 10 + n2 * 4 + moundHeight(x, z) * 1.05;
+  else if (b.kind === 'red') {
+    const mesa = Math.pow(Math.max(0, terrainWave(x, z, 0.02)), 2);
+    h = 4 + n * 6 + mesa * 16 + moundHeight(x, z) * 0.9;
+  } else if (b.kind === 'sunset') h = 2.2 + Math.abs(n) * 7 + Math.max(0, n2) * 9 + moundHeight(x, z) * 1.2;
   else if (b.kind === 'green') h = 3.2 + Math.max(0, n) * 9 + n2 * 3.6 + moundHeight(x, z) * 0.8;
   else if (b.kind === 'dark') h = 0.8 + n2 * 2.2 + Math.max(0, -n) * 1.2 + moundHeight(x, z) * 0.45;
   else if (b.kind === 'giant') h = 5 + n * 7 + Math.max(0, n2) * 12 + moundHeight(x, z) * 0.7;
@@ -1669,32 +1707,39 @@ function biomeTint(x, z, h, out) {
     const w = biomeWeight(b, x, z);
     if (w > 0.18) {
       let hex = b.ground;
-      if (b.kind === 'orange') {
-        const tone = terrainField(x * 1.6, z * 1.6);
-        hex = tone > 0.2 ? 0xff8c1a : tone < -0.18 ? 0xe85d04 : 0xff6a00;
-      } else if (b.kind === 'snow') hex = h > 28 ? 0xffffff : 0xf8fafc;
+      const tone = terrainField(x * 1.6, z * 1.6);
+      if (b.kind === 'orange') hex = tone > 0.2 ? 0xff8c1a : tone < -0.18 ? 0xe85d04 : 0xff6a00;
+      else if (b.kind === 'snow') hex = h > 28 ? 0xffffff : 0xf8fafc;
+      else if (b.kind === 'blue') hex = h > 18 ? 0xbfdbfe : (tone > 0.12 ? 0x38bdf8 : 0x1d4ed8);
+      else if (b.kind === 'red') hex = tone > 0.34 ? 0xfbbf24 : tone > 0.12 ? 0xfb7185 : tone < -0.16 ? 0x9f1239 : 0xe11d48;
+      else if (b.kind === 'sunset') hex = h > 16 ? 0xfde68a : (tone > 0.05 ? 0xfb923c : 0xc026d3);
+      else if (b.kind === 'green') hex = tone > 0.15 ? 0x4ade80 : 0x16a34a;
       else if (h < 0.25) hex = b.bed;
       else if (h > 40) hex = 0xf1f5f9;
       out.setHex(hex);
-      if (w < 0.9) out.lerp(_biomeCity, (1 - w) * (b.kind === 'orange' || b.kind === 'snow' ? 0.22 : 1));
+      const vivo = b.kind === 'orange' || b.kind === 'snow' || b.kind === 'blue' || b.kind === 'red' || b.kind === 'sunset' || b.kind === 'green';
+      if (w < 0.9) out.lerp(_biomeCity, (1 - w) * (vivo ? 0.16 : 0.45));
       return;
     }
   }
   const m = terrainMask(x, z);
   if (m < 0.05) { out.setHex(0x4a7c3a); return; }
-  const temp = terrainField(x + 220, z - 80);
-  const moist = terrainField(z + 140, x * 0.7);
-  let hex = 0x4f9a3c;
-  if (h > 48) hex = 0xf7fafc;
-  else if (h > 32) hex = 0x9aa3ad;
-  else if (h > 20) hex = 0x6e5b46;
-  else if (moist > 0.28 && temp > 0.05) hex = 0x3cb54a;
-  else if (moist > 0.2 && temp < -0.04) hex = 0x14321b;
-  else if (moist > 0.42) hex = 0x3c4630;
-  else if (moist < -0.22 && temp > 0.1) hex = 0xc4a56c;
-  else if (temp < -0.28) hex = 0xb7c6c2;
-  else if (moist < -0.1) hex = 0x5a4532;
-  out.setHex(hex).lerp(_biomeCity, 1 - m);
+  const cell = 420;
+  const jx = terrainWave(z, x, 0.011) * 110, jz = terrainWave(x, z, 0.009) * 110;
+  const ix = Math.floor((x + jx) / cell), iz = Math.floor((z + jz) / cell);
+  const sorteo = terrainSeed(ix + 3, iz - 7);
+  let hex = 0xff6a00;
+  if (h > 48) hex = 0xf8fafc;
+  else if (sorteo < 0.18) hex = 0x1d4ed8;
+  else if (sorteo < 0.36) hex = 0xff6a00;
+  else if (sorteo < 0.54) hex = 0xe11d48;
+  else if (sorteo < 0.70) hex = sorteo < 0.62 ? 0xf97316 : 0xc026d3;
+  else if (sorteo < 0.86) hex = 0xe2e8f0;
+  else hex = 0x16a34a;
+  const cerca = biomeAtPoint(x, z);
+  out.setHex(hex);
+  if (cerca) { _biomeNear.setHex(cerca.ground); out.lerp(_biomeNear, 0.5); }
+  out.lerp(_biomeCity, (1 - m) * 0.12);
 }
 const EARTH_SIZE = 4600;
 const earthSeg = preferLowPerf ? 96 : 188;
@@ -3634,7 +3679,7 @@ function restoreAlleyExitWorld() {
   } else {
     setEarthWorld(true); setCityVisible(true); if (typeof setPlatusVisible === 'function') setPlatusVisible(false);
     if (typeof setCountryVisible === 'function') setCountryVisible(false);
-    showEarthGround(true); scene.fog.near = 1; scene.fog.far = 1400;
+    showEarthGround(true); scene.fog.near = 1; scene.fog.far = 1800;
   }
 }
 function showAlleyWorld(on) {
@@ -3646,6 +3691,7 @@ function showAlleyWorld(on) {
     if (typeof setPlatusVisible === 'function') setPlatusVisible(false);
     ground.visible = false; if (typeof earthTerrain !== 'undefined') earthTerrain.visible = false;
     if (typeof skiResortGroup !== 'undefined' && skiResortGroup) skiResortGroup.visible = false;
+    if (typeof skiBeacon !== 'undefined' && skiBeacon) skiBeacon.visible = false;
     if (typeof oceanFxGroup !== 'undefined' && oceanFxGroup) oceanFxGroup.visible = false;
     applyAlleySky();
     if (alley.root) alley.root.visible = true;
@@ -3892,8 +3938,8 @@ function initCitizenBrain(n, center, radius) {
     id: 'citizen-' + id, name: CITIZEN_NAMES[id % CITIZEN_NAMES.length], job: CITIZEN_JOBS[id % CITIZEN_JOBS.length], trust: 0,
   };
 }
-function citizenPointBlocked(x, z) {
-  if (Math.abs(x) > 228 || Math.abs(z) > 228) return true;
+function citizenPointBlocked(x, z, wild) {
+  if (!wild && (Math.abs(x) > 228 || Math.abs(z) > 228)) return true;
   if (typeof insidePlayerStructure === 'function' && insidePlayerStructure(x,z,.35)) return true;
   return obstacles.some(o => x > o.minX - .48 && x < o.maxX + .48 && z > o.minZ - .48 && z < o.maxZ + .48);
 }
@@ -3923,7 +3969,7 @@ function chooseCitizenGoal(n) {
     for (let tries = 0; tries < 8; tries++) {
       const a = Math.random() * Math.PI * 2, r = 4 + Math.random() * b.radius;
       const x = b.home.x + Math.cos(a) * r, z = b.home.z + Math.sin(a) * r;
-      if (!citizenPointBlocked(x, z)) { b.goal.set(x, 0, z); break; }
+      if (!citizenPointBlocked(x, z, n.userData.wild)) { b.goal.set(x, 0, z); break; }
     }
   }
   b.thinkIn = 2.5 + Math.random() * 4;
@@ -3956,9 +4002,9 @@ function updateNPCs(dt) {
       const len = Math.hypot(dx, dz) || 1; dx /= len; dz /= len;
       const speed = b.speed * (b.activity === 'flee' ? 2.8 : 1), step = speed * dt;
       let nx = n.position.x + dx * step, nz = n.position.z + dz * step;
-      if (citizenPointBlocked(nx, nz)) {
+      if (citizenPointBlocked(nx, nz, n.userData.wild)) {
         const sx = n.position.x - dz * step, sz = n.position.z + dx * step;
-        if (!citizenPointBlocked(sx, sz)) { nx = sx; nz = sz; }
+        if (!citizenPointBlocked(sx, sz, n.userData.wild)) { nx = sx; nz = sz; }
         else { b.thinkIn = 0; nx = n.position.x; nz = n.position.z; }
       }
       moved = nx !== n.position.x || nz !== n.position.z;
@@ -3968,6 +4014,7 @@ function updateNPCs(dt) {
       if (b.wait <= 0 && distance <= .7) b.thinkIn = 0;
     }
     if (state.phase === 'NIGHT' && dist2D(n.position, b.home) < 1.2) n.visible = false;
+    if (n.userData.wild) n.position.y = groundHeightAt(n.position.x, n.position.z);
     if (moved) swingLimbs(n, dt); else swingLimbs(n, 0);
     n.userData.activity = b.activity;
   }
@@ -5045,6 +5092,9 @@ function buildTrees() {   // árboles INSTANCIADOS: ~100 árboles en solo 2 draw
 }
 buildTrees();
 
+const BIOME_TREES = [];
+const SNOW_FIRS = [];
+const GLACIER_SPOTS = [];
 function placeSnowFirs(g, spots) {
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.9 });
   const snowMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72 });
@@ -5064,6 +5114,7 @@ function placeSnowFirs(g, spots) {
     pos.set(x, y + 5.7 * s, z); esc.set(s, s, s); m4.compose(pos, q, esc); tip.setMatrixAt(i, m4);
     const ancho = 2.5 * s;
     addObstacle(x, z, ancho, ancho, y + 6.2 * s, 'arbol');
+    SNOW_FIRS.push({ x, z, cd: 0 });
   });
   g.add(trunks, low, mid, tip);
 }
@@ -5086,6 +5137,7 @@ function placeGlaciers(g, b) {
     const serac = new THREE.Mesh(new THREE.ConeGeometry(Math.min(w, d) * 0.28, h * 0.85, 5), coreMat);
     serac.position.set(x + w * 0.2, y + h * 0.9, z - d * 0.1); serac.castShadow = true; serac.userData.noSolid = true; g.add(serac);
     addObstacle(x, z, w, d, y + h, 'glaciar');
+    GLACIER_SPOTS.push({ x, z, cd: 0 });
   }
 }
 function buildWorldBiomes() {
@@ -5125,7 +5177,10 @@ function buildWorldBiomes() {
   }
   const styles = {
     orange: { n: 42, scale: 2.55, leaf: 0xff6a00, leaf2: 0xff8c1a, trunk: 0x7c3f12, fruit: 0xffe14a, spread: 0.8, fat: 1.85 },
-    green: { n: 48, scale: 1.35, leaf: 0x22c55e, leaf2: 0x15803d, trunk: 0x5c3a1e, spread: 0.8 },
+    blue: { n: 34, scale: 1.85, leaf: 0x38bdf8, leaf2: 0x1d4ed8, trunk: 0x1e3a8a, fruit: 0xe0f2fe, spread: 0.78, fat: 1.35 },
+    red: { n: 34, scale: 1.95, leaf: 0xef4444, leaf2: 0xfb7185, trunk: 0x7f1d1d, fruit: 0xfde68a, spread: 0.78, fat: 1.4 },
+    sunset: { n: 32, scale: 2.05, leaf: 0xf97316, leaf2: 0xc026d3, trunk: 0x7c2d12, fruit: 0xfde68a, spread: 0.76, fat: 1.45 },
+    green: { n: 28, scale: 1.35, leaf: 0x22c55e, leaf2: 0x15803d, trunk: 0x5c3a1e, spread: 0.72 },
     dark: { n: 36, scale: 1.55, leaf: 0x1c3324, leaf2: 0x0b140e, trunk: 0x1c1410, spread: 0.7 },
     giant: { n: 16, scale: 3.7, leaf: 0x166534, leaf2: 0x052e16, trunk: 0x4a2c14, spread: 0.68, fat: 2.5 },
     snow: { n: 46, scale: 1.7, leaf: 0xffffff, leaf2: 0xe0f2fe, trunk: 0x6b4423, spread: 0.72 },
@@ -5146,7 +5201,7 @@ function buildWorldBiomes() {
       const y = terrainHeightAt(x, z);
       if (y < 0.45) continue;
       let near = false;
-      const minSep = b.kind === 'snow' ? 42 : b.kind === 'orange' ? 78 : (st.fat ? 64 : 16);
+      const minSep = b.kind === 'snow' ? 28 : b.kind === 'orange' ? 46 : (st.fat ? 36 : 16);
       for (const s of spots) if ((s[0] - x) ** 2 + (s[1] - z) ** 2 < minSep) { near = true; break; }
       if (near) continue;
       spots.push([x, z, y]);
@@ -5182,6 +5237,7 @@ function buildWorldBiomes() {
       }
       const tronco = Math.max(1.2, 0.72 * fat * Math.min(alto, 3.1));
       addObstacle(x, z, tronco, tronco, y + Math.min(7.2, 2.15 * alto), 'arbol');
+      if (st.fruit) BIOME_TREES.push({ x, z, kind: b.kind, cd: 0 });
     });
     g.add(trunks); g.add(leaves); g.add(leaves2);
     if (fruit) g.add(fruit);
@@ -5333,10 +5389,13 @@ function nearParksNow() {
 function syncFarWorld() {
   if (state.mission === 'alley') {
     if (skiResortGroup) skiResortGroup.visible = false;
+    if (skiBeacon) skiBeacon.visible = false;
     if (oceanFxGroup) oceanFxGroup.visible = false;
     return;
   }
-  skiResortGroup.visible = nearSkiNow();
+  const lejosEsqui = (player.position.x - SKI_RESORT.x) ** 2 + (player.position.z - SKI_RESORT.z) ** 2;
+  skiResortGroup.visible = state.skiing || state.skiLiftRide || lejosEsqui < 2200 * 2200;
+  if (typeof skiBeacon !== 'undefined' && skiBeacon) skiBeacon.visible = true;
   if (oceanFxGroup) oceanFxGroup.visible = !!(state.sailing || state.swimming || player.position.x < -160);
   const nearIsl = nearIslandNow(520);
   for (const h of holes) {
@@ -6595,6 +6654,18 @@ function buildEarthMountains() {
   masCerros.forEach((p, i) => mcMountain(g, p[0], p[1], p[2], p[3], 0x94a3b8, 0xffffff, 40 + i, 'tierra', {
     grass: 0xe8eef5, soil: 0xcbd5e1, leaf: 0xf8fafc, trees: preferLowPerf ? 3 : 7,
   }));
+  const nieveLejos = preferLowPerf ? 18 : 30;
+  for (let i = 0; i < nieveLejos; i++) {
+    const a = i * 2.399963;
+    const rad = 520 + (i % 8) * 160;
+    const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
+    if (Math.hypot(x, z) < 380) continue;
+    if (Math.hypot(x - 520, z - 500) < 280) continue;
+    if (x < -240 && z > -500 && z < 130) continue;
+    mcMountain(g, x, z, 52 + (i % 4) * 16, 78 + (i % 5) * 24, 0xe2e8f0, 0xffffff, 80 + i, 'tierra', {
+      grass: 0xf8fafc, soil: 0xcbd5e1, leaf: 0xffffff, trees: preferLowPerf ? 2 : 4,
+    });
+  }
   return g;
 }
 
@@ -6609,6 +6680,7 @@ const SKI_SUMMIT_LIFT_BOTTOM = { x: SKI_RESORT.x + 25, z: SKI_RESORT.z - 170 };
 const SKI_MOUNTAIN_PROFILE = { x: SKI_RESORT.x, z: SKI_RESORT.z, r: SKI_RESORT.r, h: 300, ph: 28 * 1.7, ski: true };
 const skiSlopeHeight = (x, z) => mountainProfile(SKI_MOUNTAIN_PROFILE, x - SKI_RESORT.x, z - SKI_RESORT.z);
 const skiResortGroup = new THREE.Group(); scene.add(skiResortGroup);
+let skiBeacon = null;
 const skiVisitors = [], skiObstacles = [], skiRamps = [], skiPisteWalls = [];
 const skiWallWorld = new THREE.Vector3();
 let skiGearMesh = null;
@@ -6850,6 +6922,38 @@ function buildPlazaCentral() {
   return g;
 }
 buildPlazaCentral(); buildCondoPark(); buildFunPark(); buildWaterPark(); buildEarthMountains();
+function buildSkiBeacon() {
+  const y = mountainProfile(SKI_MOUNTAIN_PROFILE, 0, 0);
+  const g = new THREE.Group();
+  g.name = 'faro-esqui';
+  const blanco = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
+  const azul = new THREE.MeshBasicMaterial({ color: 0x0284c7, fog: false });
+  const aguja = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 8, 120, 8), blanco);
+  aguja.position.set(SKI_RESORT.x, y + 60, SKI_RESORT.z);
+  g.add(aguja);
+  const punta = new THREE.Mesh(new THREE.ConeGeometry(7, 22, 8), azul);
+  punta.position.set(SKI_RESORT.x, y + 128, SKI_RESORT.z);
+  g.add(punta);
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 160;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#0369a1'; ctx.fillRect(0, 0, 512, 160);
+  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 78px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('ESQUÍ', 256, 82);
+  const tex = new THREE.CanvasTexture(cv);
+  const cartelMat = new THREE.MeshBasicMaterial({ map: tex, fog: false, side: THREE.DoubleSide });
+  for (const giro of [0, Math.PI / 2]) {
+    const cartel = new THREE.Mesh(new THREE.PlaneGeometry(86, 26), cartelMat);
+    cartel.position.set(SKI_RESORT.x, y + 108, SKI_RESORT.z);
+    cartel.rotation.y = giro;
+    g.add(cartel);
+  }
+  g.frustumCulled = false;
+  g.traverse(o => { o.frustumCulled = false; });
+  scene.add(g);
+  skiBeacon = g;
+  addObstacle(SKI_RESORT.x, SKI_RESORT.z, 10, 10, y + 130, 'esqui');
+}
+buildSkiBeacon();
 WATER_ZONES.push(POOL);   // en la piscina grande se nada igual que en el mar
 
 // ----- SENTARSE en el baño, la silla, el sofá o la cama (E) -----
@@ -7579,7 +7683,7 @@ function restoreWorldAfterFlight() {
     scene.fog.near = 10; scene.fog.far = 320;
   } else {
     setEarthWorld(true); setCityVisible(true); setCountryVisible(false);
-    scene.background.set(0x87ceeb); scene.fog.near = 10; scene.fog.far = 160;
+    scene.background.set(0x87ceeb); scene.fog.near = 10; scene.fog.far = 1800;
   }
 }
 function abortFlight() {
@@ -7623,7 +7727,7 @@ function endFlight() {
     syncPlacedCountryVisibility();
     setCountryVisible(false);
     setEarthWorld(true); setCityVisible(true);
-    scene.background.set(0x87ceeb); scene.fog.far = 160;
+    scene.background.set(0x87ceeb); scene.fog.far = 1800;
     player.position.set(AIRPORT.x, PLAYER_EYE, AIRPORT.z - 6); yaw = 0; pitch = 0;
     dad.position.set(AIRPORT.x + 2, 0, AIRPORT.z - 5);
     toast('🏠 ¡De vuelta en casa!' + (from ? ' Volviste de ' + from.name : ''));
@@ -7847,7 +7951,7 @@ function makeHotel(x, z, rot, baseY) {
   addObstacle(x, z, girada ? d : w, girada ? w : d, baseY + h + 1.6, 'hotel');
   const lx = 0, lz = d / 2 + 1.3;
   addObstacle(x + lx * cs + lz * sn, z - lx * sn + lz * cs, girada ? 2.6 : 8.6, girada ? 8.6 : 2.6, baseY + 3.4, 'hotel');
-  WORLD_PLACES.hotels.push({ x, z, y: baseY });
+  WORLD_PLACES.hotels.push({ x, z, y: baseY, rot: rot || 0 });
   return g;
 }
 function makeCondoCompound(x, z, baseY) {
@@ -7898,9 +8002,9 @@ function buildWildSettlements() {
     .map(p => ({ p, d: Math.hypot(p.x - b.x, p.z - b.z) }))
     .filter(o => o.d > b.r * 0.35 && o.d < b.r + 220)
     .sort((a, c) => a.d - c.d);
-  const hotelN = preferLowPerf ? 4 : 7;
-  const condoN = preferLowPerf ? 5 : 8;
-  const hamletN = preferLowPerf ? 6 : 12;
+  const hotelN = preferLowPerf ? 6 : 12;
+  const condoN = preferLowPerf ? 7 : 14;
+  const hamletN = preferLowPerf ? 10 : 22;
   const usados = new Set();
   const usar = (p) => { usados.add(p); tomar(p.x, p.z, 48); };
   const ponerHotel = (p, rot) => {
@@ -7948,6 +8052,229 @@ function buildWildSettlements() {
   }
 }
 buildWildSettlements();
+
+function sitioPueblo(x, z) {
+  if (Math.abs(x) < 250 && Math.abs(z) < 250) return false;
+  if (enCalle(x, z, 6) || distritoEn(x, z, 8)) return false;
+  if (lakeAt(x, z) || cityPondAt(x, z)) return false;
+  if (x < -200 && z > -450 && z < 100) return false;
+  if (Math.hypot(x - SKI_RESORT.x, z - SKI_RESORT.z) < 190) return false;
+  if (Math.hypot(x - TREASURE_ISLAND.x, z - TREASURE_ISLAND.z) < 260) return false;
+  const h = groundHeightAt(x, z);
+  if (h < 0.15 || h > 28) return false;
+  if (Math.abs(groundHeightAt(x + 4, z) - h) > 6 || Math.abs(groundHeightAt(x, z + 4) - h) > 6) return false;
+  return true;
+}
+function lugarOcupado(x, z, radio) {
+  if (WORLD_PLACES.casas.some(c => Math.hypot(c.x - x, c.z - z) < radio)) return true;
+  if (WORLD_PLACES.hotels.some(c => Math.hypot(c.x - x, c.z - z) < radio + 6)) return true;
+  if (WORLD_PLACES.condominios.some(c => Math.hypot(c.x - x, c.z - z) < radio + 10)) return true;
+  return false;
+}
+function poblarAlrededor(cx, cz, anillos, gente) {
+  let casas = 0;
+  for (let ring = 1; ring <= anillos; ring++) {
+    const rad = 16 + ring * 15;
+    const n = 4 + ring * 2;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2 + ring * 0.45;
+      const x = cx + Math.cos(a) * rad, z = cz + Math.sin(a) * rad;
+      if (!sitioPueblo(x, z) || lugarOcupado(x, z, 11)) continue;
+      const y = groundHeightAt(x, z);
+      const plan = planDeCasa(6.2, 5.8);
+      if (!plan) continue;
+      makeCityHouse(x, z, false, Math.atan2(cx - x, cz - z), plan.w, plan.d, plan, y, 'casa-mundo');
+      WORLD_PLACES.casas.push({ x, z, y });
+      casas++;
+      if (casas % 2 === 0) {
+        const poste = new THREE.Group(); poste.position.set(x + 3.2, y, z + 1.6); scene.add(poste);
+        mcLamp(poste, 0, 0, 0xfff0b0);
+      }
+      if (casas % 3 === 0) {
+        const arb = new THREE.Group(); arb.position.set(x - 3.1, y, z + 1.2); scene.add(arb);
+        mcBush(arb, 0, 0, 0.85);
+      }
+    }
+  }
+  if (sitioPueblo(cx + 2, cz)) {
+    const y = groundHeightAt(cx, cz);
+    const plaza = new THREE.Group(); plaza.position.set(cx, y, cz); scene.add(plaza);
+    mcBench(plaza, 0, 3.2, 0);
+    mcFlowers(plaza, 2.4, -1.6, 0.75);
+    mcTree(scene, cx - 4.2, cz + 1, 4.4, 0x3f8f29, y);
+  }
+  for (let i = 0; i < gente; i++) {
+    const a = (i / Math.max(1, gente)) * Math.PI * 2 + 0.4;
+    const x = cx + Math.cos(a) * 9, z = cz + Math.sin(a) * 9;
+    if (!sitioPueblo(x, z)) continue;
+    const persona = makePerson([0x9333ea, 0x0891b2, 0xca8a04, 0xdc2626, 0x16a34a][i % 5], 0xf1c27d);
+    persona.position.set(x, groundHeightAt(x, z), z);
+    persona.userData.wild = true;
+    initCitizenBrain(persona, new THREE.Vector3(cx, groundHeightAt(cx, cz), cz), 12);
+    scene.add(persona); npcs.push(persona);
+  }
+  return casas;
+}
+(function llenarMundo() {
+  const lejos = WORLD_PLACES.hotels.slice().sort((a, b) => (b.x * b.x + b.z * b.z) - (a.x * a.x + a.z * a.z))[0];
+  if (lejos) poblarAlrededor(lejos.x, lejos.z, preferLowPerf ? 2 : 3, preferLowPerf ? 4 : 6);
+  WORLD_PLACES.hotels.forEach(h => { if (h !== lejos) poblarAlrededor(h.x, h.z, 1, 3); });
+  WORLD_PLACES.condominios.forEach(c => poblarAlrededor(c.x, c.z + 20, 1, 2));
+  poblarAlrededor(SKI_RESORT.gate.x, SKI_RESORT.gate.z, 2, 5);
+  const gigante = BIOMES.find(b => b.kind === 'giant');
+  if (gigante) poblarAlrededor(gigante.x, gigante.z + gigante.r * 0.72, 2, 4);
+  BIOMES.filter(b => b.kind === 'snow').forEach(b => poblarAlrededor(b.x + b.r * 0.9, b.z + b.r * 0.22, 1, 3));
+  const aislado = (x, z, yo) => {
+    let d = 1e9;
+    for (const h of WORLD_PLACES.hotels) if (h !== yo) d = Math.min(d, Math.hypot(h.x - x, h.z - z));
+    for (const c of WORLD_PLACES.condominios) if (c !== yo) d = Math.min(d, Math.hypot(c.x - x, c.z - z));
+    return d;
+  };
+  for (const h of WORLD_PLACES.hotels) if (aislado(h.x, h.z, h) > 220) poblarAlrededor(h.x, h.z, 2, 4);
+  for (const c of WORLD_PLACES.condominios) if (aislado(c.x, c.z, c) > 220) poblarAlrededor(c.x, c.z + 18, 2, 3);
+  const pueblos = preferLowPerf ? 8 : 14;
+  for (let i = 0; i < pueblos; i++) {
+    const a = (i / pueblos) * Math.PI * 2 + 0.6;
+    const rad = 700 + (i % 3) * 420;
+    const x = Math.cos(a) * rad, z = Math.sin(a) * rad;
+    if (!sitioPueblo(x, z) || lugarOcupado(x, z, 70)) continue;
+    poblarAlrededor(x, z, 1, 3);
+  }
+})();
+
+const HOTEL_IN = { x: 1980, z: -1480 };
+let hotelLobby = null;
+(function buildHotelLobby() {
+  const g = new THREE.Group();
+  g.name = 'hotel-lobby';
+  g.position.set(HOTEL_IN.x, 0, HOTEL_IN.z);
+  g.visible = false;
+  mcFloor(g, 0, 0, 12, 9, 0xf7f1e6, 0.08);
+  mcBox(g, 0, 1.6, -4.4, 12, 3.2, 0.35, 0xf7f1e6);
+  mcBox(g, -5.85, 1.6, 0, 0.35, 3.2, 9, 0xf7f1e6);
+  mcBox(g, 5.85, 1.6, 0, 0.35, 3.2, 9, 0xf7f1e6);
+  mcBox(g, -3.4, 1.6, 4.4, 5.2, 3.2, 0.35, 0xf7f1e6);
+  mcBox(g, 3.4, 1.6, 4.4, 5.2, 3.2, 0.35, 0xf7f1e6);
+  mcBox(g, 0, 3.15, 0, 12.4, 0.28, 9.4, 0xb91c1c);
+  mcBox(g, -3.2, 0.45, -1.2, 2.2, 0.7, 1.3, 0xf8fafc);
+  mcBox(g, -3.2, 0.95, -1.7, 2.2, 0.7, 0.28, 0xe2e8f0);
+  mcBox(g, 2.2, 0.7, -2.4, 2.4, 1.2, 0.8, 0x9a6b4f);
+  const luz = new THREE.PointLight(0xfff4e0, 1.6, 22, 1.4); luz.position.set(0, 2.55, 0); g.add(luz);
+  const aviso = makeSign('CAMA · E', 0xfde68a); aviso.position.set(-3.2, 2.1, -1.2); aviso.scale.set(0.4, 0.4, 0.4); g.add(aviso);
+  const salida = makeSign('SALIR · E', 0xfde68a); salida.position.set(0, 2.4, 4.1); salida.scale.set(0.45, 0.45, 0.45); g.add(salida);
+  scene.add(g);
+  hotelLobby = g;
+})();
+function hotelDoorPos(h) {
+  const rot = h.rot || 0, lz = 11 / 2 + 2.4;
+  return { x: h.x + Math.sin(rot) * lz, z: h.z + Math.cos(rot) * lz };
+}
+function nearestHotel(maxD) {
+  let best = null, bd = maxD;
+  for (const h of WORLD_PLACES.hotels) {
+    const p = hotelDoorPos(h);
+    const d = Math.hypot(player.position.x - p.x, player.position.z - p.z);
+    if (d < bd) { bd = d; best = h; }
+  }
+  return best;
+}
+function nearestHarvestSpot(maxD) {
+  let best = null, bd = maxD;
+  const mirar = (lista, tipo) => {
+    for (const t of lista) {
+      const d = Math.hypot(player.position.x - t.x, player.position.z - t.z);
+      if (d < bd) { bd = d; best = t; best.tipo = tipo; }
+    }
+  };
+  mirar(BIOME_TREES, 'fruta');
+  mirar(SNOW_FIRS, 'abeto');
+  mirar(GLACIER_SPOTS, 'glaciar');
+  return best;
+}
+function nearestSnowMountain() {
+  let best = null, bd = 1e9;
+  for (const m of mountains) {
+    if (m.ski || (m.planet && m.planet !== 'tierra')) continue;
+    const d = Math.hypot(player.position.x - m.x, player.position.z - m.z);
+    if (d < 16 && d < bd) { bd = d; best = m; }
+  }
+  return best;
+}
+function enterHotel(h) {
+  state.inHotel = true;
+  state.hotelReturn = { x: player.position.x, y: player.position.y, z: player.position.z };
+  if (hotelLobby) hotelLobby.visible = true;
+  player.position.set(HOTEL_IN.x, PLAYER_EYE, HOTEL_IN.z + 2.4);
+  yaw = Math.PI; pitch = 0; vy = 0; grounded = true;
+  toast('🏨 Entraste al hotel. E en la cama para descansar · E en la puerta para salir.');
+  beep(520, 0.08, 0.04);
+}
+function leaveHotel() {
+  state.inHotel = false;
+  if (hotelLobby) hotelLobby.visible = false;
+  const r = state.hotelReturn || { x: 10, y: PLAYER_EYE, z: 16 };
+  player.position.set(r.x, r.y || PLAYER_EYE, r.z);
+  toast('🚪 Saliste del hotel');
+}
+function tryWorldSites() {
+  if (state.planet === 'platus' || state.country) return false;
+  if (state.inHotel) {
+    const cama = Math.hypot(player.position.x - (HOTEL_IN.x - 3.2), player.position.z - (HOTEL_IN.z - 1.2));
+    if (cama < 2.4) {
+      state.hunger = 100; state.hp = Math.min(100, state.hp + 30);
+      toast('🛏️ Dormiste en el hotel. Sales descansado.');
+      beep(440, 0.12, 0.04);
+      return true;
+    }
+    leaveHotel();
+    return true;
+  }
+  const hotel = nearestHotel(8);
+  if (hotel) { enterHotel(hotel); return true; }
+  const cosa = nearestHarvestSpot(4.4);
+  if (cosa) {
+    const ahora = performance.now();
+    if (cosa.cd > ahora) { toast(cosa.tipo === 'glaciar' ? '🧊 El hielo todavía está duro' : '🌳 Vuelve en un momento'); return true; }
+    cosa.cd = ahora + 9000;
+    if (cosa.tipo === 'fruta') {
+      state.inv.food = (state.inv.food || 0) + 1;
+      const nombre = cosa.kind === 'orange' ? 'una naranja' : cosa.kind === 'blue' ? 'una fruta azul' : cosa.kind === 'red' ? 'una fruta roja' : cosa.kind === 'sunset' ? 'una fruta del atardecer' : 'una fruta';
+      toast('🍊 Cosechaste ' + nombre + ' · +1 comida');
+    } else if (cosa.tipo === 'abeto') {
+      state.inv.food = (state.inv.food || 0) + 1;
+      toast('❄️ Sacudes el abeto y cae un puñado de nieve dulce · +1 comida');
+    } else {
+      addMoney(state.creative ? 0 : 15);
+      toast('🧊 Arrancas un trozo de glaciar · +$15');
+    }
+    beep(640, 0.07, 0.04);
+    return true;
+  }
+  if (!inSkiResort()) {
+    const cerro = nearestSnowMountain();
+    if (cerro) {
+      toast('⛰️ Cerro nevado de ' + Math.round(cerro.h) + ' m. Se sube caminando: la nieve está arriba.');
+      return true;
+    }
+  }
+  return false;
+}
+function worldSitePrompt() {
+  if (state.inHotel) {
+    const cama = Math.hypot(player.position.x - (HOTEL_IN.x - 3.2), player.position.z - (HOTEL_IN.z - 1.2));
+    if (cama < 2.4) return { key: 'E', touch: '🛏️', text: 'Descansar en la cama del hotel' };
+    return { key: 'E', touch: '🚪', text: 'Salir del hotel' };
+  }
+  if (nearestHotel(8)) return { key: 'E', touch: '🏨', text: 'Entrar al hotel' };
+  const cosa = nearestHarvestSpot(4.4);
+  if (cosa) {
+    if (cosa.tipo === 'fruta') return { key: 'E', touch: '🍊', text: 'Cosechar la fruta del árbol' };
+    if (cosa.tipo === 'abeto') return { key: 'E', touch: '❄️', text: 'Sacudir el abeto nevado' };
+    return { key: 'E', touch: '🧊', text: 'Arrancar hielo del glaciar' };
+  }
+  if (!inSkiResort() && nearestSnowMountain()) return { key: 'E', touch: '⛰️', text: 'Cerro nevado · se sube caminando' };
+  return null;
+}
 
 function sealLooseProps() {
   const skip = new Set([player, camera, dad, mom, butler, playerAvatar]);
@@ -8028,6 +8355,7 @@ scene.children.forEach(o => { if (!_preEarthChildren.has(o)) earthMeshes.push(o)
 obstacles.slice(_preEarthObsN).forEach(o => earthObstacles.push(o));
 function setEarthWorld(v) {   // muestra/oculta la Tierra completa (con sus colisiones)
   for (const m of earthMeshes) m.visible = v;
+  if (hotelLobby) hotelLobby.visible = !!v && !!state.inHotel;
   if (!v) { for (const o of earthObstacles) { const i = obstacles.indexOf(o); if (i >= 0) obstacles.splice(i, 1); } }
   else { for (const o of earthObstacles) if (!obstacles.includes(o)) obstacles.push(o); }
   setCityVisible(v);
@@ -10967,7 +11295,7 @@ function launchBull(k) {   // tres toros en abanico, más lentos y se pueden mat
     scene.add(e); enemies.push(e);
   }
 }
-function isPlayerHidden() { return playerInSmoke() || state.underground || state.inRuins || state.inCastle || state.inArena || state.inFlight || state.mission === 'alley' || (alley.open && inBlackMarket(player.position.x, player.position.z)); }   // bajo tierra / ruinas / castillo / coliseo / avión / callejón de Tito: los monstruos de la superficie NO te ven
+function isPlayerHidden() { return playerInSmoke() || state.underground || state.inRuins || state.inCastle || state.inArena || state.inHotel || state.inFlight || state.mission === 'alley' || (alley.open && inBlackMarket(player.position.x, player.position.z)); }   // bajo tierra / ruinas / castillo / coliseo / avión / callejón de Tito: los monstruos de la superficie NO te ven
 function livingCompanions() { return [...helpers, ...(pet ? [pet] : []), ...(petAlien ? [petAlien] : []), ...eggPets].filter(c => c.visible && c.userData.hp > 0); }
 function initCompanionHealth(c, maxHp, hp = maxHp) {
   c.userData.maxHp = maxHp;
@@ -12143,7 +12471,7 @@ const state = {
   eclipse: 0,   // eclipse cósmico activo (segundos restantes)
   coreClaimed: false, relics: 0, trophies: 0, floor2Rot: 0, floors2: [], country: null, inFlight: false,   // país que estás visitando (aeropuerto) · vuelo en cabina   // núcleo (reliquias) + trofeos + segundos pisos
   riding: false,   // montando una criatura firma domada
-  inCastle: false, inArena: false,   // dentro del castillo (laberinto) / del coliseo (oleadas)
+  inCastle: false, inArena: false, inHotel: false, hotelReturn: null,   // dentro del castillo, del coliseo o de un hotel del mundo
   baseLevel: 0, baseTurrets: 0, baseGenerator: false,   // base espacial propia (cúpula + torretas + generador), se arma en cada planeta
   tutorial: { step: 0, complete: false }, chapter: 0, chapterFlags: {}, reputation: 0, medals: {}, blueprints: {}, sportGame: null,
   business: null, businessOrders: 0, parkBusiness: null, arcadeTickets: 0, arcadePrizes: {},
@@ -12672,7 +13000,7 @@ function tryInteract() {
   if (tryJobInteract()) return;   // recados: calmar al perro / abrir el cajón
   if (tryDoor()) return;          // abrir / cerrar la puerta de tu casa
   if (tryBuyPlot()) return;       // comprar el terreno del condominio
-  if (!tryRefuelCar() && !trySkiResort() && !tryArcadeRewards() && !tryArcadeZone() && !tryHarvestMiner() && !toggleBoat() && !tryIslandTempleChest() && !tryFocusedFurniture() && !tryLeaderboard() && !tryAirport() && !countryHello() && !tryParkFood() && !tryParkRide() && !tryRepairBuilding() && !tryHarvest() && !tryDiscoverSecret() && !tryWorldEvent() && !tryMount() && !toggleCar() && !tryShelter() && !tryRuins() && !tryCastle() && !tryColiseum() && !tryRocket() && !tryBank() && !trySportInteract() && !tryBusiness() && !tryFamilyOrCitizenInteract() && !tryVendorHere() && !tryHelperHere()) { if (!tryCollectGolden() && !tryRob() && !sellHouse()) tryGardenHere(); }
+  if (!tryRefuelCar() && !trySkiResort() && !tryWorldSites() && !tryArcadeRewards() && !tryArcadeZone() && !tryHarvestMiner() && !toggleBoat() && !tryIslandTempleChest() && !tryFocusedFurniture() && !tryLeaderboard() && !tryAirport() && !countryHello() && !tryParkFood() && !tryParkRide() && !tryRepairBuilding() && !tryHarvest() && !tryDiscoverSecret() && !tryWorldEvent() && !tryMount() && !toggleCar() && !tryShelter() && !tryRuins() && !tryCastle() && !tryColiseum() && !tryRocket() && !tryBank() && !trySportInteract() && !tryBusiness() && !tryFamilyOrCitizenInteract() && !tryVendorHere() && !tryHelperHere()) { if (!tryCollectGolden() && !tryRob() && !sellHouse()) tryGardenHere(); }
 }
 addEventListener('keydown', e => {
   if (e.code === 'KeyI' && ui('help').style.display === 'flex') { toggleHelp(false); return; }
@@ -13685,7 +14013,7 @@ function startGame() {
   state.hasPhone = false;
   state.contract = null;   // sin contratos al empezar
   clearEggPets(); state.incubTime = 0; state.eggQueue = 0; clearPetPoint();   // sin huevos/mascotas/banderita al empezar
-  endEclipse(); state.coreClaimed = false; state.relics = 0; state.trophies = 0; removeMount(); state.inCastle = false; setCastleVisible(false); clearTitan(); state.inArena = false; setColiVisible(false); clearArenaFoes();
+  endEclipse(); state.coreClaimed = false; state.relics = 0; state.trophies = 0; removeMount(); state.inCastle = false; setCastleVisible(false); clearTitan(); state.inArena = false; setColiVisible(false); clearArenaFoes(); state.inHotel = false; if (hotelLobby) hotelLobby.visible = false;
   state.inv = freshInv(); selectedCrop = 'apple'; state.poison = 0; state.dadPoison = 0;
   state.wanted = 0; state.wantedLevel = 0; clearPolice(); victims.forEach(v => v.userData.robbed = false);
   state.streak = 0; state.bestiary = {}; state.recordShown = false; state.unlocked = {}; state.album = {}; state.albumDone = false;
@@ -13713,7 +14041,7 @@ function startGame() {
   state.trips = 0; state.ngplus = false; state.bank = 0; state.debt = 0; state.cargo = {};
   state.planetName = 'Platus'; state.planetGround = 0x9c4a2a; state.planetHazard = 'cold'; state.planetGrav = 1; state.inRuins = false;
   if (ruinsRoom) ruinsRoom.visible = false;
-  scene.fog.far = 160;   // niebla normal de la Tierra
+  scene.fog.far = 1800;   // niebla de la Tierra: deja ver biomas y el faro de esquí
   resetWeather();
   syncFarWorld();
   toast('Empiezas con $' + START_MONEY + ': el terreno vale $' + PRECIO_TERRENO + ' y lo que sobre es para el súper 🛒');
@@ -14919,8 +15247,8 @@ function applyPerfMode() {   // modo rendimiento: sin sombras, menos resolución
   renderer.shadowMap.type = perfMode ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   renderer.toneMappingExposure = perfMode ? 1 : 1.15;
   renderer.setPixelRatio(perfMode ? (perfExtra ? 0.75 : 1) : Math.min(devicePixelRatio, 2));
-  // la niebla tapa todo desde ~160: dibujar hasta 600 es puro gasto en equipos lentos
-  camera.far = perfMode ? (perfExtra ? 480 : 800) : 2200; camera.updateProjectionMatrix();
+  // El faro del centro de esquí tiene que verse desde el otro lado del mapa.
+  camera.far = perfMode ? (perfExtra ? 2600 : 4000) : 5600; camera.updateProjectionMatrix();
 }
 // ---- Detector de lag: si el juego va lento un par de segundos, baja la calidad solo ----
 let fpsMedT = 0, fpsMedN = 0, fpsLento = 0, autoPerfStage = 0, autoPerfLock = false, fpsPrev = 0;
@@ -15572,7 +15900,7 @@ function loadGame() {
   state.baseLevel = d.baseLevel || 0; state.baseTurrets = d.baseTurrets || 0; state.baseGenerator = !!d.baseGenerator;   // base espacial
   if (state.planet === 'platus') { groundMat.color.set(state.planetGround || 0x9c4a2a); decor.forEach(t => t.visible = false); setEarthWorld(false); setPlatusVisible(true); refillCrystals(); refillGeodes(); refillBuriedTreasures(); refillEggs(); refillRuins(); state.inCastle = false; setCastleVisible(false); refillCastle(); state.inArena = false; setColiVisible(false); clearArenaFoes(); refillColiseum(); refillFloatingWorld(); spawnBase(); applyPlanetLook({ trees: 0x4a3728, moons: [0xd946ef, 0x38bdf8], fog: 160, ...PLANETS.find(p => p.name === state.planetName) }); applySpaceSuit(true); }
   else if(state.country){const c=currentCountry();groundMat.color.set(c.ground);decor.forEach(t=>t.visible=false);buildCountry(c);setCountryVisible(true);setEarthWorld(false);setCityVisible(false);setPlatusVisible(false);applySpaceSuit(false);removeBase();scene.background.set(c.sky);scene.fog.far=320;syncPlacedCountryVisibility();}
-  else { groundMat.color.set(0x4a7c3a); decor.forEach(t => t.visible = true); setEarthWorld(true); setCityVisible(true); setPlatusVisible(false); applySpaceSuit(false); removeBase(); scene.fog.far = 1400; syncPlacedCountryVisibility(); }
+  else { groundMat.color.set(0x4a7c3a); decor.forEach(t => t.visible = true); setEarthWorld(true); setCityVisible(true); setPlatusVisible(false); applySpaceSuit(false); removeBase(); scene.fog.far = 1800; syncPlacedCountryVisibility(); }
   selectedCrop = CROP_DEFS[d.selectedCrop] ? d.selectedCrop : 'apple';
   (d.plants || []).forEach(p => spawnPlant(p.x, p.z, p.grow, p.produce != null ? p.produce : p.apples, p.crop || 'apple'));   // huerto: reponer cultivos y saves antiguos
   state.helperWeapon = !!d.helperWeapon; state.helperArmor = !!d.helperArmor;   // arma/armadura de los hijos (antes de recrearlos)
@@ -15580,7 +15908,7 @@ function loadGame() {
   clearEggPets(); (d.eggPets || []).filter(p => p.hp !== 0).forEach(p => spawnEggPet(p)); state.incubTime = d.incubTime || 0; state.eggQueue = d.eggQueue || 0;   // mascotas de huevos
   removePetFlag(); state.petPoint = d.petPoint || null; if (state.petPoint) spawnPetFlag(state.petPoint.x, state.petPoint.z);   // banderita de reunión
   state.coreClaimed = !!d.coreClaimed; state.relics = d.relics || 0; state.trophies = d.trophies || 0;
-  removeMount(); state.inCastle = false; setCastleVisible(false); clearTitan(); state.inArena = false; setColiVisible(false); clearArenaFoes();
+  removeMount(); state.inCastle = false; setCastleVisible(false); clearTitan(); state.inArena = false; setColiVisible(false); clearArenaFoes(); state.inHotel = false; if (hotelLobby) hotelLobby.visible = false;
   (d.helpers || []).filter(h => h.hp !== 0).forEach(h => makeHelperAt(h.x, h.z, h.hp));                   // reponer ayudantes (ya equipados)
   const spawnY = (state.planet === 'tierra' && d.px != null && inTreasureIsland(d.px, d.pz)) ? TREASURE_ISLAND.surface + PLAYER_EYE : PLAYER_EYE;
   player.position.set(d.px != null ? d.px : 10, spawnY, d.pz != null ? d.pz : 16); yaw = 0; pitch = 0;
@@ -15657,7 +15985,7 @@ function resetAll() {
   state.guns = {}; state.gun = null; state.ammo = 0; state.clip = 0; state.reloadT = 0; state.gadgetCharges = {}; state.handGadget = null;
   state.baseLevel = 0; state.baseTurrets = 0; state.baseGenerator = false;
   state.inRuins = false; if (ruinsRoom) ruinsRoom.visible = false;
-  clearEggPets(); state.incubTime = 0; state.eggQueue = 0; clearPetPoint(); endEclipse(); removeMount(); state.inCastle = false; setCastleVisible(false); clearTitan(); state.inArena = false; setColiVisible(false); clearArenaFoes();
+  clearEggPets(); state.incubTime = 0; state.eggQueue = 0; clearPetPoint(); endEclipse(); removeMount(); state.inCastle = false; setCastleVisible(false); clearTitan(); state.inArena = false; setColiVisible(false); clearArenaFoes(); state.inHotel = false; if (hotelLobby) hotelLobby.visible = false;
   state.cinematic = false; state.cine = null; if (state.meteor) { scene.remove(state.meteor); state.meteor = null; }
   abortFlight();
   ui('fade').style.opacity = '0';
@@ -17524,6 +17852,7 @@ function goToPlanet() {
   refillEggs();                                                              // huevos alien nuevos para recoger
   refillRuins();                                                             // ruinas alien con botín fresco (entrada en un punto nuevo)
   state.inCastle = false; setCastleVisible(false); refillCastle();           // castillo laberinto con tesoros/aliens nuevos
+  state.inHotel = false; if (hotelLobby) hotelLobby.visible = false;
   state.inArena = false; setColiVisible(false); clearArenaFoes(); refillColiseum();   // coliseo de oleadas
   refillFloatingWorld();   // islas flotantes con cofres nuevos
   spawnBase();             // base espacial propia (se re-arma en cada planeta si la compraste)
@@ -19183,6 +19512,13 @@ function updateMovement(dt) {
   const mag = Math.hypot(ax, az); if (mag > 1) { ax /= mag; az /= mag; }   // no ir más rápido en diagonal
   player.position.addScaledVector(forward, az * step);
   player.position.addScaledVector(rightV, ax * step);
+  if (state.inHotel) {
+    player.position.x = THREE.MathUtils.clamp(player.position.x, HOTEL_IN.x - 5.6, HOTEL_IN.x + 5.6);
+    player.position.z = THREE.MathUtils.clamp(player.position.z, HOTEL_IN.z - 3.6, HOTEL_IN.z + 4.2);
+    player.position.y = PLAYER_EYE; vy = 0; grounded = true;
+    camera.rotation.y = yaw; camera.rotation.x = pitch;
+    return;
+  }
   if (state.planet === 'tierra' && !state.underground && !state.skiing && !state.skiLiftRide && !state.inCastle && !state.inRuins && !state.inArena) {
     const prevH = mountainHeightAt(moveStartX, moveStartZ);
     const nextH = mountainHeightAt(player.position.x, player.position.z);
@@ -19324,6 +19660,13 @@ function updateMovement(dt) {
     const cx = Math.round((player.position.x - h.x) / MINE_CELL), cz = Math.round((player.position.z - h.z) / MINE_CELL);
     if (!h.tunnels.has(tunnelKey(cx, cz))) { player.position.x = moveStartX; player.position.z = moveStartZ; }
     camera.rotation.y = yaw; camera.rotation.x = pitch; return;   // sin colisiones de la superficie bajo tierra
+  }
+  if (state.inHotel) {
+    player.position.x = THREE.MathUtils.clamp(player.position.x, HOTEL_IN.x - 5.6, HOTEL_IN.x + 5.6);
+    player.position.z = THREE.MathUtils.clamp(player.position.z, HOTEL_IN.z - 3.6, HOTEL_IN.z + 4.2);
+    player.position.y = PLAYER_EYE; vy = 0; grounded = true;
+    camera.rotation.y = yaw; camera.rotation.x = pitch;
+    return;
   }
   if (state.inRuins) {   // caminar dentro de la cámara de las ruinas (lejos del mundo)
     player.position.x = THREE.MathUtils.clamp(player.position.x, RUINS_C.x - 11, RUINS_C.x + 11);
@@ -19541,7 +19884,7 @@ function netHandle(raw, fromConn) {
 function netStartTimer() { if (!net.timer) net.timer = setInterval(netTick, 100); }
 // con ?debug se puede mirar el estado de la sala desde la consola
 try { if (new URLSearchParams(location.search).has('debug')) {
-  const timDump = () => ({ net, enemies, netMobs, placed, state, player, AIRPORT, COUNTRY_C, typing, sitOn, parkRide, keys, yaw, pitch, setLook: (y, p) => { if (y != null) yaw = y; if (p != null) pitch = p; cameraMode = 0; if (sitOn) standUp(false); }, eggPets, floors2, netHandle, ghost, ghostMesh, renderer, scene, camera, perfMode, perfExtra, autoPerfStage, rgbPlaced, selectBuildKey, miners, makeMiner, updateMiners, applyMinerOffline, tryHarvestMiner, holes, islandOres, TREASURE_ISLAND, MINE_CELL, buyItem, selectSlot, STORE_B, ALIEN_TECH, bowEquipped, laserEquipped, equipHandWeapon, selectHandTool, saveGame, loadGame, restoreWorldClock, applyWeatherState, startEclipse, endEclipse, continueGame, ensureDavidWorld, setProfile, bowArrowDamage, arrowHitsBody, hitWithArrow, shootBowArrow, hitFloatingCitizenAt, floatingCitizens, makeBull, launchBull, earthBulls, jailFolk, bankTeller: () => bankTeller, bankAtms, bankDeskNear, tryBank, JAIL, JAIL_GATE, BANK, openPlayStation, openArcadeMini, startPlayGame, PLAY_GAMES, ARCADE_GAMES, arcadeMini, miniStep, miniDraw, spawnPlaced, playHasTv, nearestPlay, nearestPlayNear, isDavidAccount, davidKeyOk, davidGateOpen, spawnEnemy, playerArrows, makeArrowMesh, toast, updatePlayerArrows, applyLivingY, updateLivingWater, waterZoneAt, dad, helpers, butler, mom, npcs, police, alley, ALLEY, BLACK_MARKET, STORY_QUESTS, openQuestPanel, enterAlleyMission, leaveAlleyMission, openBlackMarket, setAlleyDoorOpen, storyProgress, makeGunMesh, startJob, updateJobs, tryJobInteract, clearJobs, GUN_SPECS, GUN_CLIP, fireGun, laserSpendShot, updateLaserEnergy, attack, attackNPC, touch, aimHelp, gunRaycastEnemy, LASER_MAX, LASER_SHOT, LASER_RELOAD, tryInteract, tryVendorHere, tryHelperHere, tryGardenHere, openWheel, closeWheel, wheelOptions, plants, CROP_DEFS, tryDoor, setDoorOpen, nearestDoor, obstacleAt, obstacles, updateGrassField, scatterGrass, grassField: () => grassField, spawnSmokeCloud, playerInSmoke, shootBeam, spawnLaserBeam, updateLaserShots, laserShotsCount: () => laserShots.length, throwSmokeBomb, fireConfettiTube, updateThrownBombs, updateConfetti, throwHandGadget2: () => throwHandGadget(), bombsCount: () => thrownBombs.length, confettiCount: () => confettiBits.length, updateSmoke, updateAim, tryGunShot, toggleAim, gunRaycastPerson, npcs2: () => npcs, isPlayerHidden, syncHeldTool, updateViewmodel, throwHandGadget, viewmodel, startReload, updateBullets, currentGunSpec, firearmEquipped, handItems, equipHandItem, selectHandTool, gunAmmoText, bulletsCount: () => bullets.length, shellsCount: () => shells.length, jobInfo: () => job && { id: job.id, step: job.step, label: job.label, timer: +job.timer.toFixed(1), calm: !!job.calm, tx: +job.target.x.toFixed(1), tz: +job.target.z.toFixed(1), dog: !!jobDog, crate: !!jobCrate }, jobDogPos: () => jobDog && jobDog.position, jobCratePos: () => jobCrate && jobCrate.position });
+  const timDump = () => ({ tryWorldSites, worldSitePrompt, BIOMES, WORLD_PLACES, BIOME_TREES, SNOW_FIRS, GLACIER_SPOTS, hotelLobby, skiBeacon, net, enemies, netMobs, placed, state, player, AIRPORT, COUNTRY_C, typing, sitOn, parkRide, keys, yaw, pitch, setLook: (y, p) => { if (y != null) yaw = y; if (p != null) pitch = p; cameraMode = 0; if (sitOn) standUp(false); }, eggPets, floors2, netHandle, ghost, ghostMesh, renderer, scene, camera, perfMode, perfExtra, autoPerfStage, rgbPlaced, selectBuildKey, miners, makeMiner, updateMiners, applyMinerOffline, tryHarvestMiner, holes, islandOres, TREASURE_ISLAND, MINE_CELL, buyItem, selectSlot, STORE_B, ALIEN_TECH, bowEquipped, laserEquipped, equipHandWeapon, selectHandTool, saveGame, loadGame, restoreWorldClock, applyWeatherState, startEclipse, endEclipse, continueGame, ensureDavidWorld, setProfile, bowArrowDamage, arrowHitsBody, hitWithArrow, shootBowArrow, hitFloatingCitizenAt, floatingCitizens, makeBull, launchBull, earthBulls, jailFolk, bankTeller: () => bankTeller, bankAtms, bankDeskNear, tryBank, JAIL, JAIL_GATE, BANK, openPlayStation, openArcadeMini, startPlayGame, PLAY_GAMES, ARCADE_GAMES, arcadeMini, miniStep, miniDraw, spawnPlaced, playHasTv, nearestPlay, nearestPlayNear, isDavidAccount, davidKeyOk, davidGateOpen, spawnEnemy, playerArrows, makeArrowMesh, toast, updatePlayerArrows, applyLivingY, updateLivingWater, waterZoneAt, dad, helpers, butler, mom, npcs, police, alley, ALLEY, BLACK_MARKET, STORY_QUESTS, openQuestPanel, enterAlleyMission, leaveAlleyMission, openBlackMarket, setAlleyDoorOpen, storyProgress, makeGunMesh, startJob, updateJobs, tryJobInteract, clearJobs, GUN_SPECS, GUN_CLIP, fireGun, laserSpendShot, updateLaserEnergy, attack, attackNPC, touch, aimHelp, gunRaycastEnemy, LASER_MAX, LASER_SHOT, LASER_RELOAD, tryInteract, tryVendorHere, tryHelperHere, tryGardenHere, openWheel, closeWheel, wheelOptions, plants, CROP_DEFS, tryDoor, setDoorOpen, nearestDoor, obstacleAt, obstacles, updateGrassField, scatterGrass, grassField: () => grassField, spawnSmokeCloud, playerInSmoke, shootBeam, spawnLaserBeam, updateLaserShots, laserShotsCount: () => laserShots.length, throwSmokeBomb, fireConfettiTube, updateThrownBombs, updateConfetti, throwHandGadget2: () => throwHandGadget(), bombsCount: () => thrownBombs.length, confettiCount: () => confettiBits.length, updateSmoke, updateAim, tryGunShot, toggleAim, gunRaycastPerson, npcs2: () => npcs, isPlayerHidden, syncHeldTool, updateViewmodel, throwHandGadget, viewmodel, startReload, updateBullets, currentGunSpec, firearmEquipped, handItems, equipHandItem, selectHandTool, gunAmmoText, bulletsCount: () => bullets.length, shellsCount: () => shells.length, jobInfo: () => job && { id: job.id, step: job.step, label: job.label, timer: +job.timer.toFixed(1), calm: !!job.calm, tx: +job.target.x.toFixed(1), tz: +job.target.z.toFixed(1), dog: !!jobDog, crate: !!jobCrate }, jobDogPos: () => jobDog && jobDog.position, jobCratePos: () => jobCrate && jobCrate.position });
   timDump.snapshot = () => ({
     x: +player.position.x.toFixed(3), y: +player.position.y.toFixed(3), z: +player.position.z.toFixed(3), vy: +vy.toFixed(3),
     flying: !!creativeFlying, inWater: !!state.inWater, underwater: !!state.underwater, skiing: !!state.skiing,
@@ -20056,6 +20399,12 @@ function updateSky(dt) {
     applyAlleySky();
     return;
   }
+  if (state.inHotel) {
+    scene.background.setHex(0xf8f1e7); scene.fog.color.setHex(0xf8f1e7);
+    scene.fog.near = 6; scene.fog.far = 28;
+    ambient.intensity = 1.15; sun.intensity = 0.35;
+    return;
+  }
   if (state.inFlight) {   // de día o de noche: el vuelo se ve cielo y nubes, nunca negro
     scene.background.setHex(0x5ec8f2); scene.fog.color.setHex(0xb9e7ff);
     scene.fog.near = 8; scene.fog.far = 90;
@@ -20157,6 +20506,7 @@ function updateContextPrompt() {
       else if (nearSkiGate) action = { key: 'E', touch: '🎫', text: state.skiPass ? (state.skiGear ? 'Empezar / parar esquí · E' : 'Compra equipo en la caseta azul') : 'Comprar tarjeta de esquí · $500' };
       else if (nearSkiGear) action = { key: 'E', touch: '⛷️', text: dist2D(player.position, SKI_RESORT.gear2) < dist2D(player.position, SKI_RESORT.gear) ? 'Comprar snowboard · $200' : 'Comprar esquís · $200' };
       else if (state.skiPass && state.skiGear && inSkiResort() && !state.skiLiftRide) action = { key: 'E', touch: state.skiing ? '🛑' : '⛷️', text: state.skiing ? 'Dejar de esquiar' : 'Largar / esquiar ahora' };
+      else if (worldSitePrompt()) action = worldSitePrompt();
       else if (nearArcadeRewards) action = { key: 'E', touch: '🎁', text: 'Canjear premios · tickets' };
       else if (nearLeaderboard) action = { key: 'E', touch: '🏆', text: 'Ver ranking mundial trimestral' };
       else if (state.planet === 'tierra' && !state.country && ARCADE_MACHINES.some(m => dist2D(player.position, m) < 3.2)) action = { key: 'E', touch: '🎮', text: 'Jugar ' + ARCADE_MACHINES.find(m => dist2D(player.position, m) < 3.2).name + ' · E' };
