@@ -3222,6 +3222,17 @@ function placeYardPool(parent, lx, lz, rot, ox, oz) {
   });
 }
 let houseSerial = 0;
+function sueloFirme(x, z, w, d) {
+  let top = 0;
+  const hw = Math.max(w || 2, 2) / 2, hd = Math.max(d || 2, 2) / 2;
+  for (let sx = x - hw; sx <= x + hw + 0.01; sx += 2) {
+    for (let sz = z - hd; sz <= z + hd + 0.01; sz += 2) {
+      const h = groundHeightAt(sx, sz);
+      if (h > top) top = h;
+    }
+  }
+  return top;
+}
 function makeCityHouse(x, z, golden, rot = 0, maxW = 7.5, maxD = 7.5, plan = null, baseY = 0, tag = '') {
   plan = plan || planDeCasa(maxW, maxD) || planDeCasa(4, 4);
   const g = new THREE.Group();
@@ -3229,6 +3240,8 @@ function makeCityHouse(x, z, golden, rot = 0, maxW = 7.5, maxD = 7.5, plan = nul
   // La casa del tesoro se ve IGUAL que las demás (sin color ni cartel): es un secreto
   const col = plan.muro;
   const w = plan.w, d = plan.d, h1 = plan.h1;
+  const firme = sueloFirme(x, z, w + 1.6, d + 1.6);
+  if ((baseY || 0) < firme) baseY = firme;
   if (golden) {
     // CASA SECRETA: hueca, con puerta abierta para ENTRAR y un cofre de oro adentro
     const gw = Math.max(5.2, Math.min(6.5, w, d)), gh = 4, t = 0.25, wm = mat(col);
@@ -8107,6 +8120,7 @@ function sitioConstruible(x, z, margen, ancho, fondo) {
   return true;
 }
 function makeHotel(x, z, rot, baseY) {
+  baseY = Math.max(baseY || 0, sueloFirme(x, z, 18, 14));
   const g = new THREE.Group();
   g.name = 'hotel-mundo';
   g.position.set(x, baseY, z);
@@ -8137,6 +8151,7 @@ function makeHotel(x, z, rot, baseY) {
   return g;
 }
 function makeCondoCompound(x, z, baseY) {
+  baseY = Math.max(baseY || 0, sueloFirme(x, z, 36, 28));
   const g = new THREE.Group();
   g.name = 'condominio-mundo';
   g.position.set(x, baseY, z);
@@ -8156,8 +8171,8 @@ function makeCondoCompound(x, z, baseY) {
   lots.forEach(([lx, lz]) => {
     const plan = planDeCasa(6.4, 6.2);
     if (!plan) return;
-    makeCityHouse(x + lx, z + lz, false, lz < 0 ? Math.PI : 0, plan.w, plan.d, plan, baseY, 'casa-mundo');
-    WORLD_PLACES.casas.push({ x: x + lx, z: z + lz, y: baseY });
+    const casa = makeCityHouse(x + lx, z + lz, false, lz < 0 ? Math.PI : 0, plan.w, plan.d, plan, baseY, 'casa-mundo');
+    WORLD_PLACES.casas.push({ x: x + lx, z: z + lz, y: casa.position.y });
   });
   WORLD_PLACES.condominios.push({ x, z, y: baseY });
   return g;
@@ -8226,8 +8241,8 @@ function buildWildSettlements() {
       if (!sitioConstruible(p.x + lx, p.z + lz, 6, 8, 8)) return;
       const plan = planDeCasa(6.6, 6.4);
       if (!plan) return;
-      makeCityHouse(p.x + lx, p.z + lz, false, i < 2 ? Math.PI : 0, plan.w, plan.d, plan, y, 'casa-mundo');
-      WORLD_PLACES.casas.push({ x: p.x + lx, z: p.z + lz, y });
+      const casa = makeCityHouse(p.x + lx, p.z + lz, false, i < 2 ? Math.PI : 0, plan.w, plan.d, plan, y, 'casa-mundo');
+      WORLD_PLACES.casas.push({ x: p.x + lx, z: p.z + lz, y: casa.position.y });
       n++;
     });
     if (n) { usar(p); hamlets++; mcTree(scene, p.x, p.z + 1, 4.2, 0x3f8f29, y); }
@@ -8262,24 +8277,26 @@ function poblarAlrededor(cx, cz, anillos, gente) {
       const a = (k / n) * Math.PI * 2 + ring * 0.45;
       const x = cx + Math.cos(a) * rad, z = cz + Math.sin(a) * rad;
       if (!sitioPueblo(x, z) || lugarOcupado(x, z, 11)) continue;
-      const y = groundHeightAt(x, z);
       const plan = planDeCasa(6.2, 5.8);
       if (!plan) continue;
-      makeCityHouse(x, z, false, Math.atan2(cx - x, cz - z), plan.w, plan.d, plan, y, 'casa-mundo');
+      const casa = makeCityHouse(x, z, false, Math.atan2(cx - x, cz - z), plan.w, plan.d, plan, groundHeightAt(x, z), 'casa-mundo');
+      const y = casa.position.y;
       WORLD_PLACES.casas.push({ x, z, y });
       casas++;
       if (casas % 2 === 0) {
-        const poste = new THREE.Group(); poste.position.set(x + 3.2, y, z + 1.6); scene.add(poste);
+        const lx = x + 3.2, lz = z + 1.6;
+        const poste = new THREE.Group(); poste.position.set(lx, Math.max(y, groundHeightAt(lx, lz)), lz); scene.add(poste);
         mcLamp(poste, 0, 0, 0xfff0b0);
       }
       if (casas % 3 === 0) {
-        const arb = new THREE.Group(); arb.position.set(x - 3.1, y, z + 1.2); scene.add(arb);
+        const lx = x - 3.1, lz = z + 1.2;
+        const arb = new THREE.Group(); arb.position.set(lx, Math.max(y, groundHeightAt(lx, lz)), lz); scene.add(arb);
         mcBush(arb, 0, 0, 0.85);
       }
     }
   }
   if (sitioPueblo(cx + 2, cz)) {
-    const y = groundHeightAt(cx, cz);
+    const y = Math.max(groundHeightAt(cx, cz), sueloFirme(cx, cz, 8, 8));
     const plaza = new THREE.Group(); plaza.position.set(cx, y, cz); scene.add(plaza);
     mcBench(plaza, 0, 3.2, 0);
     mcFlowers(plaza, 2.4, -1.6, 0.75);
@@ -11046,7 +11063,9 @@ function updateEarthBulls(dt) {
     if (Math.hypot(nx - ud.ox, nz - ud.oz) < 5) {
       const px = b.position.x, pz = b.position.z;
       b.position.x = nx; b.position.z = nz;
-      if (resolveLivingWall(b.position, px, pz, 0.8) === 'stop') ud.wait = 0;
+      if (resolveLivingWall(b.position, px, pz, 0.8) === 'stop' || terrenoAbrupto(px, pz, nx, nz)) {
+        b.position.x = px; b.position.z = pz; ud.wait = 0;
+      }
     } else ud.wait = 0;
     b.rotation.y = ud.heading;
     applyLivingY(b, dt);
@@ -11676,6 +11695,11 @@ function moveToward(e, target, step) {
     const px = e.position.x, pz = e.position.z;
     e.position.x += (dx / len) * sub; e.position.z += (dz / len) * sub;
     if (!flies && resolveLivingWall(e.position, px, pz, livingRadius(e)) === 'stop') break;
+    const pies = e.position.y || 0;
+    const entraEnTierra = groundHeightAt(e.position.x, e.position.z) > pies + 0.35;
+    if ((!flies && terrenoAbrupto(px, pz, e.position.x, e.position.z)) || (flies && entraEnTierra)) {
+      e.position.x = px; e.position.z = pz; break;
+    }
   }
   const flyHigh = e.userData && (e.userData.fly || e.userData.ufo);
   if (flyHigh) e.position.y = flyerChaseY(e);
@@ -20240,6 +20264,8 @@ try { if (new URLSearchParams(location.search).has('debug')) {
   timDump.volverACasa = () => volverACasa();
   timDump.vineState = () => vineRide;
   timDump.paintMap = () => drawMinimap();
+  timDump.sueloFirme = (x, z, w, d) => sueloFirme(x, z, w, d);
+  timDump.moveLiving = (e, x, z, step) => moveToward(e, { x, z }, step == null ? 1 : step);
   // Revisa que ningún edificio haya quedado encima de una calle, fuera de su
   // manzana, o metido dentro de otro edificio.
   timDump.auditCity = () => {
