@@ -1490,11 +1490,155 @@ function terrainMask(x, z) {
   }
   return m;
 }
+// Biomas lejos de la ciudad: el suelo grande los pinta, y un parche fino
+// (más abajo) les da lagos, naranjos y nieve que se notan al caminar.
+const BIOMES = [
+  { id: 'naranjal', name: 'Naranjal', icon: '🍊', x: 920, z: 240, r: 145, kind: 'orange', ground: 0xe08a2c, bed: 0xc2410c },
+  { id: 'vergel', name: 'Vergel', icon: '🌿', x: -760, z: 620, r: 165, kind: 'green', ground: 0x16a34a, bed: 0x166534 },
+  { id: 'pantano', name: 'Pantano oscuro', icon: '🌑', x: 640, z: -820, r: 155, kind: 'dark', ground: 0x102018, bed: 0x0b1410 },
+  { id: 'gigantes', name: 'Bosque gigante', icon: '🌳', x: -900, z: -860, r: 175, kind: 'giant', ground: 0x166534, bed: 0x14532d },
+  { id: 'nieve', name: 'Bioma de nieve', icon: '❄️', x: 1560, z: -80, r: 185, kind: 'snow', ground: 0xe7eef6, bed: 0xd5dee8 },
+  { id: 'lagos', name: 'Lagos', icon: '🏞️', x: -560, z: 1180, r: 180, kind: 'lakes', ground: 0x4d7c0f, bed: 0x1e3a5f },
+  { id: 'canon', name: 'Cañón rojo', icon: '🏜️', x: 1700, z: 700, r: 160, kind: 'canyon', ground: 0xc2410c, bed: 0x7c2d12 },
+];
+const BIOME_LAKES = [
+  { biome: 'pantano', cx: 650, cz: -828, rx: 62, rz: 44, depth: 6.5, surface: 0.35, bottom: -5.4, color: 0x123524, opacity: 0.86 },
+  { biome: 'vergel', cx: -724, cz: 640, rx: 34, rz: 26, depth: 4.2, surface: 0.4, bottom: -3.2, color: 0x22d3ee, opacity: 0.55 },
+  { biome: 'lagos', cx: -568, cz: 1186, rx: 86, rz: 58, depth: 10, surface: 0.42, bottom: -8.6, color: 0x0284c7, opacity: 0.62 },
+  { biome: 'lagos', cx: -390, cz: 1088, rx: 52, rz: 38, depth: 7.5, surface: 0.38, bottom: -6.2, color: 0x0369a1, opacity: 0.66 },
+  { biome: 'canon', cx: 1700, cz: 700, rx: 118, rz: 16, depth: 3.2, surface: -2.2, bottom: -8.4, color: 0x0e7490, opacity: 0.74, rot: 0.99 },
+].map(w => ({ ...w, lake: true }));
+const EXTRA_WATER = [];
+const _biomeCity = new THREE.Color(0x4a7c3a);
+let cityReliefBlocks = null;
+function cityBlocks() {
+  if (cityReliefBlocks) return cityReliefBlocks;
+  const kinds = ['bumps', 'hill', 'mound', 'bumps', 'pond', 'hill', 'bumps', 'mound', 'bumps', 'hill', 'mound', 'bumps', 'hill', 'bumps'];
+  cityReliefBlocks = manzanasLibres().map((b, i) => ({ ...b, kind: kinds[i % kinds.length], ph: i * 1.7 + 0.4 }));
+  return cityReliefBlocks;
+}
+function ellipseHit(w, x, z) {
+  let dx = x - w.cx, dz = z - w.cz;
+  if (w.rot) {
+    const c = Math.cos(w.rot), s = Math.sin(w.rot);
+    const lx = dx * c + dz * s, lz = -dx * s + dz * c;
+    dx = lx; dz = lz;
+  }
+  return (dx / w.rx) * (dx / w.rx) + (dz / w.rz) * (dz / w.rz) < 1;
+}
+function waterDip(w, x, z) {
+  let dx = x - w.cx, dz = z - w.cz;
+  if (w.rot) {
+    const c = Math.cos(w.rot), s = Math.sin(w.rot);
+    const lx = dx * c + dz * s, lz = -dx * s + dz * c;
+    dx = lx; dz = lz;
+  }
+  const d = Math.hypot(dx / w.rx, dz / w.rz);
+  if (d >= 1) return 0;
+  const t = 1 - d;
+  return t * t * (3 - 2 * t) * w.depth;
+}
+function biomeWeight(b, x, z) {
+  const d = Math.hypot(x - b.x, z - b.z) / b.r;
+  if (d >= 1) return 0;
+  const t = 1 - d;
+  return t * t * (3 - 2 * t);
+}
+function biomeAtPoint(x, z) {
+  let best = null, bw = 0;
+  for (const b of BIOMES) {
+    const w = biomeWeight(b, x, z);
+    if (w > bw) { bw = w; best = b; }
+  }
+  return bw > 0 ? best : null;
+}
+function lakeAt(x, z) {
+  for (const w of BIOME_LAKES) if (ellipseHit(w, x, z)) return w;
+  for (const w of EXTRA_WATER) if (ellipseHit(w, x, z)) return w;
+  return null;
+}
+function cityPondAt(x, z) {
+  for (const b of cityBlocks()) {
+    if (b.kind !== 'pond') continue;
+    if (ellipseHit({ cx: b.x, cz: b.z, rx: b.w * 0.26, rz: b.d * 0.26 }, x, z)) return b;
+  }
+  return null;
+}
+function cityReliefAt(x, z) {
+  if (Math.abs(x) > 210 || Math.abs(z) > 210) return null;
+  if (enCalle(x, z, 0.8) || distritoEn(x, z, 0.4)) return null;
+  let block = null;
+  for (const b of cityBlocks()) {
+    if (Math.abs(x - b.x) < b.w / 2 && Math.abs(z - b.z) < b.d / 2) { block = b; break; }
+  }
+  if (!block) return null;
+  const edgeX = (block.w / 2 - Math.abs(x - block.x)) / 5.5;
+  const edgeZ = (block.d / 2 - Math.abs(z - block.z)) / 5.5;
+  const g = Math.max(0, Math.min(1, Math.min(edgeX, edgeZ)));
+  const s = g * g * (3 - 2 * g);
+  const n = terrainField(x * 2.2 + block.ph, z * 2.2);
+  const n2 = terrainWave(x, z, 0.09 + block.ph * 0.01);
+  let h = 0.45 + n * 1.7 + n2 * 0.9;
+  if (block.kind === 'hill') h = 0.9 + Math.max(0, n) * 3.4 + n2 * 1.2;
+  else if (block.kind === 'mound') {
+    const u = Math.max(0, 1 - Math.hypot(x - block.x, z - block.z) / (Math.min(block.w, block.d) * 0.42));
+    h = 1.2 + Math.pow(u, 1.55) * 5.8 + n * 0.5;
+  } else if (block.kind === 'pond') {
+    const bowl = waterDip({ cx: block.x, cz: block.z, rx: block.w * 0.28, rz: block.d * 0.28, depth: 1 }, x, z);
+    const bank = waterDip({ cx: block.x, cz: block.z, rx: block.w * 0.42, rz: block.d * 0.42, depth: 1 }, x, z);
+    h = bank * 1.2 - bowl * 0.9 + n2 * 0.2;
+  }
+  return Math.max(0.02, h * s);
+}
+function biomeShape(b, x, z) {
+  const n = terrainField(x, z);
+  const n2 = terrainWave(x, z, 0.018);
+  let h = 2 + n * 4;
+  if (b.kind === 'orange') h = 1.6 + n * 5.5 + n2 * 2.2 + Math.max(0, terrainWave(x, z, 0.04)) * 3.2;
+  else if (b.kind === 'green') h = 3.2 + Math.max(0, n) * 9 + n2 * 3.6;
+  else if (b.kind === 'dark') h = 0.55 + n2 * 1.5 + Math.max(0, -n) * 0.9;
+  else if (b.kind === 'giant') h = 5 + n * 7 + Math.max(0, n2) * 12;
+  else if (b.kind === 'snow') {
+    const u = Math.max(0, 1 - Math.hypot(x - b.x, z - b.z) / (b.r * 0.78));
+    const ridges = Math.pow(Math.max(0, 1 - Math.abs(terrainWave(x, z, 0.011))), 2) * 14 * u;
+    h = 6 + Math.pow(u, 1.45) * 70 + ridges + n * 4;
+  } else if (b.kind === 'lakes') h = 2.2 + n * 3.2 + n2 * 1.8;
+  else if (b.kind === 'canyon') {
+    const dx = x - b.x, dz = z - b.z;
+    const across = Math.abs(-dx * 0.84 + dz * 0.55);
+    h = 9 + n * 8 + Math.max(0, n2) * 6 - Math.exp(-(across * across) / (26 * 26)) * 18;
+  }
+  for (const w of BIOME_LAKES) if (w.biome === b.id) h -= waterDip(w, x, z);
+  return h;
+}
 function terrainHeightAt(x, z) {
+  if (Math.abs(x) < 260 && Math.abs(z) < 260 && (enCalle(x, z, 1) || distritoEn(x, z, 2))) return 0;
   const m = terrainMask(x, z);
-  return m <= 0 ? 0 : wildHeight(x, z) * m;
+  const wild = m <= 0 ? 0 : wildHeight(x, z) * m;
+  const b = biomeAtPoint(x, z);
+  if (!b) return wild;
+  const w = biomeWeight(b, x, z);
+  return biomeShape(b, x, z) * w + wild * (1 - w);
+}
+function groundHeightAt(x, z) {
+  const city = cityReliefAt(x, z);
+  if (city != null) return city;
+  return terrainHeightAt(x, z);
 }
 function biomeTint(x, z, h, out) {
+  const b = biomeAtPoint(x, z);
+  if (b) {
+    const w = biomeWeight(b, x, z);
+    if (w > 0.18) {
+      let hex = b.ground;
+      if (b.kind === 'snow') hex = h > 24 ? 0xf8fafc : 0xdbe7f2;
+      else if (h < 0.25) hex = b.bed;
+      else if (h > 40) hex = 0xf1f5f9;
+      out.setHex(hex);
+      if (w < 0.9) out.lerp(_biomeCity, 1 - w);
+      return;
+    }
+  }
   const m = terrainMask(x, z);
   if (m < 0.05) { out.setHex(0x4a7c3a); return; }
   const temp = terrainField(x + 220, z - 80);
@@ -1509,7 +1653,7 @@ function biomeTint(x, z, h, out) {
   else if (moist < -0.22 && temp > 0.1) hex = 0xc4a56c;
   else if (temp < -0.28) hex = 0xb7c6c2;
   else if (moist < -0.1) hex = 0x5a4532;
-  out.setHex(hex).lerp(new THREE.Color(0x4a7c3a), 1 - m);
+  out.setHex(hex).lerp(_biomeCity, 1 - m);
 }
 const EARTH_SIZE = 4600;
 const earthSeg = preferLowPerf ? 72 : 148;
@@ -2549,7 +2693,7 @@ const SHOP = [...STORE_A, ...STORE_B, ...DECOR_ITEMS, ...PAINTS, ...UNLOCK_ITEMS
 // TECNOLOGÍA ALIEN: solo la vende el vendedor de Platus (no existe en la Tierra). Da una razón real para viajar.
 const ALIEN_TECH = [
   { key: 'jetpack',     name: 'Jetpack alien',     price: 1500, color: 0x22d3ee, alien: true },
-  { key: 'laserpistol', name: 'Pistola láser',     price: 1800, color: 0xef4444, dmg: 22, alien: true },
+  { key: 'laserpistol', name: 'Pistola láser',     price: 8500, color: 0xef4444, dmg: 22, alien: true },
   { key: 'escudo',      name: 'Escudo de energía', price: 1600, color: 0x38bdf8, alien: true },
   { key: 'alienpet',    name: 'Mascota alien',     price: 2200, color: 0x7c3aed, alien: true },
   { key: 'baseespacial',  name: 'Base espacial',     price: 3000, color: 0xbfe3ff, alien: true },
@@ -4800,6 +4944,7 @@ function buildTrees() {   // árboles INSTANCIADOS: ~100 árboles en solo 2 draw
     if (x < -145 && z > -365 && z < 55) return;   // océano: nunca generar árboles sobre el agua
     if (enCalle(x, z, 2)) return;                 // ni sobre el asfalto ni sobre la vereda
     if (distritoEn(x, z, 2)) return;              // los barrios y las canchas tienen su propio paisaje
+    if (biomeAtPoint(x, z) || cityPondAt(x, z) || lakeAt(x, z)) return;
     spots.push([x, z]);
   };
   for (let i = 0; i < 36; i++) plant(28, 88);     // anillo cercano (como antes)
@@ -4809,13 +4954,13 @@ function buildTrees() {   // árboles INSTANCIADOS: ~100 árboles en solo 2 draw
   for (const m of manzanasLibres()) {
     for (let i = 0; i < 7; i++) {
       const x = m.x + (Math.random() - .5) * m.w * .82, z = m.z + (Math.random() - .5) * m.d * .82;
-      if (enCalle(x, z, 2) || distritoEn(x, z, 2)) continue;
+      if (enCalle(x, z, 2) || distritoEn(x, z, 2) || cityPondAt(x, z)) continue;
       spots.push([x, z]);
     }
   }
   for (let i = 0; i < (preferLowPerf ? 36 : 100); i++) {
     const x = (Math.random() - 0.5) * 4200, z = (Math.random() - 0.5) * 4200;
-    if (terrainMask(x, z) < 0.62) continue;
+    if (terrainMask(x, z) < 0.62 || biomeAtPoint(x, z) || lakeAt(x, z)) continue;
     const h = terrainHeightAt(x, z);
     if (h < 0.8 || h > 18) continue;
     if (enCalle(x, z, 4) || distritoEn(x, z, 6)) continue;
@@ -4836,7 +4981,7 @@ function buildTrees() {   // árboles INSTANCIADOS: ~100 árboles en solo 2 draw
   const up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
   spots.forEach(([x, z], i) => {
     const alto = .85 + Math.random() * .5, giro = Math.random() * Math.PI * 2;
-    const base = terrainHeightAt(x, z);
+    const base = groundHeightAt(x, z);
     worldTreeSizes.push(alto);
     worldTreeBase.push(base);
     q.setFromAxisAngle(up, giro);
@@ -4853,6 +4998,143 @@ function buildTrees() {   // árboles INSTANCIADOS: ~100 árboles en solo 2 draw
   decor.push(trunks, leaves, leaves2, leaves3);
 }
 buildTrees();
+
+function buildWorldBiomes() {
+  const g = new THREE.Group();
+  g.name = 'biomas';
+  scene.add(g);
+  const tint = new THREE.Color();
+  for (const b of BIOMES) {
+    const seg = preferLowPerf ? 22 : 42;
+    const size = b.r * 2.7;
+    const geo = new THREE.PlaneGeometry(size, size, seg, seg);
+    geo.rotateX(-Math.PI / 2);
+    const attr = geo.attributes.position;
+    const colors = new Float32Array(attr.count * 3);
+    for (let i = 0; i < attr.count; i++) {
+      const x = b.x + attr.getX(i), z = b.z + attr.getZ(i);
+      const h = terrainHeightAt(x, z);
+      attr.setY(i, h + 0.05);
+      biomeTint(x, z, h, tint);
+      colors[i * 3] = tint.r; colors[i * 3 + 1] = tint.g; colors[i * 3 + 2] = tint.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.94, metalness: 0,
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -8,
+    }));
+    mesh.position.set(b.x, 0, b.z);
+    mesh.receiveShadow = true;
+    g.add(mesh);
+    const dir = Math.hypot(b.x, b.z) || 1;
+    const sx = b.x - (b.x / dir) * b.r * 0.86, sz = b.z - (b.z / dir) * b.r * 0.86;
+    const sign = makeSign(b.icon + ' ' + b.name, b.kind === 'dark' ? 0x86efac : (b.kind === 'snow' ? 0xe0f2fe : 0xfde68a));
+    sign.position.set(sx, terrainHeightAt(sx, sz) + 5.5, sz);
+    g.add(sign);
+  }
+  const styles = {
+    orange: { n: 64, scale: 1.15, leaf: 0xf97316, leaf2: 0xc2410c, trunk: 0x6b3a1f, fruit: 0xfde047, spread: 0.76 },
+    green: { n: 48, scale: 1.35, leaf: 0x22c55e, leaf2: 0x15803d, trunk: 0x5c3a1e, spread: 0.8 },
+    dark: { n: 36, scale: 1.55, leaf: 0x1c3324, leaf2: 0x0b140e, trunk: 0x1c1410, spread: 0.7 },
+    giant: { n: 16, scale: 3.7, leaf: 0x166534, leaf2: 0x052e16, trunk: 0x4a2c14, spread: 0.68, fat: 2.5 },
+    snow: { n: 26, scale: 1.75, leaf: 0xf8fafc, leaf2: 0xdbeafe, trunk: 0xe7e5e4, spread: 0.6 },
+    lakes: { n: 20, scale: 1.2, leaf: 0x4ade80, leaf2: 0x166534, trunk: 0x6b4423, spread: 0.82 },
+    canyon: { n: 12, scale: 0.95, leaf: 0xb45309, leaf2: 0x7c2d12, trunk: 0x57534e, spread: 0.5 },
+  };
+  for (const b of BIOMES) {
+    const st = styles[b.kind];
+    const n = preferLowPerf ? Math.ceil(st.n * 0.4) : st.n;
+    const spots = [];
+    let guard = 0;
+    while (spots.length < n && guard < n * 14) {
+      guard++;
+      const a = Math.random() * Math.PI * 2, rad = Math.sqrt(Math.random()) * b.r * st.spread;
+      const x = b.x + Math.cos(a) * rad, z = b.z + Math.sin(a) * rad;
+      if (biomeWeight(b, x, z) < 0.28) continue;
+      if (lakeAt(x, z)) continue;
+      const y = terrainHeightAt(x, z);
+      if (y < 0.45) continue;
+      let near = false;
+      for (const s of spots) if ((s[0] - x) ** 2 + (s[1] - z) ** 2 < (st.fat ? 64 : 16)) { near = true; break; }
+      if (near) continue;
+      spots.push([x, z, y]);
+    }
+    if (!spots.length) continue;
+    const leafCol = new THREE.Color(st.leaf);
+    const leafCol2 = new THREE.Color(st.leaf2 || st.leaf);
+    const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(.34, .52, 3.4, 8), new THREE.MeshStandardMaterial({ color: st.trunk, roughness: 0.9 }), spots.length);
+    const leaves = new THREE.InstancedMesh(new THREE.SphereGeometry(1.7, 7, 5), new THREE.MeshStandardMaterial({ color: leafCol, roughness: 0.7 }), spots.length);
+    const leaves2 = new THREE.InstancedMesh(new THREE.SphereGeometry(1.15, 7, 5), new THREE.MeshStandardMaterial({ color: leafCol2, roughness: 0.68 }), spots.length);
+    let fruit = null;
+    if (st.fruit) fruit = new THREE.InstancedMesh(new THREE.SphereGeometry(.22, 6, 5), new THREE.MeshStandardMaterial({ color: st.fruit, roughness: 0.45 }), spots.length);
+    trunks.castShadow = leaves.castShadow = leaves2.castShadow = true;
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), esc = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0);
+    spots.forEach(([x, z, y], i) => {
+      const alto = st.scale * (0.9 + Math.random() * 0.25);
+      const fat = st.fat || 1;
+      q.setFromAxisAngle(up, Math.random() * Math.PI * 2);
+      pos.set(x, y + 1.7 * alto, z); esc.set(fat, alto, fat); m4.compose(pos, q, esc); trunks.setMatrixAt(i, m4);
+      const ancho = (0.95 + Math.random() * 0.3) * fat;
+      pos.set(x, y + 3.5 * alto, z); esc.set(ancho, alto * 0.9, ancho); m4.compose(pos, q, esc); leaves.setMatrixAt(i, m4);
+      pos.set(x, y + 4.8 * alto, z); esc.set(ancho * 0.72, alto * 0.75, ancho * 0.72); m4.compose(pos, q, esc); leaves2.setMatrixAt(i, m4);
+      if (fruit) {
+        const ang = Math.random() * Math.PI * 2;
+        pos.set(x + Math.cos(ang) * ancho * 1.15, y + 3.05 * alto, z + Math.sin(ang) * ancho * 1.15);
+        esc.set(1.4, 1.4, 1.4); m4.compose(pos, q, esc); fruit.setMatrixAt(i, m4);
+      }
+      addObstacle(x, z, 0.9 * fat, 0.9 * fat, y + 2.4 * Math.min(alto, 2.2), 'arbol');
+    });
+    g.add(trunks); g.add(leaves); g.add(leaves2);
+    if (fruit) g.add(fruit);
+  }
+  const waterMat = (color, opacity) => new THREE.MeshStandardMaterial({
+    color, transparent: true, opacity, roughness: 0.18, metalness: 0.04,
+    side: THREE.DoubleSide, depthWrite: false,
+  });
+  for (const w of BIOME_LAKES) {
+    const water = new THREE.Mesh(new THREE.CircleGeometry(1, 40), waterMat(w.color, w.opacity));
+    water.scale.set(w.rx, w.rz, 1);
+    water.rotation.y = w.rot || 0;
+    water.rotateX(-Math.PI / 2);
+    water.position.set(w.cx, w.surface, w.cz);
+    g.add(water);
+  }
+  for (const block of cityBlocks()) {
+    const seg = preferLowPerf ? 8 : 12;
+    const geo = new THREE.PlaneGeometry(block.w * 0.96, block.d * 0.96, seg, seg);
+    geo.rotateX(-Math.PI / 2);
+    const attr = geo.attributes.position;
+    const colors = new Float32Array(attr.count * 3);
+    for (let i = 0; i < attr.count; i++) {
+      const x = block.x + attr.getX(i), z = block.z + attr.getZ(i);
+      const h = cityReliefAt(x, z);
+      const show = h != null && h > 0.16;
+      attr.setY(i, show ? h + 0.06 : -3);
+      tint.setHex(h != null && h > 2.4 ? 0x3f7d32 : 0x4f9a3c);
+      colors[i * 3] = tint.r; colors[i * 3 + 1] = tint.g; colors[i * 3 + 2] = tint.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.96, metalness: 0,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6,
+    }));
+    mesh.position.set(block.x, 0, block.z);
+    mesh.receiveShadow = true;
+    g.add(mesh);
+    if (block.kind === 'pond') {
+      EXTRA_WATER.push({ cx: block.x, cz: block.z, rx: block.w * 0.22, rz: block.d * 0.22, surface: 0.5, bottom: 0.12, lake: true });
+      const pond = new THREE.Mesh(new THREE.CircleGeometry(1, 20), waterMat(0x38bdf8, 0.74));
+      pond.scale.set(block.w * 0.22, block.d * 0.22, 1);
+      pond.rotation.x = -Math.PI / 2;
+      pond.position.set(block.x, 0.5, block.z);
+      g.add(pond);
+    }
+  }
+}
+buildWorldBiomes();
 
 // Zona de DESIERTO (arena + cactus de bloques), lejana
 function buildDesert(cx, cz) {
@@ -4891,6 +5173,7 @@ function waterZoneAt(x, z) {
     if(Math.abs(lx)<2.4&&Math.abs(lz)<1.5)return o.poolZone||{surface:(o.baseY||0)+.55,bottom:o.baseY||0};
   }
   for (const w of HOUSE_POOLS) if (Math.abs(x - w.cx) < w.waterW / 2 && Math.abs(z - w.cz) < w.waterD / 2) return w;
+  const lake = lakeAt(x, z); if (lake) return lake;
   for (const w of WATER_ZONES) if (Math.abs(x - w.cx) < w.waterW / 2 && Math.abs(z - w.cz) < w.waterD / 2) return w;
   return null;
 }
@@ -6109,8 +6392,9 @@ function mountainHeightAt(x, z) {
     if (hh > best) best = hh;
   }
   if (here === 'tierra' && !state.country) {
-    const wild = terrainHeightAt(x, z);
+    const wild = groundHeightAt(x, z);
     if (wild > best) best = wild;
+    else if (wild < 0 && best === 0) best = wild;
   }
   return best;
 }
@@ -15236,6 +15520,10 @@ function updateDriving(dt) {
     car.group.position.set(prevX, car.group.position.y, prevZ); car.speed = 0;
     car.oceanWarn = (car.oceanWarn || 0) - dt; if (car.oceanWarn <= 0) { car.oceanWarn = 2; toast('🌊 Los autos no pueden entrar al océano · usa un barco'); }
   }
+  if (!car.helicopter && lakeAt(car.group.position.x, car.group.position.z)) {
+    car.group.position.set(prevX, car.group.position.y, prevZ); car.speed = 0;
+    car.lakeWarn = (car.lakeWarn || 0) - dt; if (car.lakeWarn <= 0) { car.lakeWarn = 2; toast('🌊 El auto no entra al lago · bájate si quieres nadar'); }
+  }
   // El mapa ampliado incluye el camino al centro de esquí (x/z hasta 800).
   // Mantener el auto dentro de esos límites permite llegar a la montaña.
   if (!car.helicopter) {
@@ -16339,6 +16627,7 @@ function buyItem(item) {
     saveGame(); return;
   }
   if (item.key === 'laserpistol') {
+    if (state.planet !== 'platus') { toast('🔫 La pistola láser solo se vende en Platus'); return; }
     if (state.laserGun && laserEquipped()) { toast('🔫 Ya tienes la pistola láser en la mano · pulsa 1 para la espada, dos veces para el arco'); return; }
     if (!state.laserGun) {
       if (!state.creative && state.money < item.price) { toast('💸 Te falta plata'); return; }
@@ -18050,6 +18339,55 @@ function updateCombo(dt) {
   if (comboTimer <= 0) { combo = 0; ui('combo').style.opacity = '0'; }
 }
 
+// Terremotos en la Tierra: el suelo tiembla un rato y después se calma.
+let quakeT = 42, quakeLeft = 0, biomeHere = '';
+const quakeRings = [];
+function noteBiomeVisit() {
+  if (state.planet !== 'tierra' || state.country) return;
+  const b = biomeAtPoint(player.position.x, player.position.z);
+  const id = b && biomeWeight(b, player.position.x, player.position.z) > 0.35 ? b.id : '';
+  if (id === biomeHere) return;
+  biomeHere = id;
+  if (b && id) toast(b.icon + ' ' + b.name);
+}
+function updateEarthquake(dt) {
+  noteBiomeVisit();
+  for (let i = quakeRings.length - 1; i >= 0; i--) {
+    const ring = quakeRings[i];
+    ring.userData.life -= dt;
+    const k = Math.max(0, ring.userData.life / 1.5);
+    ring.scale.setScalar(1 + (1 - k) * 22);
+    ring.material.opacity = k * 0.7;
+    if (ring.userData.life <= 0) {
+      scene.remove(ring); ring.geometry.dispose(); ring.material.dispose();
+      quakeRings.splice(i, 1);
+    }
+  }
+  if (state.planet !== 'tierra' || state.country || state.underground || state.inCastle || !state.running) return;
+  if (quakeLeft > 0) {
+    quakeLeft -= dt;
+    cameraShake = Math.max(cameraShake, reduceGameMotion ? 0 : 0.18 + Math.abs(Math.sin(quakeLeft * 16)) * 0.28);
+    if (quakeLeft <= 0) toast('El suelo dejó de temblar');
+    return;
+  }
+  quakeT -= dt;
+  if (quakeT > 0) return;
+  quakeLeft = 6 + Math.random() * 2;
+  quakeT = 80 + Math.random() * 70;
+  toast('🌋 ¡Terremoto!');
+  beep(48, .5, .08);
+  if (reduceGameMotion) return;
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(.8, 1.6, 28),
+    new THREE.MeshBasicMaterial({ color: 0xa8a29e, transparent: true, opacity: .7, side: THREE.DoubleSide, depthWrite: false })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(player.position.x, Math.max(0.15, mountainHeightAt(player.position.x, player.position.z) + 0.2), player.position.z);
+  ring.userData.life = 1.5;
+  scene.add(ring);
+  quakeRings.push(ring);
+}
+
 // ===================================================================
 //  BUCLE PRINCIPAL
 // ===================================================================
@@ -18102,6 +18440,7 @@ function loop() {
     if (state.phase === 'DAY') { updateBuying(dt); updateDirt(dt); updateDirtZombies(dt); }
     updateJobs(dt);                        // recados: se pausan solos de noche (el marcador se esconde)
     updateGrassField(dt);                  // pasto 3D alrededor tuyo, meciéndose
+    updateEarthquake(dt);
     updateBullets(dt);                     // balas que vuelan, casquillos, gatillo y recarga
     updateAim(dt);                         // mira telescópica (mantener clic) + punto rojo
     updateLaserShots(dt);                  // rayos láser que se apagan
@@ -18425,6 +18764,10 @@ function updateCreativeFlight(dt) {
     player.position.addScaledVector(rightV, ax * speed * dt / parts);
     const vertical = (keys['Space'] ? 1 : 0) - (keys['ControlLeft'] || keys['ControlRight'] ? 1 : 0);
     let minFlyY = PLAYER_EYE;
+    if (state.planet === 'tierra' && !state.country) {
+      const suelo = mountainHeightAt(player.position.x, player.position.z);
+      if (suelo < 0) minFlyY = suelo + PLAYER_EYE;
+    }
     if (state.planet === 'tierra' && inTreasureIsland(player.position.x, player.position.z)) minFlyY = TREASURE_ISLAND.surface + PLAYER_EYE;
     const flyWater = waterZoneAt(player.position.x, player.position.z);
     if (flyWater) minFlyY = Math.max(minFlyY, flyWater.surface + PLAYER_EYE);
@@ -18615,7 +18958,9 @@ function updateMovement(dt) {
   if (floor2Y != null) { floorY = Math.max(floorY, floor2Y); if (grounded && vy <= 0) player.position.y = floorY; }
   if (!state.underground && !state.inCastle && !state.inRuins && !state.inArena && !inSkiTopHollow()) {   // ¡las montañas se suben!
     const cerro = mountainHeightAt(player.position.x, player.position.z);
-    if (cerro > 0) { floorY = Math.max(floorY, cerro + (crouch ? CROUCH_EYE : PLAYER_EYE)); if (grounded && vy <= 0) player.position.y = floorY; }
+    const eyeH = crouch ? CROUCH_EYE : PLAYER_EYE;
+    if (cerro > 0.02) { floorY = Math.max(floorY, cerro + eyeH); if (grounded && vy <= 0) player.position.y = floorY; }
+    else if (cerro < -0.05 && floorY <= standY + 0.25) { floorY = cerro + eyeH; if (grounded && vy <= 0) player.position.y = floorY; }
   }
   if (!swimming && player.position.y <= floorY) { player.position.y = floorY; vy = 0; grounded = true; }
   if (!swimming && grounded && geyserBoost()) { vy = 25; grounded = false; beep(400, 0.12, 0.05); floatText(player.position, '⛲ ¡GÉISER!', '#67e8f9', 16); }   // parado sobre un géiser: ¡te lanza altísimo!
@@ -18850,6 +19195,7 @@ try { if (new URLSearchParams(location.search).has('debug')) {
     liftTop: { x: SKI_LIFT_BOTTOM.x, z: SKI_LIFT_BOTTOM.z - 340 },
     islandMines: holes.filter(h => h.islandMine).map(h => ({ x: h.x, z: h.z, cells: h.tunnels.size, rooms: (h.rooms || []).length, meshes: h.group.children.length })),
   });
+  timDump.forceQuake = () => { quakeT = 0; updateEarthquake(.05); renderer.render(scene, camera); };
   timDump.beginCreative = () => {
     pendingMode = 'creative'; startGame(); state.creative = true; state.money = 999999999;
     const intro = ui('intro'); if (intro) intro.style.display = 'none';
