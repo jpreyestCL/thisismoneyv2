@@ -10947,6 +10947,25 @@ function spawnPlaced(key, x, z, rot, hp, variantId, baseY, mountY, countryId, sc
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 10), new THREE.MeshStandardMaterial({ color: 0xfff1a8, emissive: 0xfde047, emissiveIntensity: 2.2 }));
     bulb.position.set(m.position.x, 2.5 + by, m.position.z); scene.add(bulb); obj.bulb = bulb;
   }
+  // Mesa de la Play, televisor y consola: el cuerpo no las atraviesa, ni caminando ni volando.
+  if (key === 'mesa_tele' || key === 'tele' || key === 'play_gamer') {
+    const sy = sc.y || 1;
+    const my = m.position.y;
+    const caja = key === 'mesa_tele'
+      ? { ancho: 2.2, fondo: 0.72, y0: by, y1: Math.max(my + 0.09 * sy, by + 1.05) }
+      : key === 'tele'
+        ? { ancho: 1.6, fondo: 0.22, y0: my - 0.6 * sy, y1: my + 0.48 * sy }
+        : { ancho: 1.4, fondo: 1.0, y0: my - 0.1 * sy, y1: my + 0.28 * sy };
+    const ca = Math.abs(Math.cos(rot)), sa = Math.abs(Math.sin(rot));
+    const w = caja.ancho * sc.x * ca + caja.fondo * sc.z * sa;
+    const d = caja.ancho * sc.x * sa + caja.fondo * sc.z * ca;
+    obj.aabb = {
+      minX: m.position.x - w / 2, maxX: m.position.x + w / 2,
+      minZ: m.position.z - d / 2, maxZ: m.position.z + d / 2,
+      bottom: caja.y0, top: caja.y1, country: region, grupo: 'mesa-play',
+    };
+    obstacles.push(obj.aabb);
+  }
   // Las colisiones son en 2D (no distinguen pisos): una pared del 2º piso taparía el paso
   // abajo también, así que arriba las paredes se colocan pero sin caja de choque.
   if (key === 'wallWood' || key === 'wallRock' || key === 'wallMetal') {
