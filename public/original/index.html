@@ -1905,6 +1905,7 @@ function updateGrassField(dt) {
     && !state.inRuins && !state.inArena && !state.mission && !(perfMode && perfExtra);
   grassField.visible = visible;
   if (!visible) return;
+  if ((creativeFlying || state.jetOn) && player.position.y > 16) { grassField.visible = false; return; }
   grassTime.value += dt;
   if (!grassAt || dist2D(player.position, grassAt) > GRASS_R * .4) scatterGrass();
   fillGrassChunk();
@@ -2406,7 +2407,7 @@ function updatePlayerCamera(dt) {
   // rayos contra cada malla del mundo en todos los frames.
   for (let i = 2; i <= 14; i++) {
     const t = i / 14, sx = THREE.MathUtils.lerp(cameraAim.x, cameraDesired.x, t), sz = THREE.MathUtils.lerp(cameraAim.z, cameraDesired.z, t);
-    if (obstacles.some(o => sx > o.minX - .18 && sx < o.maxX + .18 && sz > o.minZ - .18 && sz < o.maxZ + .18)) {
+    if (obstaclesNear(sx, sz, 0.2).some(o => sx > o.minX - .18 && sx < o.maxX + .18 && sz > o.minZ - .18 && sz < o.maxZ + .18)) {
       cameraDesired.lerpVectors(cameraAim, cameraDesired, Math.max(.12, (i - 1) / 14)); break;
     }
   }
@@ -2546,6 +2547,47 @@ function addObstacle(cx, cz, w, d, top, grupo) {
   if (grupo) o.grupo = grupo;
   obstacles.push(o);
   return o;
+}
+// Las colisiones se consultan muchísimas veces por frame (vuelo, gente, pasto).
+// Una grilla por celda evita recorrer las miles de cajas en cada consulta.
+const OBS_CELL = 20;
+let gameFrame = 0, obsGrid = null, obsBig = [], obsFrame = -1, obsLen = -1, obsSeen = 1;
+function rebuildObstacleGrid() {
+  obsGrid = new Map();
+  obsBig = [];
+  for (const o of obstacles) {
+    const w = o.maxX - o.minX, d = o.maxZ - o.minZ;
+    if (w > 64 || d > 64) { obsBig.push(o); continue; }
+    const x0 = Math.floor(o.minX / OBS_CELL), x1 = Math.floor(o.maxX / OBS_CELL);
+    const z0 = Math.floor(o.minZ / OBS_CELL), z1 = Math.floor(o.maxZ / OBS_CELL);
+    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+      const k = (x + 8000) * 20000 + (z + 8000);
+      let b = obsGrid.get(k);
+      if (!b) obsGrid.set(k, b = []);
+      b.push(o);
+    }
+  }
+  obsFrame = gameFrame;
+  obsLen = obstacles.length;
+}
+function obstaclesNear(x, z, r) {
+  if (!obsGrid || obsFrame !== gameFrame || obsLen !== obstacles.length) rebuildObstacleGrid();
+  obsSeen++;
+  const out = [];
+  const consider = (o) => {
+    if (!o || o._seen === obsSeen) return;
+    o._seen = obsSeen;
+    out.push(o);
+  };
+  for (const o of obsBig) consider(o);
+  const pad = r || 0;
+  const x0 = Math.floor((x - pad) / OBS_CELL), x1 = Math.floor((x + pad) / OBS_CELL);
+  const z0 = Math.floor((z - pad) / OBS_CELL), z1 = Math.floor((z + pad) / OBS_CELL);
+  for (let ix = x0; ix <= x1; ix++) for (let iz = z0; iz <= z1; iz++) {
+    const b = obsGrid.get((ix + 8000) * 20000 + (iz + 8000));
+    if (b) for (const o of b) consider(o);
+  }
+  return out;
 }
 function addLandingSurface(x, z, w, d, top, root) {
   landingSurfaces.push({ x, z, w, d, top, root });
@@ -3985,11 +4027,12 @@ function citizenPointBlocked(x, z, wild, feetY) {
   if (!wild && (Math.abs(x) > 228 || Math.abs(z) > 228)) return true;
   if (typeof insidePlayerStructure === 'function' && insidePlayerStructure(x,z,.35)) return true;
   const feet = feetY == null ? 0 : feetY;
-  return obstacles.some(o => {
-    if (o.top != null && feet >= o.top - 0.05) return false;
-    if (o.bottom != null && feet + 1.8 < o.bottom) return false;
-    return x > o.minX - .48 && x < o.maxX + .48 && z > o.minZ - .48 && z < o.maxZ + .48;
-  });
+  for (const o of obstaclesNear(x, z, 0.5)) {
+    if (o.top != null && feet >= o.top - 0.05) continue;
+    if (o.bottom != null && feet + 1.8 < o.bottom) continue;
+    if (x > o.minX - .48 && x < o.maxX + .48 && z > o.minZ - .48 && z < o.maxZ + .48) return true;
+  }
+  return false;
 }
 function terrenoAbrupto(x0, z0, x1, z1) {
   const h0 = groundHeightAt(x0, z0);
@@ -4032,6 +4075,7 @@ function updateNPCs(dt) {
   if (state.planet !== 'tierra') return;
   for (const n of npcs) {
     if (!n.userData.brain) initCitizenBrain(n, n.position.clone(), 18);
+    if (n.userData._lejos) continue;
     const b = n.userData.brain;
     b.thinkIn -= dt;
     if (state.phase === 'DAY' && !n.visible) { n.visible = true; b.thinkIn = 0; }
@@ -6043,7 +6087,7 @@ function carAhead(car) {
 }
 // ¿Hay un EDIFICIO (obstáculo grande, no un auto estacionado) en (x,z)?
 function insideBuilding(x, z) {
-  for (const o of obstacles) {
+  for (const o of obstaclesNear(x, z, 8)) {
     if ((o.maxX - o.minX) < 6 && (o.maxZ - o.minZ) < 6) continue;   // ignora obstáculos chicos (autos estacionados)
     if (x > o.minX - 1 && x < o.maxX + 1 && z > o.minZ - 1 && z < o.maxZ + 1) return true;
   }
@@ -6565,12 +6609,13 @@ function buildFunPark() {
     if (i % 6 === 0 && p.y > 2.4) {   // pilar hasta el suelo (solo donde la vía va por arriba)
       m4.compose(new THREE.Vector3(p.x, p.y / 2, p.z), new THREE.Quaternion(), new THREE.Vector3(1, p.y, 1));
       pillars.setMatrixAt(nPil++, m4);
+      addObstacle(cx + p.x, cz - 24 + p.z, 0.85, 0.85, p.y, 'pilar-rusa');
     }
   }
   pillars.count = nPil; ties.instanceMatrix.needsUpdate = true; pillars.instanceMatrix.needsUpdate = true;
   // Estación: techo y cartel
   mcBox(rc, -24, .4, -12, 14, .8, 6, 0x9ca3af);
-  for (const sx of [-30, -18]) mcBox(rc, sx, 2.6, -14.6, 1, 5, 1, 0xb45309);
+  for (const sx of [-30, -18]) { mcBox(rc, sx, 2.6, -14.6, 1, 5, 1, 0xb45309); addObstacle(cx + sx, cz - 24 - 14.6, 1.15, 1.15, 5.1, 'pilar-rusa'); }
   mcBox(rc, -24, 5.4, -12, 15, .8, 8, 0xdc2626);
   mcSign(rc, -24, 7.2, -12, 'MONTANA RUSA', 0xdc2626);
   // El tren: 3 carros enganchados
@@ -11633,11 +11678,12 @@ function livingRadius(e) {
 }
 function bodyIgnoresWalls(e) { return !!(e && e.userData && (e.userData.fly || e.userData.ufo || e.userData.mineHole)); }
 function obstacleAt(x, z, feetY, r) {
-  for (const o of obstacles) {
+  const radio = r || 0;
+  for (const o of obstaclesNear(x, z, radio)) {
     if (o.country !== undefined && (o.country || null) !== (state.country || null)) continue;
     if (o.bottom != null && (feetY || 0) + 1.8 < o.bottom) continue;
     if (o.top != null && (feetY || 0) >= o.top) continue;
-    if (x > o.minX - r && x < o.maxX + r && z > o.minZ - r && z < o.maxZ + r) return o;
+    if (x > o.minX - radio && x < o.maxX + radio && z > o.minZ - radio && z < o.maxZ + radio) return o;
   }
   return null;
 }
@@ -16529,8 +16575,9 @@ function updateDriving(dt) {
   if (car.helicopter && inTreasureIsland(car.group.position.x, car.group.position.z)) noteIslandArrival('🏝️ Llegaste en helicóptero a la ISLA DEL TESORO');
   if (car.helicopter) {
     const rise = (keys['Space'] || touch.jump || touch.jumpHeld ? 1 : 0) - (keys['ControlLeft'] || keys['ControlRight'] || touch.crouch || touch.heliDown ? 1 : 0);
-    car.group.position.y = Math.max(0, car.group.position.y + rise * 12 * dt);
-    resolveMountainSolid(car.group.position, prevX, prevZ, prevY, 1.4);
+    car.group.position.y += rise * 12 * dt;
+    resolveMountainSolid(car.group.position, prevX, prevZ, prevY, 0.4);
+    frenarSueloDeVuelo(car.group.position, prevX, prevZ, prevY, 0.4, 0);
     for (const rotor of car.rotors) rotor.rotation.y += dt * (state.driving ? 22 : 5);
     touch.jump = false;   // cada toque del botón ⬆️ da impulso de ascenso también en celular
   } else {
@@ -19389,10 +19436,58 @@ function updateEarthquake(dt) {
 // ===================================================================
 const clock = new THREE.Clock();
 let billboardTick = 0, hudTick = 0, minimapTick = 0, lodTick = 0, titleSkip = 0;
+const _lejosTmp = new THREE.Vector3();
+function radioLejos() {
+  const y = player.position.y;
+  if (creativeFlying || state.jetOn) return y > 36 ? 42 : 60;
+  return y > 24 ? 66 : 80;
+}
+function marcarLejos(obj, dist2, lim2) {
+  if (!obj || !obj.userData) return;
+  const ya = !!obj.userData._lejos;
+  const lejos = dist2 > (ya ? lim2 * 0.64 : lim2);
+  if (lejos) {
+    if (obj.visible) {
+      obj.visible = false;
+      obj.userData._ocultoPorLejos = true;
+    }
+    obj.userData._lejos = true;
+  } else if (ya) {
+    obj.userData._lejos = false;
+    if (obj.userData._ocultoPorLejos) {
+      obj.visible = true;
+      obj.userData._ocultoPorLejos = false;
+    }
+  }
+}
+function recortarLejos() {
+  if (state.planet !== 'tierra' || state.country) return;
+  const lim = radioLejos(), lim2 = lim * lim;
+  const px = player.position.x, pz = player.position.z;
+  for (const lista of [npcs, victims, jailFolk, skiVisitors, enemies, helpers, earthBulls, traffic, parkedCars]) {
+    if (!lista) continue;
+    for (const n of lista) {
+      if (!n || !n.position) continue;
+      const dx = n.position.x - px, dz = n.position.z - pz;
+      marcarLejos(n, dx * dx + dz * dz, lim2);
+    }
+  }
+  if ((gameFrame & 3) !== 0) return;
+  const limC = (lim + 28) * (lim + 28);
+  for (let i = 0; i < billboards.length; i++) {
+    const o = billboards[i];
+    if (!o.parent) continue;
+    o.getWorldPosition(_lejosTmp);
+    const dx = _lejosTmp.x - px, dz = _lejosTmp.z - pz;
+    marcarLejos(o, dx * dx + dz * dz, limC);
+  }
+}
 function loop() {
   requestAnimationFrame(loop);
+  gameFrame++;
   if (document.hidden) return;
   const dt = Math.min(clock.getDelta(), 0.05);
+  if (state.running) recortarLejos();
   updateAutoPerf();   // si el juego va lento un par de segundos, baja la calidad solo
   lodTick += dt; if (lodTick >= .25) { syncFarWorld(); lodTick = 0; }
   const onPlatus = state.planet === 'platus';
@@ -19499,7 +19594,7 @@ function loop() {
     if (titleSkip >= .05) { renderer.render(scene, camera); titleSkip = 0; }
     return;
   }
-  for (const e of enemies) swingLimbs(e, dt);
+  for (const e of enemies) if (e.visible) swingLimbs(e, dt);
   updatePlayerCamera(dt);
   billboardTick += dt; if (billboardTick >= .05) { updateBillboards(billboardTick); updateGamerRGB(); billboardTick = 0; }
   updateFloats(dt); updateCoins(dt); updateCombo(dt); updateImpactVoxels(dt);   // feedback de combate y recompensas
@@ -19801,6 +19896,36 @@ function updateVineRide(dt) {
   camera.rotation.y = yaw; camera.rotation.x = pitch;
   return true;
 }
+function frenarSueloDeVuelo(pos, fromX, fromZ, fromY, holgura, minimo) {
+  if (state.underground || state.inCastle || state.inRuins || state.inArena) return;
+  if (state.planet !== 'tierra' || state.country) return;
+  const suelo = mountainHeightAt(pos.x, pos.z);
+  const medio = mountainHeightAt((pos.x + fromX) / 2, (pos.z + fromZ) / 2);
+  let techo = Math.max(suelo, medio);
+  if (inTreasureIsland(pos.x, pos.z)) techo = Math.max(techo, TREASURE_ISLAND.surface);
+  if (minimo != null) techo = Math.max(techo, minimo);
+  const pies = pos.y - holgura;
+  if (pies >= techo - 0.04) return;
+  const antes = fromY - holgura;
+  if (antes >= techo - 0.35) {
+    const avance = Math.hypot(pos.x - fromX, pos.z - fromZ);
+    const salto = techo - antes;
+    if (salto > Math.max(0.55, avance * 1.15)) {
+      pos.x = fromX; pos.z = fromZ; pos.y = fromY;
+      return;
+    }
+  }
+  pos.y = techo + holgura;
+}
+function apoyarTechosDeVuelo(pos, fromY) {
+  const antes = fromY - PLAYER_EYE;
+  for (const o of obstaclesNear(pos.x, pos.z, 0.6)) {
+    if (o.top == null) continue;
+    if (o.country !== undefined && (o.country || null) !== (state.country || null)) continue;
+    if (pos.x < o.minX - 0.15 || pos.x > o.maxX + 0.15 || pos.z < o.minZ - 0.15 || pos.z > o.maxZ + 0.15) continue;
+    if (antes >= o.top - 0.2 && pos.y - PLAYER_EYE < o.top) pos.y = o.top + PLAYER_EYE;
+  }
+}
 function updateCreativeFlight(dt) {
   const lookSpeed = 1.8 * dt;
   if (keys['ArrowLeft']) yaw += lookSpeed;
@@ -19822,16 +19947,12 @@ function updateCreativeFlight(dt) {
     player.position.addScaledVector(forward, az * speed * dt / parts);
     player.position.addScaledVector(rightV, ax * speed * dt / parts);
     player.position.y += extraUp * speed * dt / parts;
-    let minFlyY = -120;
-    if (state.planet === 'tierra' && !state.country) {
-      const suelo = mountainHeightAt(player.position.x, player.position.z);
-      if (suelo < 0) minFlyY = Math.max(minFlyY, suelo + 0.35);
-    }
-    if (state.planet === 'tierra' && inTreasureIsland(player.position.x, player.position.z)) minFlyY = Math.max(minFlyY, TREASURE_ISLAND.surface + 0.4);
-    player.position.y = Math.max(minFlyY, player.position.y);
+    if (player.position.y < -120) player.position.y = -120;
     player.position.x = THREE.MathUtils.clamp(player.position.x, worldWestLimit(), 2100);
     player.position.z = THREE.MathUtils.clamp(player.position.z, -1600, 2100);
     resolveMountainSolid(player.position, px, pz, py, PLAYER_EYE);
+    frenarSueloDeVuelo(player.position, px, pz, py, PLAYER_EYE, null);
+    apoyarTechosDeVuelo(player.position, py);
     resolveCollisions();
   }
   touch.jump = false;
@@ -20295,6 +20416,7 @@ try { if (new URLSearchParams(location.search).has('debug')) {
   timDump.vineState = () => vineRide;
   timDump.paintMap = () => drawMinimap();
   timDump.sueloFirme = (x, z, w, d) => sueloFirme(x, z, w, d);
+  timDump.horno = () => hornoStats;
   timDump.moveLiving = (e, x, z, step) => moveToward(e, { x, z }, step == null ? 1 : step);
   // Revisa que ningún edificio haya quedado encima de una calle, fuera de su
   // manzana, o metido dentro de otro edificio.
@@ -20373,6 +20495,7 @@ try { if (new URLSearchParams(location.search).has('debug')) {
     return { nightTime: +state.nightTime.toFixed(2), enemies: enemies.length };
   };
   timDump.tick = (n, dt) => {
+    gameFrame++;
     const step = dt == null ? .05 : dt;
     for (let i = 0; i < (n || 40); i++) { updateMovement(step); updateWater(step); updateLivingWater(step); }
     updateContextPrompt();
@@ -20678,7 +20801,7 @@ function updateViewmodel(dt) {
 function resolveCollisions() {
   const r = 0.45, p = player.position;
   const pies = p.y - PLAYER_EYE + .05;   // altura de tus pies (para pasar por encima de lo bajo)
-  for (const o of obstacles) {
+  for (const o of obstaclesNear(p.x, p.z, r + 0.2)) {
     if (o.country !== undefined && (o.country || null) !== (state.country || null)) continue;
     if (o.bottom != null && pies + 2.2 < o.bottom) continue;
     if (o.top != null && pies >= o.top) continue;   // vas caminando más arriba que esa pared
@@ -20714,6 +20837,7 @@ function updateBillboards(dt) {
   for (let i = billboards.length - 1; i >= 0; i--) {
     const o = billboards[i];
     if (!o.parent) { billboards.splice(i, 1); continue; }
+    if (o.userData._lejos || !o.visible) continue;
     if (o.userData.billboard) { o.quaternion.copy(camera.quaternion); continue; }      // carteles/barras: miran de frente
     if (!o.userData.spriteBillboard) continue;
     o.rotation.y = Math.atan2(camera.position.x - o.position.x, camera.position.z - o.position.z);  // figuras: giran hacia ti
@@ -21135,7 +21259,145 @@ function renderHUD() {
 
 // (el ajuste de tamaño se maneja arriba con la función resize())
 
+let hornoStats = null;
+function fusionarMallas(lista) {
+  const v = new THREE.Vector3(), nrm = new THREE.Vector3(), nm = new THREE.Matrix3();
+  let total = 0;
+  const partes = [];
+  for (const mesh of lista) {
+    const geo = mesh.geometry;
+    const src = geo.index ? geo.toNonIndexed() : geo;
+    const pos = src.attributes.position;
+    if (!pos) { if (src !== geo) src.dispose(); continue; }
+    partes.push({ mesh, src, propio: src !== geo, pos, nor: src.attributes.normal, uv: src.attributes.uv });
+    total += pos.count;
+  }
+  if (total < 3 || partes.length < 2) {
+    for (const p of partes) if (p.propio) p.src.dispose();
+    return null;
+  }
+  const positions = new Float32Array(total * 3);
+  const normals = new Float32Array(total * 3);
+  const uvs = new Float32Array(total * 2);
+  let o = 0;
+  for (const p of partes) {
+    nm.getNormalMatrix(p.mesh.matrixWorld);
+    const pos = p.pos, nor = p.nor, uv = p.uv;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(p.mesh.matrixWorld);
+      const k = (o + i) * 3;
+      positions[k] = v.x; positions[k + 1] = v.y; positions[k + 2] = v.z;
+      if (nor) nrm.fromBufferAttribute(nor, i).applyMatrix3(nm).normalize();
+      else nrm.set(0, 1, 0);
+      normals[k] = nrm.x; normals[k + 1] = nrm.y; normals[k + 2] = nrm.z;
+      uvs[(o + i) * 2] = uv ? uv.getX(i) : 0;
+      uvs[(o + i) * 2 + 1] = uv ? uv.getY(i) : 0;
+    }
+    o += pos.count;
+    p.mesh.userData._horneado = true;
+    if (p.propio) p.src.dispose();
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  g.computeBoundingSphere();
+  const malla = new THREE.Mesh(g, partes[0].mesh.material);
+  malla.matrixAutoUpdate = false;
+  malla.castShadow = !preferLowPerf;
+  malla.receiveShadow = true;
+  malla.userData.horno = true;
+  return malla;
+}
+function hornearMundoQuieto() {
+  const dinamico = new Set();
+  const marca = (o) => { if (o && o.traverse) o.traverse(c => dinamico.add(c)); };
+  marca(player); marca(camera); marca(playerAvatar); marca(viewmodel);
+  marca(dad); marca(mom); marca(butler); marca(grassField); marca(hotelLobby);
+  for (const lista of [npcs, victims, police, jailFolk, enemies, helpers, earthBulls, skiVisitors, traffic, parkedCars, oceanFish, oceanSharks, oceanWaves, campfires, miners]) {
+    if (!lista) continue;
+    for (const item of lista) marca(item && (item.group || item));
+  }
+  if (typeof vehicles !== 'undefined') for (const v of vehicles) marca(v.group);
+  for (const r of parkRides) marca(r.obj);
+  for (const o of placed) if (o.mesh) marca(o.mesh);
+  if (boat) marca(boat.group);
+  scene.updateMatrixWorld(true);
+  const grupos = new Map();
+  const candidatos = [];
+  const punto = new THREE.Vector3();
+  scene.traverse(mesh => {
+    if (!mesh.isMesh || mesh.isInstancedMesh || mesh.isSkinnedMesh) return;
+    if (dinamico.has(mesh)) return;
+    let p = mesh;
+    while (p) {
+      if (p.visible === false || dinamico.has(p)) return;
+      const ud = p.userData;
+      if (ud && (ud.billboard || ud.spriteBillboard || ud.limbs || ud.noBake || ud.moving)) return;
+      p = p.parent;
+    }
+    const geo = mesh.geometry;
+    const mat = mesh.material;
+    if (!geo || !geo.attributes || !geo.attributes.position || Array.isArray(mat) || !mat) return;
+    if (mat.transparent || (mat.opacity != null && mat.opacity < 0.99)) return;
+    if (geo.attributes.position.count > 2500 || geo.attributes.color || mat.vertexColors) return;
+    candidatos.push(mesh);
+  });
+  for (const mesh of candidatos) {
+    const mat = mesh.material;
+    punto.setFromMatrixPosition(mesh.matrixWorld);
+    const cx = Math.floor(punto.x / 200), cz = Math.floor(punto.z / 200);
+    const col = mat.color ? mat.color.getHex() : 0;
+    const em = mat.emissive ? mat.emissive.getHex() : 0;
+    const key = mat.type + '|' + col + '|' + em + '|' + (mat.roughness || 0) + '|' + (mat.metalness || 0) + '|' + (mat.map ? mat.map.uuid : '') + '|' + cx + '|' + cz;
+    let list = grupos.get(key);
+    if (!list) grupos.set(key, list = []);
+    list.push(mesh);
+  }
+  const root = new THREE.Group();
+  root.name = 'mundo-horneado';
+  root.matrixAutoUpdate = false;
+  let piezas = 0, mallas = 0;
+  const partir = (list) => {
+    let lote = [], cuenta = 0;
+    const volcar = () => {
+      if (lote.length >= 2) {
+        const merged = fusionarMallas(lote);
+        if (merged) { root.add(merged); mallas++; piezas += lote.length; }
+      }
+      lote = []; cuenta = 0;
+    };
+    for (const mesh of list) {
+      const c = mesh.geometry.index ? mesh.geometry.index.count : mesh.geometry.attributes.position.count;
+      if (cuenta > 50000 && lote.length) volcar();
+      lote.push(mesh); cuenta += c;
+    }
+    volcar();
+  };
+  for (const list of grupos.values()) partir(list);
+  const restos = new Map();
+  for (const mesh of candidatos) {
+    if (mesh.userData._horneado) continue;
+    const mat = mesh.material;
+    punto.setFromMatrixPosition(mesh.matrixWorld);
+    const cx = Math.floor(punto.x / 800), cz = Math.floor(punto.z / 800);
+    const col = mat.color ? mat.color.getHex() : 0;
+    const em = mat.emissive ? mat.emissive.getHex() : 0;
+    const key = mat.type + '|' + col + '|' + em + '|' + (mat.roughness || 0) + '|' + (mat.metalness || 0) + '|' + (mat.map ? mat.map.uuid : '') + '|' + cx + '|' + cz;
+    let list = restos.get(key);
+    if (!list) restos.set(key, list = []);
+    list.push(mesh);
+  }
+  for (const list of restos.values()) partir(list);
+  scene.add(root);
+  earthMeshes.push(root);
+  for (const mesh of candidatos) {
+    if (mesh.userData._horneado) mesh.removeFromParent();
+  }
+  hornoStats = { piezas, mallas, candidatos: candidatos.length };
+}
 buildGrassField();   // pasto 3D (1 draw call) alrededor del jugador
+hornearMundoQuieto();
 loop();
 </script>
 </body>
