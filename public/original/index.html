@@ -21162,8 +21162,21 @@ function asegurarManoIzquierdaVista() {
   viewmodel.userData.manoLavado = g;
   return g;
 }
+function asegurarAguaLavado() {
+  if (playerAvatar.userData.aguaLavado) return playerAvatar.userData.aguaLavado;
+  const g = new THREE.Group();
+  for (let i = 0; i < 12; i++) {
+    const d = new THREE.Mesh(new THREE.SphereGeometry(i % 3 === 0 ? .045 : .026, 6, 5), new THREE.MeshBasicMaterial({ color: 0x7dd3fc, transparent: true, opacity: .88 }));
+    g.add(d);
+  }
+  playerAvatar.add(g);
+  g.visible = false;
+  playerAvatar.userData.aguaLavado = g;
+  return g;
+}
 function soltarManosLavado() {
   if (playerAvatar.userData.manosLavado) playerAvatar.userData.manosLavado.visible = false;
+  if (playerAvatar.userData.aguaLavado) playerAvatar.userData.aguaLavado.visible = false;
   if (viewmodel.userData.manoLavado) viewmodel.userData.manoLavado.visible = false;
   const l = playerAvatar.userData.limbs;
   if (l) { l.armL.position.z = 0; l.armR.position.z = 0; }
@@ -21262,21 +21275,52 @@ function alternarCamaraLavado() {
 }
 function encuadrarLavado() {
   const manos = asegurarManosLavado();
+  const agua = asegurarAguaLavado();
   manos.visible = true;
+  agua.visible = true;
   viewmodel.visible = false;
   if (viewmodel.userData.manoLavado) viewmodel.userData.manoLavado.visible = false;
   playerAvatar.visible = true;
   playerAvatar.position.set(player.position.x, 0, player.position.z);
-  playerAvatar.rotation.set(0, yaw, 0);
+  playerAvatar.rotation.set(0, yaw + Math.PI, 0);
+  const t = performance.now() * .011;
+  const frota = Math.sin(t);
   const l = playerAvatar.userData.limbs;
   if (l) {
-    l.armL.position.z = .2; l.armR.position.z = .2;
-    l.armL.rotation.set(-2.2, .25, 1.05);
-    l.armR.rotation.set(-2.2, -.25, -1.05);
+    l.armL.position.z = .1; l.armR.position.z = .1;
+    l.armL.rotation.set(-1.7 + frota * .28, .4, .78 + frota * .22);
+    l.armR.rotation.set(-1.7 - frota * .28, -.4, -.78 - frota * .22);
   }
-  const fx = Math.sin(yaw), fz = Math.cos(yaw);
-  camera.position.set(player.position.x + fx * .78, player.position.y + .05, player.position.z + fz * .78);
-  camera.lookAt(player.position.x, player.position.y + .15, player.position.z);
+  const pares = [[0, 1, -1], [2, 3, 1]];
+  for (const [mi, di, lado] of pares) {
+    const x = lado * (.06 - frota * .05);
+    const y = 1.88 + Math.sin(t + lado) * .035;
+    const z = .28 + Math.cos(t) * .025;
+    if (manos.children[mi]) manos.children[mi].position.set(x, y, z);
+    if (manos.children[di]) manos.children[di].position.set(x, y + .07, z + .08);
+  }
+  agua.children.forEach((d, i) => {
+    const u = (t * .18 + i / agua.children.length) % 1;
+    const lado = i % 2 === 0 ? -1 : 1;
+    d.position.set(lado * .055 * (1 - u * .35), 1.55 + u * .38, .58 - u * .32);
+    d.material.opacity = .28 + (1 - u) * .62;
+  });
+  const c = condena.celda;
+  const haciaX = Math.sin(yaw), haciaZ = Math.cos(yaw);
+  let puesto = null, hueco = -1e9;
+  for (const signo of [1, -1]) {
+    const lx = haciaZ * signo, lz = -haciaX * signo;
+    const x = player.position.x + haciaX * .4 + lx * 1.65;
+    const z = player.position.z + haciaZ * .4 + lz * 1.65;
+    const libre = Math.min(x - c.minX, c.maxX - x, z - c.minZ, c.maxZ - z);
+    if (libre > hueco) { hueco = libre; puesto = { x, z }; }
+  }
+  camera.position.set(
+    THREE.MathUtils.clamp(puesto.x, c.minX + .35, c.maxX - .35),
+    player.position.y + .42,
+    THREE.MathUtils.clamp(puesto.z, c.minZ + .35, c.maxZ - .35)
+  );
+  camera.lookAt(player.position.x, player.position.y - .08, player.position.z);
 }
 function encuadrarCondena(dt) {
   if (condena.camLavado) { encuadrarLavado(); return; }
@@ -21320,7 +21364,7 @@ function encuadrarCondena(dt) {
 function promptCondena() {
   const c = condena.celda;
   const seg = Math.max(0, Math.ceil(condena.left));
-  if (condena.lavando || condena.camLavado) return { key: 'F5', touch: '💧', text: 'Te lavas la cara · se ven las manos · celda ' + c.n };
+  if (condena.lavando || condena.camLavado) return { key: 'F5', touch: '💧', text: 'Te lavas la cara · las manos se refriegan y cae agua · celda ' + c.n };
   if (condena.pose === 'acostado') return { key: 'E', touch: '🛏️', text: 'Levantarte de la cama · celda ' + c.n + ' · ' + seg + ' s' };
   if (condena.pose === 'sentado') return { key: 'E', touch: '🛏️', text: 'Acostarte en la cama · celda ' + c.n };
   if (Math.hypot(player.position.x - c.lavabo.x, player.position.z - c.lavabo.z) < 1.7) return { key: 'E · F5', touch: '💧', text: 'Lavarte la cara en el lavamanos · F5 pone esa cámara' };
