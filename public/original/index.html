@@ -7199,6 +7199,7 @@ function aplanarBultos(x, z, w, d, y, opts) {
   asegurarMallas();
   const centroEsNieve = montanasEsquiListas && sobreMontanaDeEsqui(x, z);
   for (const mesh of mallasDeSuelo) {
+    if (mesh.userData && mesh.userData.nievePista) continue;
     const geo = mesh.geometry;
     const p = geo.parameters;
     if (!p || p.widthSegments == null || !geo.attributes.position) continue;
@@ -8380,6 +8381,102 @@ function buildSkiRoad() {
     addObstacle(sx, SKI_RESORT.gate.z - 5, 0.6, 0.6, 4, 'poste');
   }
 }
+const MANTOS_NIEVE = [
+  { x: SKI_RESORT.x, z: SKI_RESORT.z + 250, hw: 180, hd: 110 },
+  { x: SKI_RESORT.x, z: SKI_RESORT.z - 430, hw: 170, hd: 110 },
+];
+function ponerMantoDeNieve() {
+  mallasDeSuelo = null;
+  for (const manto of MANTOS_NIEVE) {
+    const w = manto.hw * 2, d = manto.hd * 2;
+    const segX = Math.max(12, Math.round(w / 6));
+    const segZ = Math.max(12, Math.round(d / 6));
+    const geo = new THREE.PlaneGeometry(w, d, segX, segZ);
+    geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position;
+    const colors = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const x = manto.x + pos.getX(i);
+      const z = manto.z + pos.getZ(i);
+      const vis = alturaMalla(x, z);
+      const anal = groundHeightAt(x, z);
+      const base = vis == null ? anal : Math.max(vis, anal);
+      pos.setY(i, Math.max(0, base) + 0.2);
+      colors[i * 3] = 1;
+      colors[i * 3 + 1] = 1;
+      colors[i * 3 + 2] = 1;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.86, metalness: 0,
+      polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -24,
+    }));
+    mesh.position.set(manto.x, 0, manto.z);
+    mesh.receiveShadow = true;
+    mesh.renderOrder = 3;
+    mesh.userData.sueloReal = true;
+    mesh.userData.nievePista = true;
+    mesh.material.side = THREE.DoubleSide;
+    skiResortGroup.add(mesh);
+  }
+  mallasDeSuelo = null;
+  pintarSueloDeNieve();
+}
+function mundoDelVertice(mesh, attr, i) {
+  const rotado = Math.abs(mesh.rotation.x) > 1;
+  const x = mesh.position.x + attr.getX(i);
+  const z = rotado ? mesh.position.z - attr.getY(i) : mesh.position.z + attr.getZ(i);
+  return { x, z };
+}
+function cercaDeManto(x, z) {
+  for (const m of MANTOS_NIEVE) {
+    if (Math.abs(x - m.x) <= m.hw + 28 && Math.abs(z - m.z) <= m.hd + 28) return true;
+  }
+  return false;
+}
+function pintarSueloDeNieve() {
+  asegurarMallas();
+  for (const suelo of mallasDeSuelo) {
+    if (suelo.userData && suelo.userData.nievePista) continue;
+    const attr = suelo.geometry && suelo.geometry.attributes && suelo.geometry.attributes.position;
+    const col = suelo.geometry && suelo.geometry.attributes && suelo.geometry.attributes.color;
+    if (!attr || !col) continue;
+    let cambio = false;
+    for (let i = 0; i < attr.count; i++) {
+      const p = mundoDelVertice(suelo, attr, i);
+      if (!cercaDeManto(p.x, p.z)) continue;
+      col.setXYZ(i, 1, 1, 1);
+      cambio = true;
+    }
+    if (cambio) col.needsUpdate = true;
+  }
+}
+function alzarMantoDeNieve() {
+  const mantos = [];
+  scene.traverse(o => {
+    if (!o.userData || !o.userData.nievePista) return;
+    o.userData.sueloReal = false;
+    mantos.push(o);
+  });
+  mallasDeSuelo = null;
+  for (const mesh of mantos) {
+    const pos = mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = mesh.position.x + pos.getX(i);
+      const z = mesh.position.z + pos.getZ(i);
+      const vis = alturaMalla(x, z);
+      const anal = groundHeightAt(x, z);
+      const base = vis == null ? anal : Math.max(vis, anal);
+      pos.setY(i, Math.max(0, base) + 0.28);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+    mesh.userData.sueloReal = true;
+  }
+  mallasDeSuelo = null;
+  pintarSueloDeNieve();
+}
 function buildSkiResort() {
   // Cerro alto, con nieve desde la zona alta y una ladera continua para no atravesarla.
   mcMountain(skiResortGroup, SKI_RESORT.x, SKI_RESORT.z, SKI_RESORT.r, 300, 0xf1f5f9, 0xffffff, 28, 'tierra', { grass: 0xffffff, soil: 0xf8fafc, leaf: 0xe2e8f0, trees: 8, ski: true });
@@ -8508,6 +8605,7 @@ function buildSkiResort() {
     const skiMat = mat(0x111827), leftSki = new THREE.Mesh(smoothBox(.12, .06, 1.7), skiMat), rightSki = leftSki.clone(); leftSki.position.set(-.28, .04, .15); rightSki.position.set(.28, .04, .15); n.add(leftSki, rightSki);
     n.userData.skiLane = lane; n.userData.skiT = t; n.userData.skiSide = side; n.userData.skiSpeed = .018 + Math.random() * .045; n.userData.skiPhase = 'down'; n.userData.skiBob = Math.random() * 6.28; n.position.set(x, skiSlopeHeight(x, z), z); skiVisitors.push(n); skiResortGroup.add(n);
   }
+  ponerMantoDeNieve();
 }
 function updateSkiVisitors(dt) {
   for (const n of skiVisitors) {
@@ -9705,7 +9803,14 @@ buildCondominio();
 const WORLD_PLACES = { hotels: [], condominios: [], casas: [] };
 const CIUDADES = [{ name: 'Ciudad principal', x: 14, z: 8, principal: true }];
 // La nieve de un centro de esquí no es sitio de ciudad: el cerro se queda, la ciudad no.
+function enMantoDeNieve(x, z) {
+  for (const m of MANTOS_NIEVE) {
+    if (Math.abs(x - m.x) <= m.hw && Math.abs(z - m.z) <= m.hd) return true;
+  }
+  return false;
+}
 function sobreMontanaDeEsqui(x, z) {
+  if (enMantoDeNieve(x, z)) return true;
   if (skiSlopeHeight(x, z) > 0.4) return true;
   let cerca = false;
   for (const c of CENTROS_ESQUI) {
@@ -9979,6 +10084,7 @@ function poblarAlrededor(cx, cz, anillos, gente) {
   }
 })();
 cerrarPisos();
+alzarMantoDeNieve();
 
 const HOTEL_IN = { x: 1980, z: -1480 };
 let hotelLobby = null;
