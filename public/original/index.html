@@ -13539,6 +13539,7 @@ function applyLivingY(e, dt) {
   if (!e) return;
   const ud = e.userData || (e.userData = {});
   if (ud.fly || ud.ufo) { e.position.y = flyerChaseY(e); return; }
+  if (ud.saltoValla) return;
   if (ud.mineHole || ud.resting) return;
   if (state.inFlight && (e === dad || e === pet || e === petAlien || helpers.includes(e))) return;
   const isHoverPet = e === petAlien || eggPets.includes(e);
@@ -13574,7 +13575,56 @@ function updateLivingWater(dt) {
   for (const p of tennis.players) add(p);
 }
 function eVisible(e) { return !!(e && e.visible !== false); }
+function delOtroLadoDeLaValla(o, desde, hacia) {
+  const mx = (o.minX + o.maxX) / 2, mz = (o.minZ + o.maxZ) / 2;
+  const aLoLargo = (o.maxX - o.minX) >= (o.maxZ - o.minZ);
+  if (aLoLargo) return (desde.z - mz) * (hacia.z - mz) < 0;
+  return (desde.x - mx) * (hacia.x - mx) < 0;
+}
+function intentarSaltarValla(e, target) {
+  if (!e || !e.userData || e.userData.saltoValla || (e.userData.saltoVallaCd || 0) > 0) return false;
+  if (!helpers.includes(e)) return false;
+  const dx = target.x - e.position.x, dz = target.z - e.position.z;
+  const len = Math.hypot(dx, dz) || 1;
+  const ux = dx / len, uz = dz / len;
+  let valla = null;
+  for (let d = 0.25; d <= 1.8; d += 0.25) {
+    const o = obstacleAt(e.position.x + ux * d, e.position.z + uz * d, 0, 0.15);
+    if (o && o.grupo === 'valla' && delOtroLadoDeLaValla(o, e.position, target)) { valla = o; break; }
+  }
+  if (!valla) return false;
+  let x1 = e.position.x + ux * 1.5, z1 = e.position.z + uz * 1.5;
+  for (let d = 0.55; d <= 2.6; d += 0.2) {
+    const x = e.position.x + ux * d, z = e.position.z + uz * d;
+    const fuera = x < valla.minX - 0.2 || x > valla.maxX + 0.2 || z < valla.minZ - 0.2 || z > valla.maxZ + 0.2;
+    if (fuera && !obstacleAt(x, z, 0, 0.3)) { x1 = x; z1 = z; break; }
+  }
+  const y0 = mountainHeightAt(e.position.x, e.position.z);
+  const y1 = mountainHeightAt(x1, z1);
+  e.userData.saltoValla = {
+    t: 0, dur: 0.48,
+    x0: e.position.x, z0: e.position.z, x1, z1, y0, y1,
+    alto: Math.max(1.25, (valla.top || 1.35) - Math.min(y0, y1) + 0.4),
+  };
+  return true;
+}
+function avanzarSaltoValla(e, dt) {
+  const s = e.userData.saltoValla;
+  if (!s) return false;
+  s.t += dt || 0.016;
+  const u = Math.min(1, s.t / s.dur);
+  e.position.x = s.x0 + (s.x1 - s.x0) * u;
+  e.position.z = s.z0 + (s.z1 - s.z0) * u;
+  e.position.y = s.y0 + (s.y1 - s.y0) * u + Math.sin(u * Math.PI) * s.alto;
+  if (u >= 1) {
+    e.position.x = s.x1; e.position.z = s.z1; e.position.y = s.y1;
+    e.userData.saltoValla = null;
+    e.userData.saltoVallaCd = 0.2;
+  }
+  return true;
+}
 function moveToward(e, target, step) {
+  if (e.userData && e.userData.saltoValla) return;
   if (e.userData && (e.userData.slow || 0) > 0) { e.userData.slow = Math.max(0, e.userData.slow - 0.016); step *= 0.38; }
   const dx = target.x - e.position.x, dz = target.z - e.position.z; const len = Math.hypot(dx, dz) || 1;
   const vuela = !!(e.userData && (e.userData.fly || e.userData.ufo));
@@ -13584,13 +13634,22 @@ function moveToward(e, target, step) {
   for (let i = 0; i < parts; i++) {
     const px = e.position.x, pz = e.position.z;
     e.position.x += (dx / len) * sub; e.position.z += (dz / len) * sub;
-    if (!ignora && resolveLivingWall(e.position, px, pz, livingRadius(e)) === 'stop') break;
+    if (!ignora) {
+      const resultado = resolveLivingWall(e.position, px, pz, livingRadius(e));
+      if (resultado) {
+        const antes = Math.hypot(target.x - px, target.z - pz);
+        const despues = Math.hypot(target.x - e.position.x, target.z - e.position.z);
+        if (despues > antes - 0.015 && intentarSaltarValla(e, target)) break;
+        if (resultado === 'stop') break;
+      }
+    }
     const pies = e.position.y || 0;
     const entraEnTierra = groundHeightAt(e.position.x, e.position.z) > pies + 0.35;
     if ((!vuela && terrenoAbrupto(px, pz, e.position.x, e.position.z)) || (vuela && entraEnTierra)) {
       e.position.x = px; e.position.z = pz; break;
     }
   }
+  if (e.userData && e.userData.saltoValla) return;
   const flyHigh = e.userData && (e.userData.fly || e.userData.ufo);
   if (flyHigh) e.position.y = flyerChaseY(e);
   else if (!waterZoneAt(e.position.x, e.position.z) || livingIgnoresWater(e)) {
@@ -13891,6 +13950,8 @@ function updateHelpers(dt) {
   const cols = Math.min(5, Math.max(3, Math.ceil(Math.sqrt(helpers.length))));
   for (let hi = 0; hi < helpers.length; hi++) {
     const h = helpers[hi];
+    h.userData.saltoVallaCd = Math.max(0, (h.userData.saltoVallaCd || 0) - dt);
+    if (h.userData.saltoValla) { avanzarSaltoValla(h, dt); swingLimbs(h, dt); continue; }
     let near = null, nd = 14;
     if (state.phase === 'NIGHT') for (const e of enemies) {  const d = dist2D(h.position, e.position); if (d < nd) { nd = d; near = e; } }
     else for (const e of enemies) { if (!e.userData.dirtZombie) continue; const d = dist2D(h.position, e.position); if (d < nd) { nd = d; near = e; } }
@@ -23038,7 +23099,7 @@ try { if (new URLSearchParams(location.search).has('debug')) {
   timDump.tick = (n, dt) => {
     gameFrame++;
     const step = dt == null ? .05 : dt;
-    for (let i = 0; i < (n || 40); i++) { updateMovement(step); updateWater(step); updateLivingWater(step); }
+    for (let i = 0; i < (n || 40); i++) { updateMovement(step); updateHelpers(step); updateWater(step); updateLivingWater(step); }
     updateContextPrompt();
     updatePlayerCamera(step);
     renderer.render(scene, camera);
