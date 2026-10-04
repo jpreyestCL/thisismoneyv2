@@ -19858,25 +19858,25 @@ function trySkiResort() {
       : '🪝 Subiendo en el arrastre · espera arriba');
     return true;
   }
-  if (state.skiing) { quitarEsquis(); return true; }
+  // Un apretón alterna. Puestos: se quitan al tiro y quedas en el suelo.
+  // Quitados: ese apretón los pone. No vuelve a decir que te los quitaste.
+  if (state.skiGear && (state.skiing || state.skiGearWorn)) { quitarEsquis(); return true; }
   if (dg < 14) {
     if (!state.skiPass) {
       if (state.money < 500) { toast('🎫 La tarjeta del centro de esquí cuesta $500'); return true; }
       state.money -= 500; state.skiPass = true; addMoney(0); toast('🎫 ¡Tarjeta de acceso comprada! Ya puedes subir a las pistas'); saveGame(); return true;
     }
     if (!state.skiGear) { toast('⛷️ Compra esquís o snowboard en la caseta azul'); return true; }
-    toggleSkiing(!state.skiing); return true;
   }
   if (de < 10 || de2 < 10) {
     if (!state.skiPass) { toast('🎫 Primero compra la tarjeta en la entrada · $500'); return true; }
-    if (state.skiGear) { toast('⛷️ Ya tienes ' + (state.skiGear === 'skis' ? 'esquís' : 'un snowboard') + ' · E para esquiar o sube por un andarivel'); return true; }
-    const gear = de2 < de ? 'snowboard' : 'skis';
-    if (state.money < 200) { toast('💸 Los esquís cuestan $200'); return true; }
-    state.money -= 200; state.skiGear = gear; state.skiGearWorn = true; toast((gear === 'snowboard' ? '🏂 Compraste snowboard' : '⛷️ Compraste esquís') + ' por $200 · E en la entrada o sube el andarivel'); saveGame(); return true;
+    if (!state.skiGear) {
+      const gear = de2 < de ? 'snowboard' : 'skis';
+      if (state.money < 200) { toast('💸 Los esquís cuestan $200'); return true; }
+      state.money -= 200; state.skiGear = gear; state.skiGearWorn = true; toast((gear === 'snowboard' ? '🏂 Compraste snowboard' : '⛷️ Compraste esquís') + ' por $200 · E en la entrada o sube el andarivel'); saveGame(); return true;
+    }
   }
-  if (state.skiPass && state.skiGear && (state.skiGearWorn || state.skiing || inSkiTopHollow() || mountainHeightAt(player.position.x, player.position.z) > 20)) {
-    toggleSkiing(!state.skiing); return true;
-  }
+  if (state.skiPass && state.skiGear) { ponerEsquis(); return true; }
   return false;
 }
 // Vida del auto: los monstruos cercanos lo dañan; si llega a 0 se destruye
@@ -22717,20 +22717,45 @@ function updateSkiMovement(dt) {
   return true;
 }
 let skiRemoveHold = 0, skiQuitando = false, skiAccessWarnAt = 0, skiJumpVy = 0, skiJumpHeld = false, skiTrickActive = false, skiRampBoost = 0, skiVelX = 0, skiVelZ = 0, skiRampRide = null;
+function pisoDeEsqui() {
+  let piso = mountainHeightAt(player.position.x, player.position.z);
+  const rampa = rampaBajoEsqui(player.position.x, player.position.z);
+  if (rampa && rampa.surface > piso) piso = rampa.surface;
+  return piso;
+}
+function plantarEnSueloDeEsqui() {
+  if (creativeFlying) return;
+  vy = 0;
+  grounded = true;
+  skiJumpVy = 0;
+  player.position.y = pisoDeEsqui() + PLAYER_EYE;
+}
+function ponerEsquis() {
+  if (!state.skiGear || state.skiing || state.skiGearWorn) return false;
+  state.skiGearWorn = true;
+  state.skiing = false;
+  stopSkiCarve();
+  skiTrickActive = false;
+  plantarEnSueloDeEsqui();
+  const visual = ensurePlayerSkiVisual();
+  soltarFlexionEsquis(visual);
+  visual.rotation.set(0, 0, 0);
+  visual.position.x = 0;
+  visual.visible = true;
+  skiRemoveHold = 0;
+  skiQuitando = true;
+  toast('⛷️ Te pusiste los ' + (state.skiGear === 'snowboard' ? 'snowboard' : 'esquís'));
+  saveGame();
+  return true;
+}
 function quitarEsquis() {
+  if (!state.skiing && !state.skiGearWorn) return false;
   state.skiing = false;
   state.skiGearWorn = false;
   stopSkiCarve();
   skiJumpVy = 0;
   skiTrickActive = false;
-  if (!creativeFlying) {
-    vy = 0;
-    grounded = true;
-    let piso = mountainHeightAt(player.position.x, player.position.z);
-    const rampa = rampaBajoEsqui(player.position.x, player.position.z);
-    if (rampa && rampa.surface > piso) piso = rampa.surface;
-    player.position.y = piso + PLAYER_EYE;
-  }
+  plantarEnSueloDeEsqui();
   const visual = ensurePlayerSkiVisual();
   soltarFlexionEsquis(visual);
   visual.rotation.set(0, 0, 0);
@@ -22740,15 +22765,12 @@ function quitarEsquis() {
   skiQuitando = true;
   toast('🥾 Te quitaste los ' + (state.skiGear === 'snowboard' ? 'snowboard' : 'esquís'));
   saveGame();
+  return true;
 }
-function updateSkiGearHold(dt) {
-  if (!state.skiGear) { skiRemoveHold = 0; return; }
-  if (!keys['KeyE']) { skiQuitando = false; skiRemoveHold = Math.max(0, skiRemoveHold - dt * 2); return; }
-  if (state.skiLiftRide) { skiRemoveHold = 0; return; }
-  if (state.skiing) { quitarEsquis(); return; }
-  if (skiQuitando) return;
-  skiRemoveHold += dt;
-  if (skiRemoveHold >= 1.15) { state.skiGearWorn = !state.skiGearWorn; skiRemoveHold = 0; const visual = ensurePlayerSkiVisual(); visual.visible = state.skiGearWorn; toast(state.skiGearWorn ? '⛷️ Te pusiste los ' + (state.skiGear === 'snowboard' ? 'snowboard' : 'esquís') : '🥾 Te quitaste los ' + (state.skiGear === 'snowboard' ? 'snowboard' : 'esquís')); saveGame(); }
+function updateSkiGearHold() {
+  // El apretón ya alternó en trySkiResort. Mantener E no repite el aviso
+  // ni vuelve a quitarlos en el mismo gesto (aunque el descenso automático arranque).
+  if (!keys['KeyE']) { skiQuitando = false; skiRemoveHold = 0; }
 }
 function updateVineRide(dt) {
   if (!vineRide) return false;
@@ -23091,7 +23113,7 @@ function updateMovement(dt) {
     noteIslandArrival('🏝️ Llegaste a la ISLA DEL TESORO');
   }
   if (choqueCalma > 0) choqueCalma = Math.max(0, choqueCalma - dt);
-  if (choqueCalma <= 0 && state.skiGearWorn && !state.skiing && !state.skiLiftRide && !caidaLeve && !rescate && inSkiResort() && !inSkiTopHollow()) {
+  if (choqueCalma <= 0 && !skiQuitando && state.skiGearWorn && !state.skiing && !state.skiLiftRide && !caidaLeve && !rescate && inSkiResort() && !inSkiTopHollow()) {
     const prevSnow = mountainHeightAt(moveStartX, moveStartZ), nextSnow = mountainHeightAt(player.position.x, player.position.z);
     if (nextSnow > 85 && nextSnow > prevSnow + 1.8) {
       player.position.x = moveStartX; player.position.z = moveStartZ;
