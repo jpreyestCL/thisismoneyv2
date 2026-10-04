@@ -9469,6 +9469,23 @@ buildCondominio();
 // Más condominios, casas y hoteles fuera de la ciudad. Cada uno lleva su caja de choque.
 const WORLD_PLACES = { hotels: [], condominios: [], casas: [] };
 const CIUDADES = [{ name: 'Ciudad principal', x: 14, z: 8, principal: true }];
+// La nieve de un centro de esquí no es sitio de ciudad: el cerro se queda, la ciudad no.
+function sobreMontanaDeEsqui(x, z) {
+  if (skiSlopeHeight(x, z) > 0.4) return true;
+  let cerca = false;
+  for (const c of CENTROS_ESQUI) {
+    const px = c.picoX != null ? c.picoX : c.x;
+    const pz = c.picoZ != null ? c.picoZ : c.z;
+    if (Math.hypot(x - c.x, z - c.z) < 280 || Math.hypot(x - px, z - pz) < 200) { cerca = true; break; }
+  }
+  if (!cerca) return false;
+  for (const m of mountains) {
+    if (m.ski || m.planet !== 'tierra') continue;
+    if (Math.abs(x - m.x) > m.r || Math.abs(z - m.z) > m.r) continue;
+    if (mountainProfile(m, x - m.x, z - m.z) > 0.8) return true;
+  }
+  return false;
+}
 function sitioConstruible(x, z, margen, ancho, fondo) {
   const h = groundHeightAt(x, z);
   if (h < 0.7 || h > 18) return false;
@@ -9476,10 +9493,12 @@ function sitioConstruible(x, z, margen, ancho, fondo) {
   if (lakeAt(x, z) || cityPondAt(x, z)) return false;
   if (lakeAt(x + ancho / 2, z) || lakeAt(x - ancho / 2, z) || lakeAt(x, z + fondo / 2) || lakeAt(x, z - fondo / 2)) return false;
   if (Math.hypot(x - SKI_RESORT.x, z - SKI_RESORT.z) < SKI_RESORT.r + 50) return false;
+  if (sobreMontanaDeEsqui(x, z)) return false;
   if (Math.hypot(x - TREASURE_ISLAND.x, z - TREASURE_ISLAND.z) < 280) return false;
   if (x < -180 && z > -430 && z < 90) return false;
   const muestras = [[0, 0], [ancho / 2, 0], [-ancho / 2, 0], [0, fondo / 2], [0, -fondo / 2]];
   for (const [dx, dz] of muestras) {
+    if (sobreMontanaDeEsqui(x + dx, z + dz)) return false;
     if (Math.abs(groundHeightAt(x + dx, z + dz) - h) > 3.2) return false;
     if (distritoEn(x + dx, z + dz, 4) || enCalle(x + dx, z + dz, 3)) return false;
   }
@@ -9624,6 +9643,7 @@ function sitioPueblo(x, z) {
   if (lakeAt(x + 5, z) || lakeAt(x - 5, z) || lakeAt(x, z + 5) || lakeAt(x, z - 5)) return false;
   if (x < -200 && z > -450 && z < 100) return false;
   if (Math.hypot(x - SKI_RESORT.x, z - SKI_RESORT.z) < 190) return false;
+  if (sobreMontanaDeEsqui(x, z) || sobreMontanaDeEsqui(x + 4, z) || sobreMontanaDeEsqui(x, z + 4)) return false;
   if (Math.hypot(x - TREASURE_ISLAND.x, z - TREASURE_ISLAND.z) < 260) return false;
   const h = groundHeightAt(x, z);
   if (h < 0.15 || h > 28) return false;
@@ -22174,6 +22194,7 @@ try { if (new URLSearchParams(location.search).has('debug')) {
   };
   timDump.setFly = (v) => { creativeFlying = !!v; if (!v) grounded = false; };
   timDump.ciudades = () => CIUDADES;
+  timDump.sobreNieveEsqui = (x, z) => sobreMontanaDeEsqui(x, z);
   timDump.vineChains = () => VINE_CHAINS;
   timDump.volverACasa = () => volverACasa();
   timDump.vineState = () => vineRide;
