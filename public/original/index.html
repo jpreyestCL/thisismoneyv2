@@ -2402,9 +2402,23 @@ function updatePlayerCamera(dt) {
   // El cuerpo acompaña al jugador SIEMPRE (en 1ª persona sirve para verte en el espejo).
   // Mira hacia DONDE MIRAS (la cara de las personas apunta a +z y la vista va a -z), así en
   // el espejo te ves la cara y en tercera persona te ves la espalda.
-  playerAvatar.position.set(player.position.x, player.position.y - PLAYER_EYE, player.position.z);
-  playerAvatar.rotation.y = yaw + Math.PI + (state.skiing && skiGearMesh ? skiGearMesh.rotation.y : 0);
-  swingLimbs(playerAvatar, dt || 0.016);
+  const enSilla = !!(state.skiLiftRide && state.skiLiftRide.chair && state.skiLiftRide.seatY != null);
+  if (enSilla) {
+    playerAvatar.userData.sillaDelAndarivel = true;
+    playerAvatar.userData.seated = true;
+    playerAvatar.position.set(state.skiLiftRide.seatX || player.position.x, state.skiLiftRide.seatY - 0.78, state.skiLiftRide.seatZ || player.position.z);
+    playerAvatar.rotation.y = Math.PI;
+    posarSentado(playerAvatar);
+  } else {
+    if (playerAvatar.userData.sillaDelAndarivel) {
+      playerAvatar.userData.sillaDelAndarivel = false;
+      playerAvatar.userData.seated = false;
+      posarDePie(playerAvatar);
+    }
+    playerAvatar.position.set(player.position.x, player.position.y - PLAYER_EYE, player.position.z);
+    playerAvatar.rotation.y = yaw + Math.PI + (state.skiing && skiGearMesh ? skiGearMesh.rotation.y : 0);
+    swingLimbs(playerAvatar, dt || 0.016);
+  }
   if (cameraMode === 0) {
     camera.position.copy(player.position);
     camera.rotation.set(pitch, yaw, 0);
@@ -2617,6 +2631,7 @@ function obstaclesNear(x, z, r) {
   return out;
 }
 function addLandingSurface(x, z, w, d, top, root) {
+  if (root && root.userData) root.userData.noBake = true;
   landingSurfaces.push({ x, z, w, d, top, root });
 }
 function addWallMesh(cx, cz, w, d, h, color, addColl) {
@@ -3326,9 +3341,19 @@ function makeCityHouse(x, z, golden, rot = 0, maxW = 7.5, maxD = 7.5, plan = nul
     // TESORO adentro: cofre + monedas de oro brillantes
     const chest = new THREE.Mesh(smoothBox(1.3, 0.9, 0.9), mat(0x7c4a1e)); chest.position.set(0, 0.55, -1.3); chest.castShadow = true; g.add(chest);
     for (let i = 0; i < 8; i++) { const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.12, 12), new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.9, roughness: 0.25 })); coin.position.set((Math.random() - 0.5) * 1.4, 0.18 + Math.random() * 0.4, -0.3 + (Math.random() - 0.5) * 1.2); coin.rotation.set(Math.random(), Math.random(), Math.random()); g.add(coin); }
-    g.userData.noSolid = true;   // la casa secreta se entra: no la sella el pase de colisiones
+    g.userData.noSolid = true;   // el pase automático no la rellena: la puerta queda abierta
     g.position.set(x, baseY || 0, z); scene.add(g);
-    return g;   // sin obstáculo: entras caminando por la puerta y cobras el oro con E
+    const cs = Math.cos(rot), sn = Math.sin(rot), girada = Math.abs(cs) < 0.5;
+    const muroCasa = (lx, lz, lw, ld) => {
+      const wx = x + lx * cs + lz * sn, wz = z - lx * sn + lz * cs;
+      addObstacle(wx, wz, girada ? ld : lw, girada ? lw : ld, (baseY || 0) + gh, 'casa-dorada');
+    };
+    muroCasa(0, -gw / 2, gw, t);
+    muroCasa(-gw / 2, 0, t, gw);
+    muroCasa(gw / 2, 0, t, gw);
+    muroCasa(-(gw / 4 + 0.35), gw / 2, gw / 2 - 0.7, t);
+    muroCasa(gw / 4 + 0.35, gw / 2, gw / 2 - 0.7, t);
+    return g;   // la puerta sigue abierta para entrar y cobrar el oro con E
   }
   const detalle = !preferLowPerf;   // en celular/equipos lentos la casa va simple (si no, son miles de piezas)
   const cuerpos = [];               // los volúmenes que ocupan sitio (de ahí salen las colisiones)
@@ -7201,6 +7226,245 @@ function resolveSkiPisteWalls() {
   }
 }
 let skiRoadCurve = null;   // el trazado del camino al cerro (lo revisa __tim.auditSkiRoad)
+const skiSillas = [];
+const skiPasajeros = [];
+const arrastreGente = [];
+let playerChair = null;
+let caidaAndarivelAviso = 0;
+function posarSentado(n) {
+  if (!n) return;
+  n.userData.seated = true;
+  const l = n.userData.limbs;
+  if (!l) return;
+  l.legL.rotation.set(-1.5, 0, 0.08);
+  l.legR.rotation.set(-1.5, 0, -0.08);
+  l.armL.rotation.set(-0.85, 0, 0.22);
+  l.armR.rotation.set(-0.85, 0, -0.22);
+}
+function posarDePie(n) {
+  if (!n) return;
+  n.userData.seated = false;
+  const l = n.userData.limbs;
+  if (!l) return;
+  l.legL.rotation.set(0, 0, 0);
+  l.legR.rotation.set(0, 0, 0);
+  l.armL.rotation.set(0, 0, 0);
+  l.armR.rotation.set(0, 0, 0);
+}
+function alturaAsiento(linea, t) {
+  const z = linea.z0 - t * linea.dist;
+  const nieve = skiSlopeHeight(linea.x, z);
+  if (!linea.chair) return nieve;
+  const sube = Math.min(1, Math.min(t, 1 - t) / 0.06);
+  return nieve + 1.02 + sube * linea.hang;
+}
+function hacerSilla(color, ancho) {
+  const g = new THREE.Group();
+  g.userData.noSolid = true;
+  g.userData.liftPart = true;
+  const w = ancho || 2.6;
+  skiBox(g, 0, 0, 0, w, 0.16, 0.78, color);
+  skiBox(g, 0, 0.55, 0.36, w, 0.78, 0.1, 0x334155);
+  skiBox(g, -w / 2, 0.32, 0, 0.08, 0.46, 0.78, 0x1e293b);
+  skiBox(g, w / 2, 0.32, 0, 0.08, 0.46, 0.78, 0x1e293b);
+  skiBox(g, 0, 1.7, 0.2, 0.1, 2.8, 0.1, 0x334155);
+  return g;
+}
+function bandaSolida(x, z, w, d, bottom, top, grupo) {
+  const o = addObstacle(x, z, w, d, top, grupo);
+  o.bottom = bottom;
+  return o;
+}
+function caerDelAndarivel(n, altura) {
+  if (!n || n.userData.caido) return;
+  n.userData.caido = true;
+  n.userData.subiendo = false;
+  n.userData.vy = -1.5;
+  n.userData.enSuelo = false;
+  if (altura) n.userData.alturaSuelo = altura;
+  posarDePie(n);
+  n.rotation.x = 0;
+  const ahora = performance.now();
+  if (ahora - caidaAndarivelAviso > 900) {
+    caidaAndarivelAviso = ahora;
+    toast('💥 Se cayeron del andarivel y no siguen subiendo');
+  }
+}
+function jugadorEntreDos(a, b) {
+  if (!a || !b || a.userData.caido || b.userData.caido) return false;
+  const px = player.position.x, pz = player.position.z;
+  const py = player.position.y - PLAYER_EYE + 0.9;
+  const ax = a.position.x, az = a.position.z, bx = b.position.x, bz = b.position.z;
+  const dx = bx - ax, dz = bz - az;
+  const len2 = dx * dx + dz * dz;
+  if (len2 < 0.05) return false;
+  const t = ((px - ax) * dx + (pz - az) * dz) / len2;
+  if (t < 0.16 || t > 0.84) return false;
+  const cx = ax + dx * t, cz = az + dz * t;
+  if (Math.hypot(px - cx, pz - cz) > 1.35) return false;
+  const yMedia = (a.position.y + b.position.y) / 2 + 0.95;
+  return Math.abs(py - yMedia) < 1.85;
+}
+function revisarParejas(lista) {
+  const vivos = [];
+  for (const n of lista) if (n && !n.userData.caido) vivos.push(n);
+  vivos.sort((a, b) => (a.userData.liftT || a.userData.t || 0) - (b.userData.liftT || b.userData.t || 0));
+  for (let i = 0; i < vivos.length - 1; i++) {
+    if (!jugadorEntreDos(vivos[i], vivos[i + 1])) continue;
+    const altura = vivos[i].userData.alturaSuelo;
+    caerDelAndarivel(vivos[i], altura);
+    caerDelAndarivel(vivos[i + 1], altura);
+  }
+}
+function actualizarCaidas(dt) {
+  for (const n of skiPasajeros) {
+    if (!n.userData.caido || n.userData.enSuelo) continue;
+    n.userData.vy = (n.userData.vy || 0) - 32 * dt;
+    n.position.y += n.userData.vy * dt;
+    const altura = n.userData.alturaSuelo || skiSlopeHeight;
+    const piso = altura(n.position.x, n.position.z);
+    if (n.position.y <= piso) {
+      n.position.y = piso;
+      n.userData.vy = 0;
+      n.userData.enSuelo = true;
+      n.rotation.z = 0.7;
+    }
+  }
+  for (const n of esquiadoresExtra) {
+    if (!n.userData.caido || n.userData.enSuelo) continue;
+    n.userData.vy = (n.userData.vy || 0) - 32 * dt;
+    n.position.y += n.userData.vy * dt;
+    const piso = alturaDeApoyo(n.position.x, n.position.z);
+    if (n.position.y <= piso) {
+      n.position.y = piso;
+      n.userData.vy = 0;
+      n.userData.enSuelo = true;
+      n.rotation.z = 0.7;
+    }
+  }
+}
+function armarAndariveles() {
+  const lineas = [
+    { kind: 'andarivel', chair: true, x: SKI_LIFT_BOTTOM.x, z0: SKI_LIFT_BOTTOM.z, dist: 340, hang: 14, color: 0xf59e0b, nSillas: 8, nTorres: 7 },
+    { kind: 'andarivel2', chair: true, x: SKI_LIFT2_BOTTOM.x, z0: SKI_LIFT2_BOTTOM.z, dist: 340, hang: 12, color: 0x22d3ee, nSillas: 6, nTorres: 6 },
+    { kind: 'cumbre', chair: true, x: SKI_SUMMIT_LIFT_BOTTOM.x, z0: SKI_SUMMIT_LIFT_BOTTOM.z, dist: 72, hang: 11, color: 0xf97316, nSillas: 4, nTorres: 3 },
+    { kind: 'arrastre', chair: false, x: SKI_TOW_BOTTOM.x, z0: SKI_TOW_BOTTOM.z, dist: 340, hang: 0, color: 0x111827, nSillas: 0, nTorres: 6 },
+  ];
+  for (const linea of lineas) {
+    for (let i = 0; i < linea.nTorres; i++) {
+      const t = (i + 0.5) / linea.nTorres;
+      const z = linea.z0 - t * linea.dist;
+      const baseY = skiSlopeHeight(linea.x, z);
+      const cima = linea.chair ? alturaAsiento(linea, t) + 3.4 : baseY + 2.4;
+      const h = Math.max(3.2, cima - baseY);
+      const torre = skiBox(skiResortGroup, linea.x, baseY + h / 2, z, 0.9, h, 0.9, 0x475569);
+      torre.userData.liftPart = true;
+      addObstacle(linea.x, z, 1.15, 1.15, baseY + h, 'torre');
+    }
+    const pasos = linea.kind === 'cumbre' ? 10 : 22;
+    const pts = [];
+    for (let i = 0; i <= pasos; i++) {
+      const t = i / pasos;
+      const z = linea.z0 - t * linea.dist;
+      const y = (linea.chair ? alturaAsiento(linea, t) + 3.1 : skiSlopeHeight(linea.x, z) + 1.2);
+      pts.push(new THREE.Vector3(linea.x, y, z));
+      const o = bandaSolida(linea.x, z, 0.55, linea.dist / pasos + 0.35, y - 0.28, y + 0.28, 'cable');
+      o.liftCable = true;
+    }
+    const cable = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), pasos, linea.chair ? 0.12 : 0.07, 5, false), mat(0x0f172a));
+    cable.userData.noSolid = true;
+    cable.userData.liftPart = true;
+    skiResortGroup.add(cable);
+    const marca = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), pasos, 0.04, 4, false), new THREE.MeshBasicMaterial({ color: 0xfbbf24 }));
+    marca.userData.noSolid = true;
+    skiResortGroup.add(marca);
+    if (!linea.chair) {
+      for (let i = 0; i < 8; i++) {
+        const n = makePerson(i % 2 ? 0x1d4ed8 : 0xb91c1c, i % 3 ? 0xf1c27d : 0x8d5524);
+        const ski = new THREE.Mesh(smoothBox(0.72, 0.06, 1.55), mat(0x111827));
+        ski.position.set(0, 0.05, 0.12);
+        n.add(ski);
+        n.userData.subiendo = true;
+        n.userData.liftT = (i + 0.35) / 8;
+        n.userData.linea = linea;
+        n.userData.alturaSuelo = skiSlopeHeight;
+        skiResortGroup.add(n);
+        arrastreGente.push(n);
+        skiPasajeros.push(n);
+      }
+      continue;
+    }
+    for (let i = 0; i < linea.nSillas; i++) {
+      const cupo = i % 3 === 1 ? 3 : 2;
+      const ancho = cupo === 3 ? 4.3 : 2.7;
+      const silla = hacerSilla(linea.color, ancho);
+      silla.userData.linea = linea;
+      skiResortGroup.add(silla);
+      const obs = addObstacle(linea.x, linea.z0, ancho, 0.9, 2, 'silla');
+      obs.bottom = 0;
+      const gancho = addObstacle(linea.x, linea.z0, 0.4, 0.4, 3, 'silla');
+      const offs = cupo === 3 ? [-1.45, 0, 1.45] : [-0.82, 0.82];
+      const gente = [];
+      for (let k = 0; k < cupo; k++) {
+        const n = makePerson(k === 1 ? 0x15803d : (k ? 0xb91c1c : 0x1d4ed8), k % 2 ? 0xe0ac69 : 0x8d5524);
+        n.userData.subiendo = true;
+        n.userData.ox = offs[k];
+        n.userData.alturaSuelo = skiSlopeHeight;
+        n.userData.sillaRef = silla;
+        skiResortGroup.add(n);
+        gente.push(n);
+        skiPasajeros.push(n);
+      }
+      const pieza = { linea, group: silla, t: (i + 0.15) / linea.nSillas, gente, obs, gancho, ancho, cupo };
+      skiSillas.push(pieza);
+      colocarSilla(pieza);
+    }
+  }
+  playerChair = hacerSilla(0xfbbf24, 2.7);
+  playerChair.visible = false;
+  skiResortGroup.add(playerChair);
+}
+function colocarSilla(s) {
+  const linea = s.linea;
+  const t = s.t;
+  const z = linea.z0 - t * linea.dist;
+  const y = alturaAsiento(linea, t);
+  s.group.position.set(linea.x, y, z);
+  s.group.rotation.y = 0;
+  s.obs.minX = linea.x - s.ancho / 2; s.obs.maxX = linea.x + s.ancho / 2;
+  s.obs.minZ = z - 0.5; s.obs.maxZ = z + 0.5;
+  s.obs.bottom = y - 0.08;
+  s.obs.top = y + 0.28;
+  s.gancho.minX = linea.x - 0.22; s.gancho.maxX = linea.x + 0.22;
+  s.gancho.minZ = z - 0.22; s.gancho.maxZ = z + 0.22;
+  s.gancho.bottom = y + 0.4;
+  s.gancho.top = y + 3.3;
+  for (const n of s.gente) {
+    if (n.userData.caido) continue;
+    n.position.set(linea.x + n.userData.ox, y - 0.78, z + 0.02);
+    n.rotation.set(0, Math.PI, 0);
+    n.userData.liftT = t + n.userData.ox * 0.0001;
+    posarSentado(n);
+  }
+}
+function updateAndariveles(dt) {
+  for (const s of skiSillas) {
+    s.t = (s.t + dt * 0.045) % 1;
+    colocarSilla(s);
+    revisarParejas(s.gente);
+  }
+  for (const n of arrastreGente) {
+    if (n.userData.caido) continue;
+    const linea = n.userData.linea;
+    n.userData.liftT = (n.userData.liftT + dt * 0.038) % 1;
+    const t = n.userData.liftT;
+    const z = linea.z0 - t * linea.dist;
+    apoyarEsquiador(n, linea.x, z, 0, -1, skiSlopeHeight);
+  }
+  revisarParejas(arrastreGente);
+  actualizarCaidas(dt);
+  obsFrame = -1;
+}
 function buildSkiRoad() {
   // Sale de la autopista del anillo (150,130) y sube al cerro sin pasar por
   // el aeropuerto ni el parque acuático.
@@ -7215,9 +7479,14 @@ function buildSkiRoad() {
   road.scale.y = .025; road.position.y = .02; road.receiveShadow = true; skiResortGroup.add(road);
   const line = new THREE.Mesh(new THREE.TubeGeometry(curve, 64, .12, 5, false), mat(0xfde68a));
   line.scale.y = .03; line.position.y = .12; skiResortGroup.add(line);
-  skiBox(skiResortGroup, SKI_RESORT.gate.x, .9, SKI_RESORT.gate.z - 5, 12, 1.8, .5, 0x0f172a);
+  const porton = skiBox(skiResortGroup, SKI_RESORT.gate.x, .9, SKI_RESORT.gate.z - 5, 12, 1.8, .5, 0x0f172a);
+  porton.userData.noSolid = true;
+  addObstacle(SKI_RESORT.gate.x, SKI_RESORT.gate.z - 5, 12, 0.7, 1.8, 'porton');
   const sign = makeSign('❄️ VALLE NEVADO · TARJETA $500', 0xe0f2fe); sign.scale.set(.72, .72, .72); sign.position.set(SKI_RESORT.gate.x, 4.2, SKI_RESORT.gate.z - 5.5); sign.material.fog = false; skiResortGroup.add(sign);
-  for (const sx of [SKI_RESORT.gate.x - 5.5, SKI_RESORT.gate.x + 5.5]) skiBox(skiResortGroup, sx, 2, SKI_RESORT.gate.z - 5, .45, 4, .45, 0x64748b);
+  for (const sx of [SKI_RESORT.gate.x - 5.5, SKI_RESORT.gate.x + 5.5]) {
+    skiBox(skiResortGroup, sx, 2, SKI_RESORT.gate.z - 5, .45, 4, .45, 0x64748b);
+    addObstacle(sx, SKI_RESORT.gate.z - 5, 0.6, 0.6, 4, 'poste');
+  }
 }
 function buildSkiResort() {
   // Cerro alto, con nieve desde la zona alta y una ladera continua para no atravesarla.
@@ -7313,18 +7582,8 @@ function buildSkiResort() {
   for (const [xOffset, zOffset] of [[-82, 452], [82, 488], [-42, 548], [44, 612], [-60, 680], [50, 740]]) {
     colocarRampaEsqui(SKI_RESORT.x + xOffset, zOffset);
   }
-  // Andarivel y arrastre: torres, cable y sillas que suben la montaña.
-  const lift = new THREE.Group(); lift.position.set(SKI_RESORT.x + 25, 0, SKI_RESORT.z); skiResortGroup.add(lift);
-  for (let i = 0; i < 7; i++) { const z = -170 + i * 56, y = Math.max(skiSlopeHeight(lift.position.x, lift.position.z + z) + 10, 155); skiBox(lift, 0, y / 2, z, .85, y, .85, 0x475569); }
-  const cable = new THREE.Mesh(new THREE.CylinderGeometry(.28, .28, 350, 8), mat(0x0f172a)); cable.rotation.x = Math.PI / 2; cable.position.set(0, 155, 0); lift.add(cable);
-  const cableMarker = new THREE.Mesh(new THREE.CylinderGeometry(.1, .1, 350, 6), mat(0xfbbf24)); cableMarker.rotation.x = Math.PI / 2; cableMarker.position.set(0, 155.4, 0); lift.add(cableMarker);
-  for (let i = 0; i < 11; i++) { const z = -160 + i * 32, hanger = skiBox(lift, 0, 149, z, .14, 12, .14, 0x334155); const chair = skiBox(lift, 0, 142.8, z, 1.9, .22, .85, 0xf59e0b); chair.rotation.y = Math.PI / 2; }
-  const lift2 = new THREE.Group(); lift2.position.set(SKI_RESORT.x - 8, 0, SKI_RESORT.z - 12); skiResortGroup.add(lift2);
-  for (let i = 0; i < 5; i++) { const z = -48 + i * 28, y = Math.max(skiSlopeHeight(lift2.position.x, lift2.position.z + z) + 7, 135); skiBox(lift2, 0, y / 2, z, .75, y, .75, 0x1e293b); }
-  const cable2 = new THREE.Mesh(new THREE.CylinderGeometry(.25, .25, 105, 8), mat(0x020617)); cable2.rotation.x = Math.PI / 2; cable2.position.set(0, 135, 0); lift2.add(cable2);
-  for (let i = 0; i < 9; i++) { const z = -43 + i * 11, hanger = skiBox(lift2, 0, 129, z, .12, 10, .12, 0x334155); skiBox(lift2, 0, 123.4, z, 1.8, .22, .8, 0x22d3ee); }
-  const liftSign = makeSign('🚡 ANDARIVEL 1 · 🚠 ANDARIVEL 2', 0xfef08a); liftSign.scale.set(.52, .52, .52); liftSign.position.set(SKI_RESORT.x, 8, SKI_RESORT.z + 48); skiResortGroup.add(liftSign);
-  const tow = new THREE.Mesh(smoothBox(1.2, .15, 105), mat(0x111827)); tow.position.set(SKI_RESORT.x - 28, 72, SKI_RESORT.z + 2); tow.rotation.x = -.25; skiResortGroup.add(tow);
+  // Andariveles de silla (en el cielo) y de arrastre. Las torres, el cable y las sillas los arma armarAndariveles.
+  const liftSign = makeSign('🚡 ANDARIVEL 1 · 🚠 ANDARIVEL 2 · 🪝 ARRASTRE', 0xfef08a); liftSign.scale.set(.52, .52, .52); liftSign.position.set(SKI_RESORT.x, 8, SKI_RESORT.z + 48); skiResortGroup.add(liftSign);
   // Plataformas planas para bajarse del andarivel, descansar o elegir otra subida.
   for (const [x, z, w, d] of [[SKI_LIFT_BOTTOM.x, SKI_LIFT_BOTTOM.z - 340, 72, 48], [SKI_LIFT2_BOTTOM.x, SKI_LIFT2_BOTTOM.z - 340, 58, 42], [SKI_TOW_BOTTOM.x, SKI_TOW_BOTTOM.z - 340, 52, 38]]) {
     const mainArrival = x === SKI_LIFT_BOTTOM.x && z === SKI_LIFT_BOTTOM.z - 340;
@@ -7346,10 +7605,8 @@ function buildSkiResort() {
   summitPlatform.position.set(SKI_SUMMIT_LIFT_BOTTOM.x, summitTop - .25, SKI_SUMMIT_LIFT_BOTTOM.z - 72); summitPlatform.receiveShadow = true; skiResortGroup.add(summitPlatform);
   addLandingSurface(SKI_SUMMIT_LIFT_BOTTOM.x, SKI_SUMMIT_LIFT_BOTTOM.z - 72, 48, 36, summitTop, summitPlatform);
   const summitSign = makeSign('🏔️ CUMBRE', 0xfef3c7); summitSign.scale.set(.34, .34, .34); summitSign.position.set(SKI_SUMMIT_LIFT_BOTTOM.x, summitTop + 3, SKI_SUMMIT_LIFT_BOTTOM.z - 72); skiResortGroup.add(summitSign);
-  const summitLift = new THREE.Group(); summitLift.position.set(SKI_SUMMIT_LIFT_BOTTOM.x, 0, SKI_SUMMIT_LIFT_BOTTOM.z); skiResortGroup.add(summitLift);
-  const summitCable = new THREE.Mesh(new THREE.CylinderGeometry(.2, .2, 72, 8), mat(0x111827)); summitCable.rotation.x = Math.PI / 2; summitCable.position.set(0, summitTop + 34, -36); summitLift.add(summitCable);
-  for (let i = 0; i < 4; i++) { const z = -10 - i * 18, hanger = skiBox(summitLift, 0, summitTop + 30, z, .12, 8, .12, 0x334155); skiBox(summitLift, 0, summitTop + 25.5, z, 1.6, .22, .7, 0xf97316); }
   const summitLiftSign = makeSign('🚠 ANDARIVEL A LA CUMBRE', 0xfef08a); summitLiftSign.scale.set(.34, .34, .34); summitLiftSign.position.set(SKI_SUMMIT_LIFT_BOTTOM.x + 8, summitTop + 4, SKI_SUMMIT_LIFT_BOTTOM.z + 2); skiResortGroup.add(summitLiftSign);
+  armarAndariveles();
   // Cuerda del andarivel, a la altura de las manos, pegada a la nieve.
   cuerdaSobreNieve(skiResortGroup, SKI_RESORT.x + 25, SKI_RESORT.z + 58, SKI_RESORT.x + 25, SKI_RESORT.z - 62, skiSlopeHeight);
   // Mucha gente esperando y bajando por las pistas.
@@ -7357,33 +7614,36 @@ function buildSkiResort() {
     const n = makePerson(i % 2 ? 0x2563eb : 0xdc2626, i % 3 ? 0xf1c27d : 0x8d5524);
     const lane = i % 2, side = lane ? 1 : -1, t = (i % 17) / 17, x = SKI_RESORT.x + side * (8 + t * 34) + Math.sin(t * 8) * 5, z = SKI_RESORT.z - 54 + t * 106;
     const skiMat = mat(0x111827), leftSki = new THREE.Mesh(smoothBox(.12, .06, 1.7), skiMat), rightSki = leftSki.clone(); leftSki.position.set(-.28, .04, .15); rightSki.position.set(.28, .04, .15); n.add(leftSki, rightSki);
-    n.userData.skiLane = lane; n.userData.skiT = t; n.userData.skiSide = side; n.userData.skiSpeed = .018 + Math.random() * .045; n.userData.skiPhase = i % 4 === 0 ? 'lift' : 'down'; n.userData.liftT = Math.random(); n.userData.skiBob = Math.random() * 6.28; n.position.set(x, skiSlopeHeight(x, z), z); skiVisitors.push(n); skiResortGroup.add(n);
+    n.userData.skiLane = lane; n.userData.skiT = t; n.userData.skiSide = side; n.userData.skiSpeed = .018 + Math.random() * .045; n.userData.skiPhase = 'down'; n.userData.skiBob = Math.random() * 6.28; n.position.set(x, skiSlopeHeight(x, z), z); skiVisitors.push(n); skiResortGroup.add(n);
   }
 }
 function updateSkiVisitors(dt) {
   for (const n of skiVisitors) {
+    if (n.userData.caido) continue;
     n.userData.skiBob += dt * 2;
-    if (n.userData.skiPhase === 'lift') {
-      n.userData.liftT += dt * (.045 + n.userData.skiSpeed * .35);
-      const lt = Math.min(1, n.userData.liftT), x = SKI_RESORT.x + 25, z = SKI_RESORT.z + 58 - lt * 120;
-      apoyarEsquiador(n, x, z, 0, -1, skiSlopeHeight);
-      if (lt >= 1) { n.userData.skiPhase = 'down'; n.userData.skiT = 0; agarrarCuerda(n, false); }
-      continue;
-    }
     n.userData.skiT += dt * n.userData.skiSpeed;
-    if (n.userData.skiT >= 1) { n.userData.skiPhase = 'lift'; n.userData.liftT = 0; continue; }
+    if (n.userData.skiT >= 1) n.userData.skiT = 0;
     const t = n.userData.skiT, side = n.userData.skiSide, x = SKI_RESORT.x + side * (8 + t * 34) + Math.sin(t * 8 + n.userData.skiLane) * 5, z = SKI_RESORT.z - 54 + t * 106;
     apoyarEnNieve(n, x, z, side * 0.15, 1, skiSlopeHeight);
     n.position.y += Math.abs(Math.sin(n.userData.skiBob)) * .04;
     agarrarCuerda(n, false);
   }
+  const porCentro = new Map();
   for (const n of esquiadoresExtra) {
+    if (n.userData.caido) continue;
+    n.userData.alturaSuelo = alturaDeApoyo;
     n.userData.t = (n.userData.t + dt * 0.08) % 1;
+    n.userData.liftT = n.userData.t;
     const t = n.userData.t;
     const x = n.userData.x0 + (n.userData.x1 - n.userData.x0) * t;
     const z = n.userData.z0 + (n.userData.z1 - n.userData.z0) * t;
     apoyarEsquiador(n, x, z, n.userData.x1 - n.userData.x0, n.userData.z1 - n.userData.z0, alturaDeApoyo);
+    const clave = n.userData.x0 + ',' + n.userData.z0;
+    let grupo = porCentro.get(clave);
+    if (!grupo) porCentro.set(clave, grupo = []);
+    grupo.push(n);
   }
+  for (const grupo of porCentro.values()) revisarParejas(grupo);
 }
 buildSkiResort();
 skiResortGroup.visible = false;
@@ -7503,6 +7763,7 @@ function ponerCentrosEsqui() {
     const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.4, 9, 6), mat(0x334155));
     poste.position.set(c.x, y + 4.5, c.z + 5.2);
     g.add(poste);
+    addObstacle(c.x, c.z + 5.2, 0.7, 0.7, y + 9, 'poste');
     const cartel = makeSign('⛷️ ' + c.name, 0xe0f2fe);
     cartel.material.fog = false;
     cartel.scale.set(1.7, 1.7, 1.7);
@@ -8941,7 +9202,10 @@ function sealLooseProps() {
   };
   const chainVisible = (obj) => {
     let o = obj;
-    while (o) { if (o.visible === false) return false; o = o.parent; }
+    while (o) {
+      if (o.visible === false && o !== skiResortGroup) return false;
+      o = o.parent;
+    }
     return true;
   };
   const cell = 8;
@@ -12043,7 +12307,7 @@ function livingRadius(e) {
   if (e && e.userData && e.userData.commander) return 1.55;
   return 0.5;
 }
-function bodyIgnoresWalls(e) { return !!(e && e.userData && (e.userData.fly || e.userData.ufo || e.userData.mineHole)); }
+function bodyIgnoresWalls(e) { return !!(e && e.userData && e.userData.mineHole); }
 function obstacleAt(x, z, feetY, r) {
   const radio = r || 0;
   for (const o of obstaclesNear(x, z, radio)) {
@@ -12121,16 +12385,17 @@ function eVisible(e) { return !!(e && e.visible !== false); }
 function moveToward(e, target, step) {
   if (e.userData && (e.userData.slow || 0) > 0) { e.userData.slow = Math.max(0, e.userData.slow - 0.016); step *= 0.38; }
   const dx = target.x - e.position.x, dz = target.z - e.position.z; const len = Math.hypot(dx, dz) || 1;
-  const flies = bodyIgnoresWalls(e);
-  const parts = flies ? 1 : Math.max(1, Math.ceil(Math.abs(step) / 0.32));
+  const vuela = !!(e.userData && (e.userData.fly || e.userData.ufo));
+  const ignora = bodyIgnoresWalls(e);
+  const parts = ignora ? 1 : Math.max(1, Math.ceil(Math.abs(step) / 0.28));
   const sub = step / parts;
   for (let i = 0; i < parts; i++) {
     const px = e.position.x, pz = e.position.z;
     e.position.x += (dx / len) * sub; e.position.z += (dz / len) * sub;
-    if (!flies && resolveLivingWall(e.position, px, pz, livingRadius(e)) === 'stop') break;
+    if (!ignora && resolveLivingWall(e.position, px, pz, livingRadius(e)) === 'stop') break;
     const pies = e.position.y || 0;
     const entraEnTierra = groundHeightAt(e.position.x, e.position.z) > pies + 0.35;
-    if ((!flies && terrenoAbrupto(px, pz, e.position.x, e.position.z)) || (flies && entraEnTierra)) {
+    if ((!vuela && terrenoAbrupto(px, pz, e.position.x, e.position.z)) || (vuela && entraEnTierra)) {
       e.position.x = px; e.position.z = pz; break;
     }
   }
@@ -13724,7 +13989,12 @@ addEventListener('keydown', e => {
   if (e.code === 'Escape' && wheelOpen()) { closeWheel(); return; }
   if (e.code === 'Tab' && state.running && !state.paused && (wheelOpen() || !algunRecuadroAbierto())) { e.preventDefault(); toggleWheel(); return; }   // Tab = menú de acciones
   if (e.code === 'Escape' && state.running && !typing) { togglePause(); return; }                   // Esc pausa / reanuda
-  if (e.code === 'F5' && state.running && !typing) { e.preventDefault(); cycleCameraMode(); return; }
+  if ((e.code === 'F5' || (e.code === 'KeyF' && state.skiLiftRide && state.skiLiftRide.chair)) && state.running && !typing) {
+    e.preventDefault();
+    cycleCameraMode();
+    if (state.skiLiftRide && state.skiLiftRide.chair) toast('🪑 ' + CAMERA_NAMES[cameraMode] + ' desde la silla');
+    return;
+  }
   if (e.code === 'F4' && new URLSearchParams(location.search).has('debug')) { e.preventDefault(); debugFlightCabin(); return; }
   if (e.code === 'F7' && new URLSearchParams(location.search).has('debug')) { e.preventDefault(); debugTreasureIsland(); return; }
   if (state.paused) return;   // en pausa el teclado no hace nada (solo Esc, arriba)
@@ -16956,6 +17226,7 @@ function updateDriving(dt) {
   const R = 1.5;
   const piesVehiculo = car.group.position.y;
   for (const o of obstacles) {
+    if (o.dueno && (o.dueno === car || o.dueno === car.group)) continue;
     if (car.helicopter && o.top != null && piesVehiculo >= o.top) continue;
     if (o.bottom != null && piesVehiculo + 2.2 < o.bottom) continue;
     if (car.group.position.x > o.minX - R && car.group.position.x < o.maxX + R && car.group.position.z > o.minZ - R && car.group.position.z < o.maxZ + R) {
@@ -17830,16 +18101,40 @@ function nearSkiLiftBoarding() {
   }
   return best;
 }
+function esAndarivelDeSilla(kind) {
+  return kind === 'andarivel' || kind === 'andarivel2' || kind === 'cumbre';
+}
 function updateSkiLiftRide(dt) {
   const ride = state.skiLiftRide; if (!ride) return false;
   ride.t += dt * .16;
   const base = ride.kind === 'arrastre' ? SKI_TOW_BOTTOM : ride.kind === 'andarivel2' ? SKI_LIFT2_BOTTOM : ride.kind === 'cumbre' ? SKI_SUMMIT_LIFT_BOTTOM : SKI_LIFT_BOTTOM;
   const distance = ride.kind === 'cumbre' ? 72 : 340;
-  const x = base.x, z = base.z - ride.t * distance;
-  player.position.set(x, skiSlopeHeight(x, z) + PLAYER_EYE, z);
+  const x = base.x, z = base.z - Math.min(1, ride.t) * distance;
+  const silla = esAndarivelDeSilla(ride.kind);
+  ride.chair = silla;
+  if (silla) {
+    const linea = { chair: true, x, z0: base.z, dist: distance, hang: ride.kind === 'cumbre' ? 11 : ride.kind === 'andarivel2' ? 12 : 14 };
+    const seatY = alturaAsiento(linea, Math.min(1, ride.t));
+    ride.seatY = seatY;
+    ride.seatX = x;
+    ride.seatZ = z;
+    player.position.set(x, seatY + 1.08, z);
+    if (playerChair) {
+      playerChair.visible = true;
+      playerChair.position.set(x, seatY, z);
+      playerChair.rotation.y = 0;
+    }
+    revisarParejas(skiPasajeros.filter(n => n.userData.sillaRef && n.userData.sillaRef.userData.linea && n.userData.sillaRef.userData.linea.kind === ride.kind && !n.userData.caido));
+  } else {
+    player.position.set(x, skiSlopeHeight(x, z) + PLAYER_EYE, z);
+    if (playerChair) playerChair.visible = false;
+    revisarParejas(arrastreGente);
+  }
   grounded = true; vy = 0; camera.rotation.y = yaw; camera.rotation.x = pitch;
   if (ride.t >= 1) {
     state.skiLiftRide = null;
+    if (playerChair) playerChair.visible = false;
+    if (playerAvatar) { playerAvatar.userData.sillaDelAndarivel = false; playerAvatar.userData.seated = false; posarDePie(playerAvatar); }
     // En la zona plana de la plataforma, un poco hacia la pista (sin salirte
     // del deck ni caer encima del andarivel de la cumbre).
     const topZ = base.z - distance, zOut = topZ + 4;
@@ -17857,8 +18152,11 @@ function trySkiResort() {
   if (lift) {
     if (!state.skiPass || !state.skiGear) { toast('🎫 Necesitas la tarjeta y esquís o snowboard para subir'); return true; }
     state.skiGearWorn = true; state.skiing = false; stopSkiCarve();
-    state.skiLiftRide = { kind: lift.kind, t: 0 };
-    toast('🚡 Subiendo en el ' + (lift.kind === 'cumbre' ? 'andarivel a la cumbre' : lift.kind === 'andarivel2' ? 'andarivel 2' : lift.kind) + ' · espera arriba');
+    state.skiLiftRide = { kind: lift.kind, t: 0, chair: esAndarivelDeSilla(lift.kind) };
+    if (state.skiLiftRide.chair) yaw = 0;
+    toast(state.skiLiftRide.chair
+      ? '🚡 Sentado en la silla · F o F5 miran desde la silla'
+      : '🪝 Subiendo en el arrastre · espera arriba');
     return true;
   }
   if (dg < 14) {
@@ -19849,10 +20147,103 @@ function recortarLejos() {
     marcarLejos(o, dx * dx + dz * dz, limC);
   }
 }
+function syncCuerposSolidos() {
+  const poner = (m, r, alto) => {
+    if (!m || !m.position || m === player || m === playerAvatar) return;
+    if (!m.userData) m.userData = {};
+    let o = m.userData.cuerpoSolido;
+    if (!o) {
+      o = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, top: 0, bottom: 0, grupo: 'cuerpo', cuerpo: true };
+      m.userData.cuerpoSolido = o;
+      obstacles.push(o);
+    }
+    if (!m.parent || m.visible === false) {
+      o.top = -8; o.bottom = -9;
+      o.minX = o.maxX = m.position.x; o.minZ = o.maxZ = m.position.z;
+      return;
+    }
+    const rr = r || 0.34;
+    o.minX = m.position.x - rr; o.maxX = m.position.x + rr;
+    o.minZ = m.position.z - rr; o.maxZ = m.position.z + rr;
+    o.bottom = m.position.y + 0.12;
+    o.top = m.position.y + (alto || 1.82);
+  };
+  const lista = (arr, r, alto) => { if (!arr) return; for (let i = 0; i < arr.length; i++) poner(arr[i], r, alto); };
+  lista(npcs, 0.34, 1.82);
+  lista(countryNPCs, 0.34, 1.82);
+  lista(victims, 0.34, 1.7);
+  lista(police, 0.36, 1.9);
+  lista(jailFolk, 0.34, 1.82);
+  lista(helpers, 0.34, 1.82);
+  lista(earthBulls, 0.72, 1.45);
+  lista(skiVisitors, 0.34, 1.82);
+  lista(skiPasajeros, 0.3, 1.72);
+  lista(esquiadoresExtra, 0.34, 1.82);
+  lista(eggPets, 0.32, 1.05);
+  lista(miners, 0.34, 1.7);
+  lista(floatingCitizens, 0.34, 1.82);
+  if (soccer && soccer.players) lista(soccer.players, 0.34, 1.82);
+  if (basketball && basketball.players) lista(basketball.players, 0.34, 1.9);
+  if (tennis && tennis.players) lista(tennis.players, 0.34, 1.82);
+  poner(dad, 0.4, 1.9);
+  poner(mom, 0.34, 1.82);
+  poner(butler, 0.34, 1.82);
+  poner(pet, 0.38, 1.05);
+  poner(petAlien, 0.36, 1.15);
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    const radio = e && e.userData && e.userData.ufo ? 2.4 : Math.max(0.42, livingRadius(e));
+    const alto = e && e.userData && e.userData.ufo ? 4.2 : 2.05;
+    poner(e, radio, alto);
+  }
+  const ponerCaja = (grupo, heading, ancho, largo, alto, dueno, piso) => {
+    if (!grupo || !grupo.position) return;
+    if (!grupo.userData) grupo.userData = {};
+    let o = grupo.userData.cuerpoSolido;
+    if (!o) {
+      o = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, top: 0, bottom: 0, grupo: 'auto', cuerpo: true };
+      grupo.userData.cuerpoSolido = o;
+      obstacles.push(o);
+    }
+    o.dueno = dueno;
+    if (!grupo.parent || grupo.visible === false) {
+      o.top = -8; o.bottom = -9;
+      return;
+    }
+    const miraEnZ = Math.abs(Math.cos(heading)) >= Math.abs(Math.sin(heading));
+    const sx = miraEnZ ? ancho : largo;
+    const sz = miraEnZ ? largo : ancho;
+    o.minX = grupo.position.x - sx / 2; o.maxX = grupo.position.x + sx / 2;
+    o.minZ = grupo.position.z - sz / 2; o.maxZ = grupo.position.z + sz / 2;
+    o.bottom = grupo.position.y + (piso == null ? 0.2 : piso);
+    o.top = grupo.position.y + alto;
+  };
+  if (typeof traffic !== 'undefined') {
+    for (let i = 0; i < traffic.length; i++) {
+      const c = traffic[i];
+      if (!c || !c.userData || !c.userData.moving) continue;
+      ponerCaja(c, c.userData.heading || c.rotation.y || 0, 2.35, 4.7, 1.85, c, 0.15);
+    }
+  }
+  if (typeof vehicles !== 'undefined') {
+    for (let i = 0; i < vehicles.length; i++) {
+      const v = vehicles[i];
+      if (!v || !v.group) continue;
+      const heli = !!v.helicopter;
+      const ang = v.moto ? 1.15 : (heli ? 3.4 : 2.45);
+      const lar = v.moto ? 3.6 : (heli ? 9.2 : 4.8);
+      ponerCaja(v.group, v.heading || 0, ang, lar, heli ? 2.8 : 1.75, v, 0.15);
+    }
+  }
+  if (typeof boat !== 'undefined' && boat && boat.group) {
+    ponerCaja(boat.group, boat.heading || 0, 11, 30, 2.05, boat, -0.2);
+  }
+}
 function loop() {
   requestAnimationFrame(loop);
   gameFrame++;
   if (document.hidden) return;
+  syncCuerposSolidos();
   const dt = Math.min(clock.getDelta(), 0.05);
   if (state.running) recortarLejos();
   updateAutoPerf();   // si el juego va lento un par de segundos, baja la calidad solo
@@ -20327,6 +20718,10 @@ function updateCreativeFlight(dt) {
   grounded = false; vy = 0; camera.rotation.y = yaw; camera.rotation.x = pitch;
 }
 function updateMovement(dt) {
+  if (state.skiLiftRide || nearSkiNow()) {
+    updateAndariveles(dt);
+    syncCuerposSolidos();
+  }
   if (raceState) return;   // durante la carrera 3D el auto y la cámara siguen la pista aérea
   if (state.mission === 'alley' && alley.following) {
     camera.rotation.y = yaw; camera.rotation.x = pitch;
@@ -20476,7 +20871,7 @@ function updateMovement(dt) {
   // Superficies altas de objetos: permiten aterrizar sobre aviones y estructuras
   // energéticas sin atravesarlas al caer.
   for (const s of landingSurfaces) {
-    if (!s.root || !s.root.visible || !s.root.parent) continue;
+    if (!s.root || s.root.visible === false) continue;
     const top = s.top + (crouch ? CROUCH_EYE : PLAYER_EYE);
     if (Math.abs(player.position.x - s.x) > s.w / 2 || Math.abs(player.position.z - s.z) > s.d / 2) continue;
     const encima = player.position.y >= top - 0.7 || yAntesDeCaer >= top - .05;   // venías cayendo desde arriba
@@ -20861,6 +21256,17 @@ try { if (new URLSearchParams(location.search).has('debug')) {
     let objetos = 0; scene.traverse(() => objetos++);
     return { objetos, llamadas: renderer.info.render.calls, triangulos: renderer.info.render.triangles, texturas: renderer.info.memory.textures, geometrias: renderer.info.memory.geometries, trafico: traffic.length, estacionados: parkedCars.length };
   };
+  timDump.estadoAndariveles = () => ({
+    sillas: skiSillas.map(s => ({
+      kind: s.linea.kind, cupo: s.cupo, t: +s.t.toFixed(3),
+      x: +s.group.position.x.toFixed(2), y: +s.group.position.y.toFixed(2), z: +s.group.position.z.toFixed(2),
+      vivos: s.gente.filter(n => !n.userData.caido).map(n => ({ x: +n.position.x.toFixed(2), y: +n.position.y.toFixed(2), z: +n.position.z.toFixed(2) })),
+      caidos: s.gente.filter(n => n.userData.caido).map(n => ({ y: +n.position.y.toFixed(2), suelo: !!n.userData.enSuelo, sube: !!n.userData.subiendo })),
+    })),
+    arrastre: arrastreGente.map(n => ({ t: +n.userData.liftT.toFixed(3), x: +n.position.x.toFixed(2), y: +n.position.y.toFixed(2), z: +n.position.z.toFixed(2), caido: !!n.userData.caido, suelo: !!n.userData.enSuelo })),
+    extra: esquiadoresExtra.map(n => ({ x: +n.position.x.toFixed(2), y: +n.position.y.toFixed(2), z: +n.position.z.toFixed(2), caido: !!n.userData.caido })),
+    playerChair: playerChair ? { v: playerChair.visible, x: +playerChair.position.x.toFixed(2), y: +playerChair.position.y.toFixed(2), z: +playerChair.position.z.toFixed(2) } : null,
+  });
   timDump.finishLift = (kind) => {
     state.skiPass = true; state.skiGear = 'skis'; state.skiGearWorn = true; state.skiing = false;
     state.skiLiftRide = { kind: kind || 'andarivel', t: 1 };
@@ -21176,6 +21582,10 @@ function updateViewmodel(dt) {
   }
 }
 function resolveCollisions() {
+  if (skiSillas.length) {
+    for (const s of skiSillas) revisarParejas(s.gente);
+    revisarParejas(arrastreGente);
+  }
   const r = 0.45, p = player.position;
   const pies = p.y - PLAYER_EYE + .05;   // altura de tus pies (para pasar por encima de lo bajo)
   for (const o of obstaclesNear(p.x, p.z, r + 0.2)) {
