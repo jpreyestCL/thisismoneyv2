@@ -7565,37 +7565,59 @@ function hacerInteriorNaranjo() {
   g.visible = false;
   g.userData.noSolid = true;
   const tela = new THREE.MeshBasicMaterial({ color: 0xf97316, side: THREE.DoubleSide, fog: false });
-  tela.userData.rescate = true;
-  const caja = new THREE.Mesh(new THREE.BoxGeometry(1.28, 0.86, 2.4), tela);
-  caja.frustumCulled = false;
-  g.add(caja);
-  const labio = new THREE.MeshBasicMaterial({ color: 0xea580c, fog: false, side: THREE.DoubleSide });
-  const dientesMat = new THREE.MeshBasicMaterial({ color: 0xfdba74, fog: false });
-  const tiro = new THREE.MeshBasicMaterial({ color: 0xffedd5, fog: false });
-  labio.userData.rescate = dientesMat.userData.rescate = tiro.userData.rescate = true;
-  for (const x of [-0.07, 0.07]) {
-    const cinta = new THREE.Mesh(smoothBox(0.055, 0.035, 2.05), labio);
-    cinta.position.set(x, 0.32, 0);
-    cinta.frustumCulled = false;
-    g.add(cinta);
-  }
+  const boca = new THREE.MeshBasicMaterial({ color: 0xc2410c, side: THREE.DoubleSide, fog: false });
+  const diente = new THREE.MeshBasicMaterial({ color: 0x9a3412, fog: false });
+  tela.userData.rescate = boca.userData.rescate = diente.userData.rescate = true;
+  const pared = (x, y, z, w, h, d, mat) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    m.frustumCulled = false;
+    g.add(m);
+    return m;
+  };
+  pared(0, -0.42, 0, 1.55, 0.08, 2.35, tela);
+  pared(-0.74, 0.02, 0, 0.08, 0.92, 2.35, tela);
+  pared(0.74, 0.02, 0, 0.08, 0.92, 2.35, tela);
+  pared(0, 0.02, -1.14, 1.55, 0.92, 0.08, tela);
+  pared(0, 0.02, 1.14, 1.55, 0.92, 0.08, boca);
+  const izq = pared(-0.4, 0.48, 0, 0.72, 0.05, 2.2, tela);
+  const der = pared(0.4, 0.48, 0, 0.72, 0.05, 2.2, tela);
+  const dientes = [];
   for (let i = 0; i < 18; i++) {
-    const d = new THREE.Mesh(smoothBox(0.05, 0.08, 0.075), dientesMat);
-    d.position.set(i % 2 ? 0.04 : -0.04, 0.32, -0.95 + i * 0.105);
-    d.rotation.z = i % 2 ? 0.45 : -0.45;
-    d.frustumCulled = false;
-    g.add(d);
+    const z = -1.02 + i * 0.12;
+    for (const lado of [-1, 1]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.04, 0.055), diente);
+      m.position.set(lado * 0.07, 0.44, z + (lado > 0 ? 0.03 : 0));
+      m.rotation.z = lado > 0 ? -0.55 : 0.55;
+      m.frustumCulled = false;
+      g.add(m);
+      dientes.push({ mesh: m, z, lado });
+    }
   }
-  const cierre = new THREE.Mesh(smoothBox(0.18, 0.22, 0.1), tiro);
-  cierre.position.set(0, 0.16, 0.28);
-  cierre.frustumCulled = false;
-  g.add(cierre);
-  const anilla = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.016, 8, 14), tiro);
-  anilla.position.set(0, 0.04, 0.28);
-  anilla.rotation.x = Math.PI / 2;
-  anilla.frustumCulled = false;
-  g.add(anilla);
+  const slider = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.07, 0.16), diente);
+  slider.position.set(0, 0.47, -0.8);
+  slider.frustumCulled = false;
+  g.add(slider);
+  const tiro = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.1, 0.05), boca);
+  tiro.position.set(0, 0.36, -0.8);
+  tiro.frustumCulled = false;
+  g.add(tiro);
+  g.userData.cierrePiezas = { izq, der, dientes, slider, tiro };
   return g;
+}
+function moverCierre(g, k) {
+  const u = g && g.userData.cierrePiezas;
+  if (!u) return;
+  const z = -0.9 + Math.max(0, Math.min(1, k)) * 1.7;
+  u.slider.position.z = z;
+  u.tiro.position.z = z;
+  const abierto = 0.1 * (1 - Math.max(0, Math.min(1, k)));
+  u.izq.position.x = -0.34 - abierto;
+  u.der.position.x = 0.34 + abierto;
+  for (const d of u.dientes) {
+    const cerrado = d.z < z - 0.04;
+    d.mesh.position.x = d.lado * (cerrado ? 0.028 : 0.1);
+  }
 }
 function hacerSocorrista(color) {
   const p = makePerson(color, 0xf1c27d);
@@ -7669,13 +7691,22 @@ function yawDe(vx, vz) {
   if (vx * vx + vz * vz < 0.04) return 0;
   return Math.atan2(vx, vz);
 }
+function alzarDelAndarivel(n) {
+  if (!n) return;
+  const mundo = new THREE.Vector3();
+  n.getWorldPosition(mundo);
+  if (n.parent !== scene) scene.add(n);
+  n.position.copy(mundo);
+  n.userData.sillaRef = null;
+  n.userData.subiendo = false;
+}
 function posarTumbado(n, x, y, z, yaw, k, aire) {
   if (!n) return;
   n.visible = true;
   n.position.set(x, y, z);
   n.rotation.order = 'YXZ';
-  n.rotation.y = yaw;
-  n.rotation.x = aire ? Math.sin(k * 12) * 0.55 : 0.08;
+  n.rotation.y = aire ? yaw : 0;
+  n.rotation.x = aire ? Math.sin(k * 12) * 0.55 : -0.55;
   n.rotation.z = Math.min(1, k) * (Math.PI / 2);
 }
 function aplicarChoqueAndarivel(npc, velocidad) {
@@ -7690,12 +7721,13 @@ function aplicarChoqueAndarivel(npc, velocidad) {
   if (skiGearMesh) skiGearMesh.visible = false;
   if (skiResortGroup) skiResortGroup.visible = true;
   limpiarAvisoChoque();
+  alzarDelAndarivel(npc);
   caerDelAndarivel(npc, npc.userData.alturaSuelo || skiSlopeHeight, true);
   asegurarEsquis(npc);
   asegurarEsquis(playerAvatar);
   posarDePie(npc);
   posarDePie(playerAvatar);
-  const lateral = Math.min(7.2, Math.max(3.4, (velocidad || rumbo) * 0.48));
+  const lateral = Math.min(2.8, Math.max(2.2, (velocidad || rumbo) * 0.2));
   const sx = Number.isFinite(ladoX) ? ladoX : 1, sz = Number.isFinite(ladoZ) ? ladoZ : 0;
   const alto = npc.position.y - nieveVisible(npc.position.x, npc.position.z) > 2.2;
   const pies = {
@@ -7796,22 +7828,46 @@ function manoSocorrista(n, lado) {
 function encuadrarCaida() {
   const c = caidaChoque;
   if (!c) return;
+  camera.up.set(0, 1, 0);
   viewmodel.visible = false;
   visUiCaida(false);
-  if (c.fase === 'dentro' && c.interior) {
+  if ((c.fase === 'cierre' || c.fase === 'dentro') && c.interior && c.llevaJugador) {
     c.interior.visible = true;
     const p = c.interior.position;
-    camera.position.set(p.x, p.y + 0.02, p.z - 0.08);
-    camera.lookAt(p.x, p.y + 0.24, p.z + 0.55);
+    const pieza = c.interior.userData.cierrePiezas;
+    const sz = pieza ? pieza.slider.position.z : 0;
+    camera.position.set(p.x, p.y + 0.05, p.z + sz - 0.55);
+    camera.lookAt(p.x, p.y + 0.46, p.z + sz + 0.35);
+    viewmodel.visible = false;
     if (playerAvatar) playerAvatar.visible = false;
     return;
   }
   const nx = c.npc ? c.npc.position.x : c.pies.x;
   const nz = c.npc ? c.npc.position.z : c.pies.z;
   const mx = (c.pies.x + nx) / 2, mz = (c.pies.z + nz) / 2;
+  const yNieve = nieveVisible(mx, mz);
+  if (c.fase === 'suelo') {
+    const sep = Math.max(3.2, Math.hypot(c.pies.x - nx, c.pies.z - nz));
+    const alto = Math.max(4.2, sep * 0.72);
+    const atras = Math.max(5.4, sep * 0.92);
+    camera.position.set(mx, yNieve + alto, mz + atras);
+    camera.lookAt(mx, yNieve + 0.5, mz);
+    if (grassField) grassField.visible = false;
+    if (!c.marcado) {
+      c.marcado = true;
+      const pintar = (n) => {
+        if (!n) return;
+        marcarVisible(n);
+        n.traverse(o => { if (o.material && o.material.emissive) o.material.emissiveIntensity = 0.9; });
+      };
+      pintar(playerAvatar);
+      pintar(c.npc);
+    }
+    return;
+  }
   const y = sueloReal(mx, mz);
   const sep = Math.hypot(c.pies.x - nx, c.pies.z - nz);
-  const dist = c.fase === 'suelo' || c.fase === 'depie' || c.fase === 'pregunta' ? Math.max(5.4, sep * 0.62 + 2.4) : Math.max(7.2, sep * 0.7 + 3);
+  const dist = c.fase === 'depie' || c.fase === 'pregunta' ? Math.max(5.4, sep * 0.62 + 2.4) : Math.max(7.2, sep * 0.7 + 3);
   camera.position.set(mx + dist * 0.72, y + 2.15, mz - dist * 0.48);
   camera.lookAt(mx, y + 0.55, mz + 0.4);
 }
@@ -7837,6 +7893,10 @@ function updateCaidaChoque(dt) {
         if (o.suelo) n.userData.enSuelo = true;
       } else c.sueloN = true;
     }
+    if (c.fase === 'suelo') {
+      c.pies.y = nieveVisible(c.pies.x, c.pies.z) + 0.08;
+      if (n) n.position.y = nieveVisible(n.position.x, n.position.z) + 0.08;
+    }
     const k = c.fase === 'suelo' ? 1 : Math.min(1, c.t / 0.85);
     posarTumbado(playerAvatar, c.pies.x, c.pies.y, c.pies.z, c.yawJ, k, c.fase === 'vuelo' && !c.sueloJ);
     if (n) posarTumbado(n, n.position.x, n.position.y, n.position.z, n.userData.yawCaida || 0, k, c.fase === 'vuelo' && !c.sueloN);
@@ -7847,13 +7907,13 @@ function updateCaidaChoque(dt) {
     const k = Math.min(1, c.t / 0.7);
     playerAvatar.rotation.order = 'YXZ';
     playerAvatar.rotation.z = (1 - k) * (Math.PI / 2);
-    playerAvatar.rotation.x = 0.08 * (1 - k);
+    playerAvatar.rotation.x = -0.55 * (1 - k);
     playerAvatar.position.set(c.pies.x, c.pies.y, c.pies.z);
     player.position.set(c.pies.x, c.pies.y + 0.25 + k * (PLAYER_EYE - 0.25), c.pies.z);
     if (!c.grave && n) {
       n.rotation.order = 'YXZ';
       n.rotation.z = (1 - k) * (Math.PI / 2);
-      n.rotation.x = 0.08 * (1 - k);
+      n.rotation.x = -0.55 * (1 - k);
     } else if (n) {
       posarTumbado(n, n.position.x, n.position.y, n.position.z, n.userData.yawCaida || 0, 1, false);
     }
@@ -7909,22 +7969,23 @@ function updateCaidaChoque(dt) {
     }
     if (c.fase === 'llegada' && c.t > 2.05) { c.fase = 'acostar'; c.t = 0; }
     else if (c.fase === 'acostar' && c.t > 0.9) { c.fase = 'cierre'; c.t = 0; }
-    else if (c.fase === 'cierre' && c.t > 0.75) {
-      if (c.llevaJugador) {
+    else if (c.fase === 'cierre' && c.llevaJugador && c.interior && c.camilla) {
+      c.interior.visible = true;
+      c.interior.position.set(c.camilla.position.x, c.camilla.position.y + 0.42, c.camilla.position.z);
+      moverCierre(c.interior, Math.min(1, c.t / 1.15));
+      if (c.t > 1.2) {
         c.fase = 'dentro';
         c.t = 0;
-        if (c.interior && c.camilla) {
-          c.interior.position.set(c.camilla.position.x, c.camilla.position.y + 0.55, c.camilla.position.z);
-          c.interior.visible = true;
-          c.camilla.visible = false;
-          if (c.e1) c.e1.visible = false;
-          if (c.e2) c.e2.visible = false;
-          if (c.cuerda1) c.cuerda1.visible = false;
-          if (c.cuerda2) c.cuerda2.visible = false;
-          if (c.ambulancia) c.ambulancia.visible = false;
-        }
-      } else if (c.t > 1.3) terminarCaida();
-    } else if (c.fase === 'dentro' && c.t > 3.4) terminarCaida();
+        c.camilla.visible = false;
+        if (c.e1) c.e1.visible = false;
+        if (c.e2) c.e2.visible = false;
+        if (c.cuerda1) c.cuerda1.visible = false;
+        if (c.cuerda2) c.cuerda2.visible = false;
+        if (c.ambulancia) c.ambulancia.visible = false;
+        moverCierre(c.interior, 1);
+      }
+    } else if (c.fase === 'cierre' && !c.llevaJugador && c.t > 1.3) terminarCaida();
+    else if (c.fase === 'dentro' && c.t > 3.4) terminarCaida();
     player.position.set(c.pies.x, c.pies.y + 0.35, c.pies.z);
   }
   return !!caidaChoque;
