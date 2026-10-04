@@ -2436,7 +2436,8 @@ function updatePlayerCamera(dt) {
       playerAvatar.visible = false;
     } else {
       playerAvatar.rotation.set(0, yaw + Math.PI + (state.skiing && skiGearMesh ? skiGearMesh.rotation.y : 0), 0);
-      swingLimbs(playerAvatar, dt || 0.016);
+      if (state.skiing) aquietarCuerpoEsqui();
+      else swingLimbs(playerAvatar, dt || 0.016);
     }
   }
   if (cameraMode === 0) {
@@ -21987,6 +21988,28 @@ function drawMinimap() {
   g.beginPath(); g.arc(px, pz, 3.5, 0, 7); g.fill(); g.stroke();
 }
 
+function aquietarCuerpoEsqui() {
+  const l = playerAvatar.userData.limbs;
+  if (!l) return;
+  l.legL.rotation.x = 0.22; l.legR.rotation.x = 0.22;
+  l.legL.rotation.z = 0.06; l.legR.rotation.z = -0.06;
+  l.armL.rotation.x = -0.22; l.armR.rotation.x = -0.22;
+  l.armL.rotation.z = 0.5; l.armR.rotation.z = -0.5;
+}
+function flexionarEsquis(gear, dt, steer, speedNow) {
+  gear.userData.flexT = (gear.userData.flexT || 0) + dt * (2.4 + Math.min(10, speedNow));
+  const flex = Math.sin(gear.userData.flexT) * (0.06 + Math.min(0.2, speedNow * 0.012));
+  const izq = gear.children[0], der = gear.children[1];
+  if (izq) izq.rotation.x = flex + steer * 0.14;
+  if (der) der.rotation.x = flex * 0.55 - steer * 0.14;
+  if (gear.userData.board) gear.userData.board.rotation.x = flex + steer * 0.1;
+}
+function soltarFlexionEsquis(gear) {
+  const izq = gear.children[0], der = gear.children[1];
+  if (izq) izq.rotation.x = 0;
+  if (der) der.rotation.x = 0;
+  if (gear.userData.board) gear.userData.board.rotation.x = 0;
+}
 function ensurePlayerSkiVisual() {
   if (skiGearMesh) return skiGearMesh;
   skiGearMesh = new THREE.Group(); skiGearMesh.position.y = -1.48; skiGearMesh.visible = false; player.add(skiGearMesh);
@@ -22004,7 +22027,12 @@ function stopSkiCarve() { skiVelX = 0; skiVelZ = 0; skiRampBoost = 0; skiRampRid
 function updateSkiMovement(dt) {
   if (!state.skiPass || !state.skiGear) { if (skiGearMesh) skiGearMesh.visible = false; return false; }
   const gearVisual = ensurePlayerSkiVisual(); gearVisual.visible = !!state.skiGearWorn || !!state.skiing; gearVisual.userData.board.visible = state.skiGear === 'snowboard';
-  if (!state.skiing) { stopSkiCarve(); return false; }
+  if (!state.skiing) {
+    stopSkiCarve();
+    soltarFlexionEsquis(gearVisual);
+    gearVisual.rotation.y = 0; gearVisual.rotation.z = 0; gearVisual.position.x = 0;
+    return false;
+  }
   const fwd = keys['KeyW'] || keys['ArrowUp'], back = keys['KeyS'] || keys['ArrowDown'];
   const left = keys['KeyA'] || keys['ArrowLeft'], right = keys['KeyD'] || keys['ArrowRight'];
   const lookSpeed = 1.8 * dt;
@@ -22028,6 +22056,7 @@ function updateSkiMovement(dt) {
   gearVisual.rotation.y += ((-steer * .45) - gearVisual.rotation.y) * Math.min(1, dt * 8);
   gearVisual.rotation.z += (lean - gearVisual.rotation.z) * Math.min(1, dt * 9);
   gearVisual.position.x += (steer * .28 - gearVisual.position.x) * Math.min(1, dt * 10);
+  flexionarEsquis(gearVisual, dt, steer, speedNow);
   if (grounded) {
     let accel = 4.2 + Math.min(16, slopeDrop * .85);
     if (push > 0) accel += 7;
