@@ -2426,6 +2426,7 @@ function getAimDirection(out) {
 }
 
 function updatePlayerCamera(dt) {
+  if (gymSesion && state.inGym) { encuadrarGym(); return; }
   if (caidaChoque) {
     encuadrarCaida();
     return;
@@ -10357,15 +10358,17 @@ const GYM_NOMBRES = {
   prensa: 'la prensa de piernas', polea: 'la polea', remo: 'la máquina de remo',
 };
 function gymRachaLista() { return !!(state.gym && state.gym.streak >= 5); }
+function gymRutinaLista() { return !!(state.gym && state.gym.completas >= 5); }
 function esEspadaObsidianaEnMano() {
   const n = String(state.weaponName || '').toLowerCase();
   return n.includes('espada') && n.includes('obsidiana');
 }
 function danoDeEspada() {
   const base = state.weaponDmg || 0;
-  return gymRachaLista() && esEspadaObsidianaEnMano() ? base + 1 : base;
+  if (!esEspadaObsidianaEnMano()) return base;
+  return base + (gymRachaLista() ? 1 : 0) + (gymRutinaLista() ? 1 : 0);
 }
-function velocidadCorrer() { return 14 + (gymRachaLista() ? 1 : 0); }
+function velocidadCorrer() { return 14 + (gymRachaLista() ? 1 : 0) + (gymRutinaLista() ? 1 : 0); }
 function gymDoor() { return { x: GYM.x, z: GYM.z + GYM.d / 2 + 2.6 }; }
 function piezaGym(g, x, y, z, w, h, d, color) { return mcBox(g, x, y, z, w, h, d, color); }
 function ponerMaquina(g, x, z, tipo, armar) {
@@ -10373,80 +10376,111 @@ function ponerMaquina(g, x, z, tipo, armar) {
   root.position.set(x, 0, z);
   g.add(root);
   const mover = armar(root);
-  gymMaquinas.push({ tipo, x: GYM_IN.x + x, z: GYM_IN.z + z, mesh: root, mover, baseY: mover ? mover.position.y : 0 });
+  gymMaquinas.push({ tipo, x: GYM_IN.x + x, z: GYM_IN.z + z, mesh: root, mover, baseY: mover ? mover.position.y : 0, partes: root.userData.gymPartes || {} });
   const aviso = makeSign(tipo, 0xfde68a);
   aviso.position.set(x, 2.35, z);
   aviso.scale.set(0.32, 0.32, 0.32);
   g.add(aviso);
 }
+function barraConDiscos(largo, radio) {
+  const g = new THREE.Group();
+  const palo = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, largo, 10), mat(0xf8fafc));
+  palo.rotation.z = Math.PI / 2; g.add(palo);
+  for (const s of [-1, 1]) {
+    const negro = new THREE.Mesh(new THREE.CylinderGeometry(radio, radio, 0.14, 14), mat(0x111827));
+    negro.rotation.z = Math.PI / 2; negro.position.x = s * (largo * 0.36); g.add(negro);
+    const rojo = new THREE.Mesh(new THREE.CylinderGeometry(radio * 0.82, radio * 0.82, 0.1, 14), mat(0xdc2626));
+    rojo.rotation.z = Math.PI / 2; rojo.position.x = s * (largo * 0.36 + 0.16); g.add(rojo);
+  }
+  return g;
+}
 function armarCaminadora(root) {
-  piezaGym(root, 0, 0.22, 0, 1.15, 0.14, 2.3, 0x111827);
-  piezaGym(root, 0, 0.38, 0, 0.92, 0.08, 2.0, 0x4b5563);
-  piezaGym(root, -0.5, 0.85, 0.95, 0.1, 1.05, 0.1, 0xd1d5db);
-  piezaGym(root, 0.5, 0.85, 0.95, 0.1, 1.05, 0.1, 0xd1d5db);
-  return piezaGym(root, 0, 1.35, 1.05, 0.85, 0.32, 0.1, 0x2563eb);
+  piezaGym(root, 0, 0.22, 0, 1.2, 0.16, 2.4, 0x111827);
+  const cinta = new THREE.Group();
+  for (let i = 0; i < 8; i++) piezaGym(cinta, 0, 0.48, -0.95 + i * 0.26, 0.86, 0.04, 0.12, i % 2 ? 0x111827 : 0xd1d5db);
+  root.add(cinta);
+  piezaGym(root, -0.52, 0.9, -0.95, 0.08, 1.15, 0.08, 0xd1d5db);
+  piezaGym(root, 0.52, 0.9, -0.95, 0.08, 1.15, 0.08, 0xd1d5db);
+  const panel = piezaGym(root, 0, 1.45, -1.05, 0.9, 0.36, 0.1, 0x2563eb);
+  root.userData.gymPartes = { cinta, panel };
+  return cinta;
 }
 function armarPesas(root) {
-  const barra = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.7, 8), mat(0xe5e7eb));
-  barra.rotation.z = Math.PI / 2; barra.position.y = 0.55; root.add(barra);
-  piezaGym(root, -0.72, 0.55, 0, 0.22, 0.42, 0.42, 0x111827);
-  piezaGym(root, 0.72, 0.55, 0, 0.22, 0.42, 0.42, 0x111827);
+  const barra = barraConDiscos(1.8, 0.32);
+  barra.position.y = 0.4; root.add(barra);
+  root.userData.gymPartes = { barra };
   return barra;
 }
 function armarBanca(root) {
-  piezaGym(root, 0, 0.42, 0, 0.55, 0.12, 1.5, 0x1d4ed8);
-  piezaGym(root, 0, 0.22, -0.55, 0.5, 0.32, 0.12, 0x9ca3af);
-  piezaGym(root, 0, 0.22, 0.55, 0.5, 0.32, 0.12, 0x9ca3af);
-  const barra = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.35, 8), mat(0xf8fafc));
-  barra.rotation.z = Math.PI / 2; barra.position.set(0, 0.85, 0); root.add(barra);
+  piezaGym(root, 0, 0.48, 0.05, 0.62, 0.14, 1.75, 0x1d4ed8);
+  piezaGym(root, 0, 0.26, -0.75, 0.55, 0.4, 0.14, 0x9ca3af);
+  piezaGym(root, 0, 0.26, 0.78, 0.55, 0.4, 0.14, 0x9ca3af);
+  const barra = barraConDiscos(1.9, 0.34);
+  barra.position.set(0, 1.15, 0.05); root.add(barra);
+  root.userData.gymPartes = { barra };
   return barra;
 }
 function armarMancuernas(root) {
-  piezaGym(root, 0, 0.28, 0, 1.4, 0.16, 0.55, 0x374151);
-  const a = piezaGym(root, -0.35, 0.48, 0, 0.38, 0.14, 0.14, 0xdc2626);
-  piezaGym(root, 0.35, 0.48, 0, 0.38, 0.14, 0.14, 0x2563eb);
-  return a;
+  piezaGym(root, 0, 0.32, 0, 1.5, 0.16, 0.6, 0x374151);
+  const izq = barraConDiscos(0.55, 0.16); izq.position.set(-0.38, 0.55, 0); root.add(izq);
+  const der = barraConDiscos(0.55, 0.16); der.position.set(0.38, 0.55, 0); root.add(der);
+  root.userData.gymPartes = { izq, der };
+  return izq;
 }
 function armarRack(root) {
-  piezaGym(root, -0.55, 1.05, -0.35, 0.1, 2.0, 0.1, 0x111827);
-  piezaGym(root, 0.55, 1.05, -0.35, 0.1, 2.0, 0.1, 0x111827);
-  piezaGym(root, -0.55, 1.05, 0.35, 0.1, 2.0, 0.1, 0x111827);
-  piezaGym(root, 0.55, 1.05, 0.35, 0.1, 2.0, 0.1, 0x111827);
-  piezaGym(root, 0, 1.95, 0, 1.2, 0.1, 0.8, 0x111827);
-  const barra = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.5, 8), mat(0xf8fafc));
-  barra.rotation.z = Math.PI / 2; barra.position.set(0, 1.55, 0); root.add(barra);
+  for (const x of [-0.62, 0.62]) for (const z of [-0.38, 0.38]) piezaGym(root, x, 1.15, z, 0.1, 2.2, 0.1, 0x111827);
+  piezaGym(root, 0, 2.15, 0, 1.4, 0.1, 0.9, 0x111827);
+  const barra = barraConDiscos(1.7, 0.3);
+  barra.position.set(0, 1.6, 0); root.add(barra);
+  root.userData.gymPartes = { barra };
   return barra;
 }
 function armarBici(root) {
-  piezaGym(root, 0, 0.35, 0, 0.12, 0.55, 1.3, 0x334155);
-  piezaGym(root, 0, 0.85, -0.35, 0.28, 0.1, 0.28, 0x111827);
-  const rueda = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.05, 6, 12), mat(0x9ca3af));
-  rueda.position.set(0, 0.42, 0.45); root.add(rueda);
+  piezaGym(root, 0, 0.42, 0, 0.12, 0.7, 1.45, 0x334155);
+  piezaGym(root, 0, 0.95, -0.42, 0.34, 0.1, 0.34, 0x111827);
+  const rueda = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.06, 8, 16), mat(0x9ca3af));
+  rueda.position.set(0, 0.48, 0.5); root.add(rueda);
+  const biela = new THREE.Group(); biela.position.set(0, 0.48, 0.05); root.add(biela);
+  const palanca = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.7, 0.08), mat(0xe5e7eb)); biela.add(palanca);
+  const pedal = piezaGym(biela, 0.2, 0.32, 0, 0.22, 0.06, 0.12, 0xf59e0b);
+  root.userData.gymPartes = { rueda, biela, pedal };
   return rueda;
 }
 function armarEliptica(root) {
-  piezaGym(root, 0, 0.7, 0.2, 0.12, 1.2, 0.12, 0xe5e7eb);
-  piezaGym(root, 0, 0.28, 0, 0.7, 0.1, 1.6, 0x374151);
-  const pedal = piezaGym(root, 0.28, 0.4, 0.15, 0.16, 0.08, 0.28, 0xf59e0b);
-  piezaGym(root, -0.28, 0.4, -0.15, 0.16, 0.08, 0.28, 0xf59e0b);
-  return pedal;
+  piezaGym(root, 0, 0.85, -0.15, 0.12, 1.45, 0.12, 0xe5e7eb);
+  piezaGym(root, 0, 0.28, 0, 0.8, 0.12, 1.7, 0x374151);
+  const pedalL = piezaGym(root, -0.28, 0.42, 0.1, 0.2, 0.08, 0.36, 0xf59e0b);
+  const pedalR = piezaGym(root, 0.28, 0.42, -0.1, 0.2, 0.08, 0.36, 0xf59e0b);
+  root.userData.gymPartes = { pedalL, pedalR };
+  return pedalL;
 }
 function armarPrensa(root) {
-  piezaGym(root, 0, 0.45, 0.35, 0.7, 0.45, 0.7, 0x1f2937);
-  piezaGym(root, 0, 0.85, -0.15, 0.15, 0.9, 0.9, 0x6b7280);
-  return piezaGym(root, 0, 1.15, -0.55, 0.9, 0.7, 0.16, 0xdc2626);
+  piezaGym(root, 0, 0.42, 0.55, 0.7, 0.4, 0.7, 0x1f2937);
+  piezaGym(root, 0, 0.9, -0.1, 0.16, 1.15, 1.15, 0x6b7280);
+  const plataforma = new THREE.Group(); root.add(plataforma);
+  piezaGym(plataforma, 0, 1.15, -0.7, 1.05, 0.85, 0.18, 0xdc2626);
+  piezaGym(plataforma, -0.42, 1.15, -0.45, 0.1, 0.1, 0.7, 0x9ca3af);
+  piezaGym(plataforma, 0.42, 1.15, -0.45, 0.1, 0.1, 0.7, 0x9ca3af);
+  root.userData.gymPartes = { plataforma };
+  return plataforma;
 }
 function armarPolea(root) {
-  piezaGym(root, -0.45, 1.15, 0, 0.12, 2.2, 0.12, 0x111827);
-  piezaGym(root, 0.45, 1.15, 0, 0.12, 2.2, 0.12, 0x111827);
-  piezaGym(root, 0, 2.2, 0, 1.05, 0.1, 0.2, 0x111827);
-  piezaGym(root, 0, 1.2, 0, 0.06, 1.5, 0.06, 0x9ca3af);
-  return piezaGym(root, 0, 0.55, 0.15, 0.34, 0.1, 0.1, 0xfbbf24);
+  piezaGym(root, -0.5, 1.25, 0, 0.12, 2.4, 0.12, 0x111827);
+  piezaGym(root, 0.5, 1.25, 0, 0.12, 2.4, 0.12, 0x111827);
+  piezaGym(root, 0, 2.4, 0, 1.15, 0.12, 0.28, 0x111827);
+  const cable = piezaGym(root, 0, 1.55, 0.12, 0.04, 1.5, 0.04, 0x9ca3af);
+  const agarre = new THREE.Group(); root.add(agarre);
+  piezaGym(agarre, 0, 0, 0.22, 0.7, 0.08, 0.08, 0xfbbf24);
+  agarre.position.y = 2.05;
+  root.userData.gymPartes = { cable, agarre };
+  return agarre;
 }
 function armarRemo(root) {
-  piezaGym(root, 0, 0.22, 0, 0.45, 0.12, 2.1, 0x334155);
-  const asiento = piezaGym(root, 0, 0.4, 0.25, 0.4, 0.1, 0.35, 0x111827);
-  piezaGym(root, 0, 0.55, -0.85, 0.08, 0.55, 0.08, 0x9ca3af);
+  piezaGym(root, 0, 0.2, 0, 0.5, 0.12, 2.3, 0x334155);
+  const asiento = piezaGym(root, 0, 0.42, 0.35, 0.42, 0.1, 0.38, 0x111827);
+  const manija = new THREE.Group(); root.add(manija);
+  piezaGym(manija, 0, 0.7, -0.15, 0.55, 0.06, 0.06, 0xf8fafc);
+  root.userData.gymPartes = { asiento, manija };
   return asiento;
 }
 function construirGym() {
@@ -10532,10 +10566,12 @@ function puertaGymCerca() {
 }
 function fraseSenora(mismoDia, antes, ahora) {
   const dias = ahora + (ahora === 1 ? ' día seguido' : ' días seguidos');
-  if (mismoDia) return 'Hoy no vas más al gym: la entrada de este día ya está paga. Llevas ' + dias + '.';
-  if (ahora >= 5) return 'Sí, vas más al gym. Llevas ' + dias + '. La espada de obsidiana pega más y corres más rápido.';
-  if (antes > 0 && ahora === 1) return 'Se cortó la racha, así que hoy no vas más al gym. Este día cuenta como el primero.';
-  return 'Sí, vas más al gym. Llevas ' + ahora + ' de 5 días seguidos.';
+  const extra = gymRutinaLista() ? ' Con cinco rutinas seguidas quedas un poco más rápido y un poco más fuerte.' : '';
+  const cual = rutinaGymHoy() ? 'Hoy toca la rutina de fuerza.' : 'Hoy toca la rutina de repeticiones.';
+  if (mismoDia) return 'Hoy no vas más al gym: la entrada de este día ya está paga. Llevas ' + dias + '. ' + cual + extra;
+  if (ahora >= 5) return 'Sí, vas más al gym. Llevas ' + dias + '. La espada de obsidiana pega más y corres más rápido.' + extra + ' ' + cual;
+  if (antes > 0 && ahora === 1) return 'Se cortó la racha, así que hoy no vas más al gym. Este día cuenta como el primero. ' + cual;
+  return 'Sí, vas más al gym. Llevas ' + ahora + ' de 5 días seguidos. ' + cual;
 }
 function decirSenora(mismoDiaForzado) {
   const g = state.gym || { streak: 0, lastNight: null };
@@ -10570,29 +10606,244 @@ function entrarAlGym() {
   beep(520, 0.08, 0.04);
   return true;
 }
+let gymSesion = null;
+function asegurarRutinaGym() {
+  if (!state.gym) state.gym = { lastNight: null, streak: 0, completas: 0, ultimaCompleta: null, nocheHechas: null, hechas: {} };
+  if (state.gym.completas == null) state.gym.completas = 0;
+  if (!state.gym.hechas) state.gym.hechas = {};
+  const day = state.night | 0;
+  if (state.gym.nocheHechas !== day) {
+    state.gym.nocheHechas = day;
+    state.gym.hechas = {};
+  }
+  return state.gym;
+}
+function rutinaGymHoy() { return (state.night | 0) % 2; }
+function faltaRutinaGym() {
+  const g = asegurarRutinaGym();
+  return gymMaquinas.filter(m => !g.hechas[m.tipo]);
+}
+function marcarMaquinaGym(tipo) {
+  const g = asegurarRutinaGym();
+  g.hechas[tipo] = true;
+  const falta = faltaRutinaGym();
+  if (falta.length) {
+    toast('💪 ' + GYM_NOMBRES[tipo] + ' lista. Faltan ' + falta.length + '.');
+    return;
+  }
+  const day = state.night | 0;
+  if (g.ultimaCompleta === day) {
+    toast('✅ Rutina de hoy completa. Ya puedes salir.');
+    return;
+  }
+  g.completas = g.ultimaCompleta === day - 1 ? (g.completas || 0) + 1 : 1;
+  g.ultimaCompleta = day;
+  if (g.completas >= 5) toast('💪 Cinco rutinas seguidas. Corres y pegas un poco más, encima de la racha.');
+  else toast('✅ Rutina lista (' + g.completas + ' de 5). Mañana empieza la otra. Ya puedes salir.');
+}
 function salirDelGym() {
+  if (gymSesion) {
+    toast('Termina la serie antes de irte.');
+    return false;
+  }
+  const falta = faltaRutinaGym();
+  if (falta.length) {
+    say('Señora del gym', 'No puedes irte hasta pasar por todas las máquinas. Te falta ' + falta.map(m => GYM_NOMBRES[m.tipo]).join(', ') + '.');
+    return false;
+  }
   state.inGym = false;
   if (gymLobby) gymLobby.visible = false;
   const r = state.gymReturn || gymDoor();
   player.position.set(r.x, r.y || PLAYER_EYE, r.z);
+  posarDePie(playerAvatar);
   toast('🚪 Saliste del gym');
+  return true;
 }
 function usarMaquina(m) {
-  m.mesh.userData.uso = 1.5;
-  toast('🏋️ Usas ' + GYM_NOMBRES[m.tipo] + '.');
+  if (gymSesion) return;
+  gymSesion = { m, t: 0, dur: rutinaGymHoy() ? 8.4 : 7.2, rutina: rutinaGymHoy() };
+  const texto = m.tipo === 'banca'
+    ? 'Acuéstate en la camilla y empuja la pesa hasta que no puedas más.'
+    : 'Usas ' + GYM_NOMBRES[m.tipo] + ' hasta que no puedes más.';
+  toast('🏋️ ' + texto);
   beep(440, 0.06, 0.03);
 }
-function actualizarMaquinasGym(dt) {
-  for (const m of gymMaquinas) {
-    if (!m.mesh.userData.uso || !m.mover) continue;
-    m.mesh.userData.uso -= dt;
-    const k = Math.max(0, m.mesh.userData.uso);
-    m.mover.position.y = m.baseY + (k > 0 ? Math.sin(k * 22) * 0.08 : 0);
+function pulsoGym(t, rutina) {
+  const ang = t * (rutina ? 0.5 : 0.85) * Math.PI * 2;
+  return { ang, pulso: (Math.sin(ang) + 1) / 2 };
+}
+function animarMaquinaGym(m, t, rutina) {
+  const p = m.partes || {};
+  const { ang, pulso } = pulsoGym(t, rutina);
+  if (m.tipo === 'caminadora' && p.cinta) {
+    const paso = (t * (rutina ? 1.4 : 2.6)) % 0.52;
+    p.cinta.children.forEach((c, i) => { c.position.z = -0.95 + ((i * 0.26 + paso) % 2.08); });
+  } else if (m.tipo === 'pesas' && p.barra) {
+    p.barra.position.y = rutina ? 0.55 + pulso * 0.55 : 0.38 + pulso * 1.15;
+    p.barra.position.z = rutina ? -0.15 - (1 - pulso) * 0.35 : 0;
+  } else if (m.tipo === 'banca' && p.barra) {
+    p.barra.position.y = 0.72 + pulso * 0.9;
+    p.barra.position.z = 0.05;
+  } else if (m.tipo === 'mancuernas' && p.izq) {
+    const alto = rutina ? 1.15 + pulso * 0.9 : 0.5 + pulso * 0.85;
+    const fondo = rutina ? 0.05 : 0.15 + pulso * 0.28;
+    p.izq.position.set(-0.38, alto, fondo);
+    p.der.position.set(0.38, alto, fondo);
+  } else if (m.tipo === 'rack' && p.barra) {
+    p.barra.position.y = rutina ? 0.72 + pulso * 0.9 : 1.62 - pulso * 0.72;
+  } else if (m.tipo === 'bici') {
+    if (p.rueda) p.rueda.rotation.x = ang * (rutina ? 2.2 : 1.4);
+    if (p.biela) p.biela.rotation.x = ang * (rutina ? 1.3 : 1);
+  } else if (m.tipo === 'eliptica' && p.pedalL) {
+    const a = rutina ? -ang : ang;
+    p.pedalL.position.set(-0.28, 0.38 + Math.sin(a) * 0.28, Math.cos(a) * 0.48);
+    p.pedalR.position.set(0.28, 0.38 + Math.sin(a + Math.PI) * 0.28, Math.cos(a + Math.PI) * 0.48);
+  } else if (m.tipo === 'prensa' && p.plataforma) {
+    p.plataforma.position.z = -pulso * (rutina ? 0.85 : 0.62);
+  } else if (m.tipo === 'polea' && p.agarre) {
+    if (rutina) { p.agarre.position.set(0, 1.05, 0.15 + pulso * 0.55); }
+    else { p.agarre.position.set(0, 2.05 - pulso * 1.05, 0.2); }
+    if (p.cable) p.cable.scale.y = Math.max(0.25, (p.agarre.position.y - 0.35) / 1.5);
+  } else if (m.tipo === 'remo') {
+    if (p.asiento) p.asiento.position.z = rutina ? 0.35 : 0.15 + pulso * 0.7;
+    if (p.manija) p.manija.position.z = 0.15 + pulso * 0.85;
   }
+}
+function posarCuerpoGym(m, t, rutina) {
+  const l = playerAvatar.userData.limbs;
+  if (!l) return;
+  const { ang, pulso } = pulsoGym(t, rutina);
+  playerAvatar.visible = cameraMode !== 0;
+  const pie = (x, y, z, rx) => { playerAvatar.position.set(m.x + x, y, m.z + z); playerAvatar.rotation.set(rx || 0, 0, 0); };
+  if (m.tipo === 'banca') {
+    pie(0, 0.58, -0.85, Math.PI / 2);
+    l.armL.rotation.set(-0.2 - pulso * 1.35, 0, 0.35);
+    l.armR.rotation.set(-0.2 - pulso * 1.35, 0, -0.35);
+    l.legL.rotation.set(0.35, 0, 0.2); l.legR.rotation.set(0.35, 0, -0.2);
+  } else if (m.tipo === 'caminadora') {
+    pie(0, 0, 0.15, 0);
+    const paso = Math.sin(ang * (rutina ? 1.2 : 2));
+    l.legL.rotation.x = paso * 1.15; l.legR.rotation.x = -paso * 1.15;
+    l.armL.rotation.x = -paso * 0.9; l.armR.rotation.x = paso * 0.9;
+    l.armL.rotation.z = 0.15; l.armR.rotation.z = -0.15;
+  } else if (m.tipo === 'mancuernas') {
+    pie(0, 0, 0.55, 0);
+    const curl = rutina ? -2.2 + pulso * 0.4 : -0.4 - pulso * 1.7;
+    l.armL.rotation.set(curl, 0, 0.25); l.armR.rotation.set(curl, 0, -0.25);
+    l.legL.rotation.set(0, 0, 0); l.legR.rotation.set(0, 0, 0);
+  } else if (m.tipo === 'rack') {
+    pie(0, rutina ? 0 : -pulso * 0.45, 0.35, 0);
+    l.legL.rotation.x = rutina ? -0.4 : -pulso * 1.15;
+    l.legR.rotation.x = l.legL.rotation.x;
+    l.armL.rotation.set(rutina ? -1.2 - pulso * 0.8 : -1.5, 0, 0.4);
+    l.armR.rotation.set(rutina ? -1.2 - pulso * 0.8 : -1.5, 0, -0.4);
+  } else if (m.tipo === 'bici') {
+    pie(0, 0.15, -0.35, 0);
+    posarSentado(playerAvatar);
+    const ped = Math.sin(ang);
+    l.legL.rotation.x = -1.2 + ped * 0.7; l.legR.rotation.x = -1.2 - ped * 0.7;
+    playerAvatar.position.y = rutina ? 0.15 + Math.abs(ped) * 0.12 : 0.15;
+  } else if (m.tipo === 'eliptica') {
+    pie(0, 0, 0.2, 0);
+    const ped = Math.sin(rutina ? -ang : ang);
+    l.legL.rotation.x = ped * 0.9; l.legR.rotation.x = -ped * 0.9;
+    l.armL.rotation.x = -0.8 - ped * 0.6; l.armR.rotation.x = -0.8 + ped * 0.6;
+  } else if (m.tipo === 'prensa') {
+    pie(0, 0.15, 0.85, 0);
+    posarSentado(playerAvatar);
+    l.legL.rotation.x = -0.4 - pulso * 1.1; l.legR.rotation.x = -0.4 - pulso * 1.1;
+    l.armL.rotation.set(-0.3, 0, 0.2); l.armR.rotation.set(-0.3, 0, -0.2);
+  } else if (m.tipo === 'polea') {
+    pie(0, 0.05, 0.55, 0);
+    posarSentado(playerAvatar);
+    const tiro = rutina ? -0.6 - pulso * 0.5 : -2.4 + pulso * 1.5;
+    l.armL.rotation.set(tiro, 0, 0.35); l.armR.rotation.set(tiro, 0, -0.35);
+  } else if (m.tipo === 'remo') {
+    pie(0, 0.12, (rutina ? 0.35 : 0.15 + pulso * 0.7), 0);
+    posarSentado(playerAvatar);
+    l.legL.rotation.x = -0.5 - (1 - pulso) * 0.8; l.legR.rotation.x = l.legL.rotation.x;
+    l.armL.rotation.set(-0.4 - pulso * 1.1, 0, 0.2); l.armR.rotation.set(-0.4 - pulso * 1.1, 0, -0.2);
+  } else if (m.tipo === 'pesas') {
+    pie(0, 0, 0.7, rutina ? 0.7 : 0.9 * (1 - pulso));
+    l.armL.rotation.set(-1.3 + pulso * 0.8, 0, 0.2); l.armR.rotation.set(-1.3 + pulso * 0.8, 0, -0.2);
+    l.legL.rotation.x = (1 - pulso) * 0.6; l.legR.rotation.x = l.legL.rotation.x;
+  }
+}
+function posarManosGym() {
+  if (!gymSesion) return;
+  const { pulso } = pulsoGym(gymSesion.t, gymSesion.rutina);
+  const tipo = gymSesion.m.tipo;
+  viewmodel.visible = cameraMode === 0;
+  if (tipo === 'banca') {
+    viewmodel.position.set(0.02, -0.05 + pulso * 0.55, -0.62);
+    viewmodel.rotation.set(-1.35 + pulso * 0.9, 0.05, 0);
+  } else if (tipo === 'caminadora') {
+    const paso = Math.sin(gymSesion.t * (gymSesion.rutina ? 8 : 14));
+    viewmodel.position.set(0.34, -0.35 + paso * 0.16, -0.7);
+    viewmodel.rotation.set(-0.5 + paso * 0.8, 0, -0.2);
+  } else if (tipo === 'mancuernas' || tipo === 'pesas' || tipo === 'rack') {
+    viewmodel.position.set(0.28, -0.42 + pulso * 0.62, -0.58);
+    viewmodel.rotation.set(-0.3 - pulso * 1.3, 0.1, -0.25);
+  } else {
+    viewmodel.position.set(0.22, -0.28 + pulso * 0.22, -0.66);
+    viewmodel.rotation.set(-0.7 - pulso * 0.8, 0.15, -0.2);
+  }
+}
+function encuadrarGym() {
+  if (!gymSesion) return;
+  const m = gymSesion.m;
+  const { pulso } = pulsoGym(gymSesion.t, gymSesion.rutina);
+  posarCuerpoGym(m, gymSesion.t, gymSesion.rutina);
+  if (cameraMode === 0) {
+    const pieza = m.tipo === 'banca' || m.tipo === 'rack' || m.tipo === 'pesas' ? m.partes.barra
+      : m.tipo === 'caminadora' ? m.partes.cinta
+      : m.tipo === 'mancuernas' ? m.partes.izq
+      : m.tipo === 'bici' ? m.partes.biela
+      : m.tipo === 'eliptica' ? m.partes.pedalL
+      : m.tipo === 'prensa' ? m.partes.plataforma
+      : m.tipo === 'polea' ? m.partes.agarre
+      : m.partes.manija;
+    const ojo = m.tipo === 'banca' ? { x: 0, y: 0.62, z: 0.72 }
+      : m.tipo === 'caminadora' ? { x: 0, y: 1.62 + Math.sin(gymSesion.t * 14) * 0.06, z: 0.2 }
+      : m.tipo === 'prensa' ? { x: 0, y: 1.2, z: 0.95 }
+      : m.tipo === 'remo' ? { x: 0, y: 1.15, z: (m.partes.asiento ? m.partes.asiento.position.z : 0.3) + 0.45 }
+      : m.tipo === 'bici' ? { x: 0.15, y: 1.35, z: -0.2 }
+      : m.tipo === 'polea' ? { x: 0, y: 1.4, z: 0.85 }
+      : m.tipo === 'eliptica' ? { x: 0, y: 1.65, z: 0.85 }
+      : { x: 0, y: PLAYER_EYE - (m.tipo === 'rack' && !gymSesion.rutina ? pulso * 0.35 : 0), z: 0.95 };
+    camera.position.set(m.x + ojo.x, ojo.y, m.z + ojo.z);
+    if (pieza) {
+      const blanco = new THREE.Vector3();
+      pieza.getWorldPosition(blanco);
+      camera.lookAt(blanco);
+    }
+    player.position.copy(camera.position);
+    yaw = camera.rotation.y;
+    pitch = camera.rotation.x;
+    posarManosGym();
+    return;
+  }
+  const focoY = playerAvatar.position.y + 0.85;
+  camera.position.set(m.x + 2.35, focoY + 1.15, m.z + 0.35);
+  camera.lookAt(m.x, focoY, m.z);
+}
+function actualizarMaquinasGym(dt) {
+  if (!gymSesion) return;
+  gymSesion.t += dt;
+  animarMaquinaGym(gymSesion.m, gymSesion.t, gymSesion.rutina);
+  if (gymSesion.t < gymSesion.dur) return;
+  const tipo = gymSesion.m.tipo;
+  gymSesion = null;
+  posarDePie(playerAvatar);
+  playerAvatar.rotation.set(0, yaw + Math.PI, 0);
+  marcarMaquinaGym(tipo);
+  toast('😮 No puedes más.');
+  beep(220, 0.09, 0.04);
 }
 function tryGym() {
   if (state.planet !== 'tierra' || state.country) return false;
   if (state.inGym) {
+    if (gymSesion) { toast('Sigue hasta que no puedas más.'); return true; }
     const m = maquinaCerca(2.6);
     if (m) { usarMaquina(m); return true; }
     if (senoraCerca(2.8)) { decirSenora(true); return true; }
@@ -10605,10 +10856,14 @@ function tryGym() {
 function gymPrompt() {
   if (state.planet !== 'tierra' || state.country) return null;
   if (state.inGym) {
+    if (gymSesion) return { key: 'E', touch: '🏋️', text: 'Aguanta ' + GYM_NOMBRES[gymSesion.m.tipo] };
     const m = maquinaCerca(2.6);
-    if (m) return { key: 'E', touch: '🏋️', text: 'Usar ' + GYM_NOMBRES[m.tipo] };
+    if (m) {
+      const hecha = asegurarRutinaGym().hechas[m.tipo];
+      return { key: 'E', touch: '🏋️', text: (hecha ? 'Repetir ' : 'Usar ') + GYM_NOMBRES[m.tipo] };
+    }
     if (senoraCerca(2.8)) return { key: 'E', touch: '👩', text: 'Hablar con la señora del gym' };
-    if (salidaGymCerca()) return { key: 'E', touch: '🚪', text: 'Salir del gym' };
+    if (salidaGymCerca()) return { key: 'E', touch: '🚪', text: faltaRutinaGym().length ? 'Salir (te faltan máquinas)' : 'Salir del gym' };
     return null;
   }
   if (puertaGymCerca()) return { key: 'E', touch: '🏋️', text: state.creative ? 'Entrar al gym' : 'Entrar al gym · $2000' };
@@ -14852,7 +15107,7 @@ const state = {
   coreClaimed: false, relics: 0, trophies: 0, floor2Rot: 0, floors2: [], country: null, inFlight: false,   // país que estás visitando (aeropuerto) · vuelo en cabina   // núcleo (reliquias) + trofeos + segundos pisos
   riding: false,   // montando una criatura firma domada
   inCastle: false, inArena: false, inHotel: false, hotelReturn: null,   // dentro del castillo, del coliseo o de un hotel del mundo
-  inGym: false, gymReturn: null, gym: { lastNight: null, streak: 0 },   // gym: un pago de $2000 por día, cinco días seguidos
+  inGym: false, gymReturn: null, gym: { lastNight: null, streak: 0, completas: 0, ultimaCompleta: null, nocheHechas: null, hechas: {} },   // gym: un pago de $2000 por día, cinco días seguidos; cinco rutinas completas suman otro punto
   baseLevel: 0, baseTurrets: 0, baseGenerator: false,   // base espacial propia (cúpula + torretas + generador), se arma en cada planeta
   tutorial: { step: 0, complete: false }, chapter: 0, chapterFlags: {}, reputation: 0, medals: {}, blueprints: {}, sportGame: null,
   business: null, businessOrders: 0, parkBusiness: null, arcadeTickets: 0, arcadePrizes: {},
@@ -17421,7 +17676,14 @@ function saveGame() {
       dadMode: dad.userData.mode, dadArmed: !!dad.userData.armed, dadX: dad.position.x, dadZ: dad.position.z, dadArmor: state.dadArmor,   // papá: modo, arma, posición y armadura
       dadResting: !!dad.userData.resting,
       streak: state.streak || 0,   // racha de noches perfectas
-      gym: { lastNight: state.gym && state.gym.lastNight != null ? state.gym.lastNight : null, streak: state.gym && state.gym.streak || 0 },
+      gym: {
+        lastNight: state.gym && state.gym.lastNight != null ? state.gym.lastNight : null,
+        streak: state.gym && state.gym.streak || 0,
+        completas: state.gym && state.gym.completas || 0,
+        ultimaCompleta: state.gym && state.gym.ultimaCompleta != null ? state.gym.ultimaCompleta : null,
+        nocheHechas: state.gym && state.gym.nocheHechas != null ? state.gym.nocheHechas : null,
+        hechas: state.gym && state.gym.hechas ? state.gym.hechas : {},
+      },
       missions: state.missions || null,   // misiones del día con su progreso
       story: state.story || {}, storyRewarded: state.storyRewarded || {}, gadgets: state.gadgets || {}, alleyOpen: !!alley.open, mission: state.mission || null, alleyReturn: alley.returnTo || null, alleyUnlockedToast: !!state.alleyUnlockedToast,
       bestiary: state.bestiary || {},     // colección de monstruos
@@ -18257,7 +18519,14 @@ function loadGame() {
     hasPhone: !!d.hasPhone, skiPass: !!d.skiPass, skiGear: d.skiGear || null, skiGearWorn: d.skiGearWorn != null ? !!d.skiGearWorn : !!d.skiGear, skiing: false, skiLiftRide: null,
     streak: d.streak || 0, stamina: 100, blocking: false, dodgeCd: 0, invulnerable: 0,
     inGym: false, gymReturn: null,
-    gym: { lastNight: d.gym && d.gym.lastNight != null ? d.gym.lastNight : null, streak: Math.max(0, d.gym && +d.gym.streak || 0) },
+    gym: {
+      lastNight: d.gym && d.gym.lastNight != null ? d.gym.lastNight : null,
+      streak: Math.max(0, d.gym && +d.gym.streak || 0),
+      completas: Math.max(0, d.gym && +d.gym.completas || 0),
+      ultimaCompleta: d.gym && d.gym.ultimaCompleta != null ? d.gym.ultimaCompleta : null,
+      nocheHechas: d.gym && d.gym.nocheHechas != null ? d.gym.nocheHechas : null,
+      hechas: (d.gym && d.gym.hechas) || {},
+    },
   });
   lastHp = state.hp;
   resetPlots();
@@ -22620,6 +22889,10 @@ function updateMovement(dt) {
   if (state.hunger <= 0) spd = 6;     // muerto de hambre: caminas lento
   if (running) state.hunger = Math.max(0, state.hunger - 0.8 * dt);
   const step = spd * dt;
+  if (gymSesion && state.inGym) {
+    camera.rotation.y = yaw; camera.rotation.x = pitch;
+    return;
+  }
   // ejes de movimiento: teclado (WASD, discreto) + joystick táctil (analógico)
   let ax = 0, az = 0;
   if (fwd) az += 1; if (back) az -= 1;
@@ -23073,8 +23346,11 @@ try { if (new URLSearchParams(location.search).has('debug')) {
   timDump.empujarMeteorito = () => resolverMeteorito(0.05);
   timDump.gymEstado = () => ({
     streak: state.gym.streak, lastNight: state.gym.lastNight, bonus: gymRachaLista(),
+    completas: state.gym.completas || 0, rutinaExtra: gymRutinaLista(), rutina: rutinaGymHoy(),
     dmg: danoDeEspada(), correr: velocidadCorrer(), inGym: !!state.inGym, money: state.money,
     maquinas: gymMaquinas.map(m => m.tipo),
+    falta: faltaRutinaGym().map(m => m.tipo),
+    sesion: gymSesion ? gymSesion.m.tipo : null,
   });
   timDump.usarGym = () => tryGym();
   timDump.sentarGrada = () => {
@@ -23531,6 +23807,7 @@ function dadWalkBob(dt) {
   }
 }
 function updateViewmodel(dt) {
+  if (gymSesion && state.inGym) { posarManosGym(); return; }
   if (condena && condena.lavando && !condena.camLavado && !condena.pose) {
     viewmodel.visible = true;
     viewmodel.position.set(.08, .12, -.38);
