@@ -21174,6 +21174,23 @@ function asegurarAguaLavado() {
   playerAvatar.userData.aguaLavado = g;
   return g;
 }
+function asegurarCamaCelda() {
+  if (playerAvatar.userData.camaCelda) return playerAvatar.userData.camaCelda;
+  const g = new THREE.Group();
+  const cojin = new THREE.Mesh(smoothBox(.48, .2, .12), mat(0xf8fafc));
+  cojin.position.set(0, 1.78, -.06);
+  g.add(cojin);
+  const manta = new THREE.Mesh(smoothBox(.7, 1.2, .07), mat(0x1d4ed8));
+  manta.position.set(0, .92, .1);
+  g.add(manta);
+  playerAvatar.add(g);
+  g.visible = false;
+  playerAvatar.userData.camaCelda = g;
+  return g;
+}
+function mostrarCamaCelda(on) {
+  asegurarCamaCelda().visible = !!on;
+}
 function soltarManosLavado() {
   if (playerAvatar.userData.manosLavado) playerAvatar.userData.manosLavado.visible = false;
   if (playerAvatar.userData.aguaLavado) playerAvatar.userData.aguaLavado.visible = false;
@@ -21196,12 +21213,9 @@ function acercarAlLavabo() {
 function colocarCuerpoCondena() {
   const c = condena.celda;
   if (condena.lavando && !condena.pose) acercarAlLavabo();
-  else if (condena.pose === 'sentado') {
-    player.position.set(c.cama.x, c.cama.y + 1.05, c.cama.z);
+  else if (condena.pose === 'acostado') {
+    player.position.set(c.cama.x, c.cama.y + .55, c.cama.z);
     yaw = 0; pitch = 0; vy = 0; grounded = true;
-  } else if (condena.pose === 'acostado') {
-    player.position.set(c.cama.x, c.cama.y + .42, c.cama.z);
-    yaw = 0; pitch = -1.05; vy = 0; grounded = true;
   }
 }
 function meterEnCelda() {
@@ -21216,6 +21230,8 @@ function salirDeLaCelda() {
   if (c && c.preso) c.preso.userData.jailQuieto = false;
   condena = null;
   soltarManosLavado();
+  mostrarCamaCelda(false);
+  playerAvatar.rotation.order = 'XYZ';
   posarDePie(playerAvatar);
   player.position.set(JAIL_GATE.x, PLAYER_EYE, JAIL_GATE.z + 6);
   vy = 0; grounded = true;
@@ -21335,20 +21351,24 @@ function encuadrarCondena(dt) {
   soltarManosLavado();
   playerAvatar.visible = true;
   if (condena.pose === 'acostado') {
-    playerAvatar.position.set(c.cama.x, c.cama.y + .02, c.cama.z - .15);
+    playerAvatar.position.set(c.cama.x, c.cama.y + .08, c.cama.z + .9);
     playerAvatar.rotation.order = 'YXZ';
     playerAvatar.rotation.set(-Math.PI / 2, 0, 0);
     posarDePie(playerAvatar);
-    camera.position.set(player.position.x, player.position.y, player.position.z);
-    camera.rotation.set(pitch, yaw, 0);
+    mostrarCamaCelda(true);
+    viewmodel.visible = false;
+    const lado = c.cama.x + 1.85 <= c.maxX - .3 ? 1 : -1;
+    camera.position.set(
+      THREE.MathUtils.clamp(c.cama.x + lado * 1.85, c.minX + .3, c.maxX - .3),
+      c.cama.y + 1.45,
+      THREE.MathUtils.clamp(c.cama.z + .15, c.minZ + .3, c.maxZ - .3)
+    );
+    camera.lookAt(c.cama.x, c.cama.y + .4, c.cama.z);
     applyCameraFeedback(dt);
     return;
   }
-  if (condena.pose === 'sentado') {
-    playerAvatar.position.set(c.cama.x, c.cama.y - .4, c.cama.z);
-    playerAvatar.rotation.set(0, yaw + Math.PI, 0);
-    posarSentado(playerAvatar);
-  }
+  mostrarCamaCelda(false);
+  playerAvatar.rotation.order = 'XYZ';
   if (cameraMode === 0) {
     camera.position.copy(player.position);
     camera.rotation.set(pitch, yaw, 0);
@@ -21366,9 +21386,8 @@ function promptCondena() {
   const seg = Math.max(0, Math.ceil(condena.left));
   if (condena.lavando || condena.camLavado) return { key: 'F5', touch: '💧', text: 'Te lavas la cara · las manos se refriegan y cae agua · celda ' + c.n };
   if (condena.pose === 'acostado') return { key: 'E', touch: '🛏️', text: 'Levantarte de la cama · celda ' + c.n + ' · ' + seg + ' s' };
-  if (condena.pose === 'sentado') return { key: 'E', touch: '🛏️', text: 'Acostarte en la cama · celda ' + c.n };
   if (Math.hypot(player.position.x - c.lavabo.x, player.position.z - c.lavabo.z) < 1.7) return { key: 'E · F5', touch: '💧', text: 'Lavarte la cara en el lavamanos · F5 pone esa cámara' };
-  if (Math.hypot(player.position.x - c.cama.x, player.position.z - c.cama.z) < 1.8) return { key: 'E', touch: '🛏️', text: 'Sentarte en tu cama · celda ' + c.n };
+  if (Math.hypot(player.position.x - c.cama.x, player.position.z - c.cama.z) < 1.8) return { key: 'E', touch: '🛏️', text: 'Acostarte en la cama · celda ' + c.n };
   return { key: '🔒', touch: '🔒', text: 'Celda ' + c.n + ' · te quedan ' + seg + ' s' };
 }
 function tryCelda() {
@@ -21390,27 +21409,20 @@ function tryCelda() {
   if (condena.pose === 'acostado') {
     condena.pose = null;
     soltarManosLavado();
+    mostrarCamaCelda(false);
+    playerAvatar.rotation.order = 'XYZ';
     posarDePie(playerAvatar);
     player.position.set(c.cama.x, PLAYER_EYE, Math.min(c.maxZ, c.cama.z + 1.15));
     toast('🚶 Te levantaste de la cama');
     return true;
   }
-  if (condena.pose === 'sentado') {
+  if (Math.hypot(player.position.x - c.cama.x, player.position.z - c.cama.z) < 1.8) {
     condena.pose = 'acostado';
     condena.lavando = false;
     condena.camLavado = false;
     soltarManosLavado();
     colocarCuerpoCondena();
     toast('🛏️ Te acostaste en la cama de la celda');
-    return true;
-  }
-  if (Math.hypot(player.position.x - c.cama.x, player.position.z - c.cama.z) < 1.8) {
-    condena.pose = 'sentado';
-    condena.lavando = false;
-    condena.camLavado = false;
-    soltarManosLavado();
-    colocarCuerpoCondena();
-    toast('🪑 Sentado en la cama de la celda ' + c.n);
     return true;
   }
   return false;
