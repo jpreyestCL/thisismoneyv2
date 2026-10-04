@@ -5102,13 +5102,36 @@ function updateJailFolk(dt) {
 
 // Policías: aparecen cuando estás "buscado" y te persiguen
 const police = [];
+// Punto libre por donde entra la patrulla. Si estás junto a la cárcel, salen del portón.
+// Si estás lejos, arrancan a la vista, del lado de la comisaría: si no, se quedan en el portón y nunca llegan.
+function sitioPolicia() {
+  const px = player.position.x, pz = player.position.z;
+  const gx = JAIL_GATE.x, gz = JAIL_GATE.z;
+  const dx = gx - px, dz = gz - pz, lejos = Math.hypot(dx, dz) || 1;
+  const libre = (x, z) => !obstacleAt(x, z, 0, 0.75, true) && !terrenoAbrupto(px, pz, x, z);
+  if (lejos < 46) {
+    for (const lado of [0, 3, -3, 6, -6]) {
+      const x = gx + lado, z = gz + 4;
+      if (libre(x, z)) return { x, z };
+    }
+  }
+  const ux = dx / lejos, uz = dz / lejos;
+  for (const dist of [34, 26, 18, 42]) {
+    if (dist > lejos - 6) continue;
+    for (const lado of [0, 5, -5, 10, -10]) {
+      const x = px + ux * dist - uz * lado, z = pz + uz * dist + ux * lado;
+      if (libre(x, z)) return { x, z };
+    }
+  }
+  return { x: gx, z: gz + 4 };
+}
 function spawnPolice(n) {
   for (let k = 0; k < n; k++) {
     const p = makePerson(0x1e3a8a, 0xf1c27d);
     const helm = new THREE.Mesh(smoothBox(0.52, 0.22, 0.52), mat(0x1e40af)); helm.position.y = 2.35; p.add(helm);
     const tag = makeSign('POLICIA', 0x60a5fa); tag.scale.set(.5, .5, .5); tag.position.set(0, 3, 0); p.add(tag);
-    // salen por el PORTÓN de la cárcel (no de cualquier parte), con un poco de dispersión
-    p.position.set(JAIL_GATE.x + (Math.random() * 8 - 4), 0, JAIL_GATE.z + Math.random() * 3);
+    const sitio = sitioPolicia();
+    p.position.set(sitio.x, mountainHeightAt(sitio.x, sitio.z), sitio.z);
     scene.add(p); police.push(p);
   }
 }
@@ -5129,7 +5152,7 @@ function becomeWanted(sec, stars) {
   stars = stars || 1;
   state.wantedLevel = Math.min(5, (state.wantedLevel || 0) + stars);
   state.wanted = Math.max(state.wanted, sec + state.wantedLevel * 5);
-  if (police.length === 0 && state.policeDelay <= 0) state.policeDelay = Math.max(2, 8 - state.wantedLevel);
+  state.policeDelay = 0;   // salen enseguida: si esperan, la búsqueda se acaba antes de que lleguen
 }
 function updatePolice(dt) {
   if (state.planet === 'platus') { if (police.length) clearPolice(); state.wanted = 0; state.wantedLevel = 0; return; }   // en Platus NO hay policía
@@ -5154,7 +5177,7 @@ function updatePolice(dt) {
       if (escondido) {   // no te ven: se quedan dando vueltas donde te vieron por última vez
         p.userData.lostAt = p.userData.lostAt || { x: player.position.x, z: player.position.z };
         const lost = p.userData.lostAt;
-        if (dist2D(p.position, lost) > 3) moveToward(p, lost, speed * .55 * dt);
+        if (dist2D(p.position, lost) > 3) moveToward(p, lost, speed * .55 * dt, true);
         else p.rotation.y += dt * 1.6;
         if (p.userData.car) p.userData.car.position.set(p.position.x, mountainHeightAt(p.position.x, p.position.z), p.position.z);
         continue;
@@ -5164,7 +5187,15 @@ function updatePolice(dt) {
         if (playerAirborne()) { airCombatMiss('police'); continue; }   // volando: te persiguen abajo, no te esposan
         policeCatch(); return;
       }
-      moveToward(p, player.position, speed * dt);
+      const ax = p.position.x, az = p.position.z;
+      moveToward(p, player.position, speed * dt, true);
+      // Un muro los dejaba quietos. Si el paso no avanzó, se corren de lado y siguen.
+      if (Math.hypot(p.position.x - ax, p.position.z - az) < 0.02) {
+        const ux = (player.position.x - ax) / d, uz = (player.position.z - az) / d;
+        const lado = p.userData.lado || (p.userData.lado = 1);
+        moveToward(p, { x: ax - uz * lado * 5, z: az + ux * lado * 5 }, speed * dt, true);
+        if (Math.hypot(p.position.x - ax, p.position.z - az) < 0.02) p.userData.lado = -lado;
+      }
       const face = Math.atan2(player.position.x - p.position.x, player.position.z - p.position.z);
       if (p.userData.car) {
         p.userData.car.position.set(p.position.x, mountainHeightAt(p.position.x, p.position.z), p.position.z);
@@ -13500,9 +13531,10 @@ function livingRadius(e) {
   return 0.5;
 }
 function bodyIgnoresWalls(e) { return !!(e && e.userData && e.userData.mineHole); }
-function obstacleAt(x, z, feetY, r) {
+function obstacleAt(x, z, feetY, r, atravesarGente) {
   const radio = r || 0;
   for (const o of obstaclesNear(x, z, radio)) {
+    if (atravesarGente && o.cuerpo) continue;   // la patrulla no se choca con su propio cuerpo ni con la gente
     if (o.country !== undefined && (o.country || null) !== (state.country || null)) continue;
     if (o.bottom != null && (feetY || 0) + 1.8 < o.bottom) continue;
     if (o.top != null && (feetY || 0) >= o.top) continue;
@@ -13510,11 +13542,11 @@ function obstacleAt(x, z, feetY, r) {
   }
   return null;
 }
-function resolveLivingWall(pos, prevX, prevZ, r) {
+function resolveLivingWall(pos, prevX, prevZ, r, atravesarGente) {
   const fy = pos.y || 0;
-  if (!obstacleAt(pos.x, pos.z, fy, r)) return null;
-  const canX = !obstacleAt(pos.x, prevZ, fy, r);
-  const canZ = !obstacleAt(prevX, pos.z, fy, r);
+  if (!obstacleAt(pos.x, pos.z, fy, r, atravesarGente)) return null;
+  const canX = !obstacleAt(pos.x, prevZ, fy, r, atravesarGente);
+  const canZ = !obstacleAt(prevX, pos.z, fy, r, atravesarGente);
   if (canX && !canZ) { pos.z = prevZ; return 'slide'; }
   if (canZ && !canX) { pos.x = prevX; return 'slide'; }
   pos.x = prevX; pos.z = prevZ;
@@ -13623,7 +13655,7 @@ function avanzarSaltoValla(e, dt) {
   }
   return true;
 }
-function moveToward(e, target, step) {
+function moveToward(e, target, step, atravesarGente) {
   if (e.userData && e.userData.saltoValla) return;
   if (e.userData && (e.userData.slow || 0) > 0) { e.userData.slow = Math.max(0, e.userData.slow - 0.016); step *= 0.38; }
   const dx = target.x - e.position.x, dz = target.z - e.position.z; const len = Math.hypot(dx, dz) || 1;
@@ -13635,7 +13667,7 @@ function moveToward(e, target, step) {
     const px = e.position.x, pz = e.position.z;
     e.position.x += (dx / len) * sub; e.position.z += (dz / len) * sub;
     if (!ignora) {
-      const resultado = resolveLivingWall(e.position, px, pz, livingRadius(e));
+      const resultado = resolveLivingWall(e.position, px, pz, livingRadius(e), atravesarGente);
       if (resultado) {
         const antes = Math.hypot(target.x - px, target.z - pz);
         const despues = Math.hypot(target.x - e.position.x, target.z - e.position.z);
@@ -20328,6 +20360,7 @@ function attack(multiplier = 1) {
     if (d < bestD) { const to = new THREE.Vector3().subVectors(e.position, p).normalize(); if (to.dot(dir) > cono) { best = e; bestD = d; } }
   }
   if (best) { hitEnemy(best, dmg, p); if (laserEquipped()) shootBeam(best.position); }   // el botín flotante avisa cuánto pagó el kill
+  else if (golpeAUnaPersona()) return;   // de noche el golpe también llama a la policía si le pega a alguien
   else if (!tryMineIslandOre() && !tryHitGeode() && !tryMineCrater() && !tryMineCrystal()) tryMineCoal();   // isla o recursos de Platus
 }
 // ===================================================================
@@ -20714,7 +20747,25 @@ function updateLaserShots(dt) {
 }
 function clearLaserShots() { laserShots.forEach(s => killMesh(s.g)); laserShots.length = 0; }
 
-// Pegarle a una PERSONA de día (aldeano o gente del estadio): te vuelve BUSCADO
+// Pegarle a una PERSONA (aldeano o gente del estadio): la policía sale a buscarte
+function golpeAUnaPersona() {
+  if (state.planet === 'platus' || state.buildMode) return false;
+  const p = player.position; const dir = new THREE.Vector3(); getAimDirection(dir);
+  const range = MELEE_REACH;
+  let best = null, bestD = range;
+  for (const person of npcs.concat(victims)) {
+    if (!person.visible) continue;
+    const d = dist3D(p, person.position);
+    if (d < bestD) { const to = new THREE.Vector3().subVectors(person.position, p).normalize(); if (to.dot(dir) > 0.2) { best = person; bestD = d; } }
+  }
+  if (!best) return false;
+  vmSwing = 1; beep(300, 0.05, 0.03);
+  const push = new THREE.Vector3().subVectors(best.position, p).setY(0).normalize().multiplyScalar(1.2);
+  best.position.add(push);
+  becomeWanted(18, 1);
+  toast('👊 ¡Le pegaste a alguien! Te volviste BUSCADO… ¡corre (Shift)!');
+  return true;
+}
 function attackNPC() {
   if (state.buildMode) return;
   if (state.handGadget) { throwHandGadget(); return; }
@@ -20726,19 +20777,7 @@ function attackNPC() {
   if (titan && hitTitan(state.weaponDmg)) { vmSwing = 1; return; }   // golpear al TITÁN (de día también)
   if (state.planet === 'platus') { vmSwing = 1; if (!tryHitFloatingCitizen(state.weaponDmg) && !tryHitGeode() && !tryMineCrystal()) tryMineCoal(); return; }   // en Platus: ciudadanos, geodas, cristales o carbón
   if (tryMineIslandOre()) { vmSwing=1; beep(310,.06,.035); return; }
-  const p = player.position; const dir = new THREE.Vector3(); getAimDirection(dir);
-  const range = MELEE_REACH;
-  let best = null, bestD = range;
-  for (const person of npcs.concat(victims)) {
-    const d = dist3D(p, person.position);
-    if (d < bestD) { const to = new THREE.Vector3().subVectors(person.position, p).normalize(); if (to.dot(dir) > 0.2) { best = person; bestD = d; } }
-  }
-  if (!best) return;
-  vmSwing = 1; beep(300, 0.05, 0.03);
-  const push = new THREE.Vector3().subVectors(best.position, p).setY(0).normalize().multiplyScalar(1.2);
-  best.position.add(push);   // empujón
-  becomeWanted(18, 1);
-  toast('👊 ¡Le pegaste a alguien! Te volviste BUSCADO… ¡corre (Shift)!');
+  golpeAUnaPersona();
 }
 
 // ===================================================================
