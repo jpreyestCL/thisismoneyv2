@@ -2398,10 +2398,10 @@ function getAimDirection(out) {
 function updatePlayerCamera(dt) {
   if (rescate && rescate.vista) {
     viewmodel.visible = false;
-    playerAvatar.visible = false;
-    const y = mountainHeightAt(rescate.x, rescate.z);
-    camera.position.set(rescate.x + 7.4, y + 4.8, rescate.z - 3.6);
-    camera.lookAt(rescate.x, y + 1.2, rescate.z + 2.6);
+    const y = sueloReal(rescate.x, rescate.z + 2.1);
+    camera.position.set(rescate.x + 5.4, y + 3.35, rescate.z + 0.35);
+    camera.lookAt(rescate.x - 0.05, y + 0.9, rescate.z + 2.35);
+    if (playerAvatar) playerAvatar.visible = true;
     return;
   }
   if (state.cinematic) { playerAvatar.visible = false; viewmodel.visible = false; return; }
@@ -7401,6 +7401,52 @@ function ponerCuerda(mesh, ax, ay, az, bx, by, bz) {
   mesh.position.set((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2);
   mesh.quaternion.setFromUnitVectors(cuerdaArriba, cuerdaDir);
 }
+function nieveVisible(x, z) {
+  return sueloReal(x, z) + 0.06;
+}
+function marcarVisible(obj) {
+  obj.traverse(o => {
+    o.frustumCulled = false;
+    if (!o.material || o.material.userData.rescate) return;
+    const mat = o.material.clone();
+    mat.fog = false;
+    mat.userData.rescate = true;
+    if (mat.emissive && mat.color) {
+      mat.emissive.copy(mat.color);
+      mat.emissiveIntensity = Math.max(mat.emissiveIntensity || 0, 0.4);
+    }
+    o.material = mat;
+  });
+}
+function posarEsquiando(n, fase) {
+  if (!n || !n.userData.limbs) return;
+  const l = n.userData.limbs;
+  const s = Math.sin(fase) * 0.38;
+  l.legL.rotation.set(0.5 + s, 0, 0.1);
+  l.legR.rotation.set(0.5 - s, 0, -0.1);
+  l.armL.rotation.set(-0.7, 0, 0.62);
+  l.armR.rotation.set(-0.42, 0, -0.28);
+}
+function hacerSacoNaranjo() {
+  const g = new THREE.Group();
+  g.userData.noSolid = true;
+  const naranja = new THREE.MeshBasicMaterial({ color: 0xf97316, fog: false });
+  naranja.userData.rescate = true;
+  const pieza = (w, h, d, x, y, z) => {
+    const m = new THREE.Mesh(smoothBox(w, h, d), naranja);
+    m.position.set(x, y, z);
+    m.frustumCulled = false;
+    m.userData.noSolid = true;
+    g.add(m);
+    return m;
+  };
+  pieza(1.28, 0.16, 2.45, 0, 0.1, 0);
+  pieza(0.12, 0.5, 2.45, -0.58, 0.34, 0);
+  pieza(0.12, 0.5, 2.45, 0.58, 0.34, 0);
+  pieza(1.28, 0.5, 0.12, 0, 0.34, -1.16);
+  pieza(1.28, 0.26, 0.12, 0, 0.22, 1.16);
+  return g;
+}
 function soltarRescate() {
   if (!rescate) return;
   if (rescate.grupo) scene.remove(rescate.grupo);
@@ -7415,7 +7461,7 @@ function soltarRescate() {
 function crearAmbulancia(x, z) {
   const g = new THREE.Group();
   g.userData.noSolid = true;
-  const y = mountainHeightAt(x, z);
+  const y = nieveVisible(x, z);
   g.position.set(x, y, z);
   const caja = (w, h, d, px, py, pz, color) => {
     const m = new THREE.Mesh(smoothBox(w, h, d), mat(color));
@@ -7466,17 +7512,21 @@ function aplicarChoqueAndarivel(npc, velocidad) {
     persona.userData.noSolid = true;
     return persona;
   };
-  const e1 = vestir(makePerson(0xf97316, 0xf1c27d));
-  const e2 = vestir(makePerson(0xea580c, 0xe0ac69));
-  const saco = new THREE.Mesh(smoothBox(0.92, 0.48, 2.05), new THREE.MeshStandardMaterial({ color: 0xf97316, roughness: 0.72, emissive: 0xc2410c, emissiveIntensity: 0.35 }));
-  saco.userData.noSolid = true;
-  const cuerda = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 6), new THREE.MeshBasicMaterial({ color: 0x1e293b }));
+  const e1 = vestir(makePerson(0xdc2626, 0xf1c27d));
+  const e2 = vestir(makePerson(0x1d4ed8, 0xe0ac69));
+  marcarVisible(e1);
+  marcarVisible(e2);
+  const saco = hacerSacoNaranjo();
+  const cuerda = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 1, 8), new THREE.MeshBasicMaterial({ color: 0x0b1220, fog: false }));
+  cuerda.material.userData.rescate = true;
+  cuerda.frustumCulled = false;
   cuerda.userData.noSolid = true;
   grupo.add(e1, e2, saco, cuerda);
   scene.add(grupo);
   const metaZ = Math.min(SKI_RESORT.z + 268, z + 160);
   const ambulancia = crearAmbulancia(THREE.MathUtils.clamp(x, SKI_RESORT.x - 40, SKI_RESORT.x + 40), metaZ);
   rescate = { npc, t: 0, fase: 'caida', velocidad, x, z, metaZ, grupo, e1, e2, saco, cuerda, ambulancia: ambulancia.grupo, obs: ambulancia.obs, vista: false };
+  colocarRescate();
   toast('🚑 Choque grave · los dos al suelo. La ambulancia viene a buscarlos');
 }
 function updateCaidaLeve(dt) {
@@ -7503,19 +7553,30 @@ function updateCaidaLeve(dt) {
   return false;
 }
 function colocarRescate() {
-  const y = mountainHeightAt(rescate.x, rescate.z);
-  const y1 = mountainHeightAt(rescate.x - 0.7, rescate.z + 3.1);
-  const y2 = mountainHeightAt(rescate.x + 0.7, rescate.z + 3.1);
-  rescate.e1.position.set(rescate.x - 0.7, y1, rescate.z + 3.1);
-  rescate.e2.position.set(rescate.x + 0.7, y2, rescate.z + 3.1);
-  rescate.e1.rotation.set(0, 0, 0);
-  rescate.e2.rotation.set(0, 0, 0);
-  rescate.saco.position.set(rescate.x, y + 0.28, rescate.z);
+  const y = nieveVisible(rescate.x, rescate.z);
+  const y1 = nieveVisible(rescate.x - 0.95, rescate.z + 4.35);
+  const y2 = nieveVisible(rescate.x + 0.95, rescate.z + 4.35);
+  rescate.e1.position.set(rescate.x - 0.95, y1, rescate.z + 4.35);
+  rescate.e2.position.set(rescate.x + 0.95, y2, rescate.z + 4.35);
+  rescate.e1.rotation.set(0.32, 0, 0);
+  rescate.e2.rotation.set(0.32, 0, 0);
+  rescate.saco.position.set(rescate.x, y, rescate.z);
   rescate.saco.rotation.set(0, 0, 0);
-  ponerCuerda(rescate.cuerda, rescate.x, y + 0.95, rescate.z + 2.35, rescate.x, y + 0.45, rescate.z + 0.95);
-  player.position.set(rescate.x, y + 0.5, rescate.z);
+  ponerCuerda(
+    rescate.cuerda,
+    rescate.x, (y1 + y2) / 2 + 0.92, rescate.z + 3.45,
+    rescate.x, y + 0.42, rescate.z + 1.22
+  );
+  if (playerAvatar) {
+    playerAvatar.visible = true;
+    playerAvatar.position.set(rescate.x, y + 0.38, rescate.z + 0.82);
+    playerAvatar.rotation.order = 'XYZ';
+    playerAvatar.rotation.set(-Math.PI / 2, 0, 0);
+  }
+  player.position.set(rescate.x, y + 0.85, rescate.z);
   if (rescate.npc && rescate.npc.userData.enSuelo) {
-    rescate.npc.position.set(rescate.x + 1.4, (rescate.npc.userData.alturaSuelo || skiSlopeHeight)(rescate.x + 1.4, rescate.z), rescate.z);
+    const suelo = nieveVisible(rescate.x + 1.6, rescate.z);
+    rescate.npc.position.set(rescate.x + 1.6, suelo, rescate.z);
   }
 }
 function updateRescate(dt) {
@@ -7526,23 +7587,21 @@ function updateRescate(dt) {
     rescate.fase = 'arrastre';
     toast('🚑 Dos socorristas te bajan en el saco naranjo · F5 mira el rescate');
   }
-  if (rescate.fase === 'arrastre') {
-    rescate.z += 9 * dt;
+  if (rescate.fase === 'caida' || rescate.fase === 'arrastre') {
+    if (rescate.fase === 'arrastre') rescate.z += 9 * dt;
     colocarRescate();
-    if (rescate.z >= rescate.metaZ - 3) {
+    posarEsquiando(rescate.e1, rescate.t * 9);
+    posarEsquiando(rescate.e2, rescate.t * 9 + 1.4);
+    if (rescate.fase === 'arrastre' && rescate.z >= rescate.metaZ - 3) {
       rescate.fase = 'ambulancia';
       rescate.saco.visible = false;
       rescate.e1.visible = false;
       rescate.e2.visible = false;
       rescate.cuerda.visible = false;
+      if (playerAvatar) playerAvatar.visible = false;
       toast('🚑 La ambulancia se los llevó');
       rescate.t = 0;
     }
-    return true;
-  }
-  if (rescate.fase === 'caida') {
-    const piso = mountainHeightAt(player.position.x, player.position.z);
-    player.position.y = piso + 0.42;
     return true;
   }
   if (rescate.t > 2.2) {
@@ -21499,10 +21558,15 @@ try { if (new URLSearchParams(location.search).has('debug')) {
     leve: caidaLeve ? { t: +caidaLeve.t.toFixed(2), enPie: !!(caidaLeve.npc && caidaLeve.npc.userData.enPie), caido: !!(caidaLeve.npc && caidaLeve.npc.userData.caido), suelo: !!(caidaLeve.npc && caidaLeve.npc.userData.enSuelo), nz: caidaLeve.npc ? +caidaLeve.npc.rotation.z.toFixed(2) : null } : null,
     rescate: rescate ? {
       fase: rescate.fase, vista: !!rescate.vista, t: +rescate.t.toFixed(2),
-      saco: rescate.saco.visible, color: rescate.saco.material.color.getHex(),
+      saco: rescate.saco.visible,
+      color: (() => { let hex = 0; rescate.saco.traverse(o => { if (o.material && o.material.color) hex = o.material.color.getHex(); }); return hex; })(),
       e1: rescate.e1.visible, e2: rescate.e2.visible,
       cuerda: rescate.cuerda.visible, largo: +rescate.cuerda.scale.y.toFixed(2),
       x: +rescate.x.toFixed(1), z: +rescate.z.toFixed(1),
+      nieve: +sueloReal(rescate.x, rescate.z).toFixed(2),
+      formula: +mountainHeightAt(rescate.x, rescate.z).toFixed(2),
+      sacoY: +rescate.saco.position.y.toFixed(2),
+      cam: { x: +camera.position.x.toFixed(1), y: +camera.position.y.toFixed(1), z: +camera.position.z.toFixed(1) },
     } : null,
     esquiando: !!state.skiing,
   });
@@ -22120,6 +22184,9 @@ function updateContextPrompt() {
     }
   }
   if (!action && currentGunSpec()) action = { key: 'E', touch: '🔭', text: state.aiming ? 'Bajar la mira · CLIC dispara' : 'E pone la MIRA · CLIC dispara' };
+  if (rescate && rescate.vista) action = null;
+  else if (rescate) action = { key: 'F5', touch: '🚑', text: 'Mira el rescate' };
+  else if (caidaLeve) action = { key: '💥', touch: '💥', text: 'Los dos en el suelo' };
   ctxWantsE = !!(action && String(action.key).includes('E') && !currentGunSpec());   // hay algo del mundo que usa la E
   box.classList.toggle('visible', !!action);
   if (action) { key.textContent = document.body.classList.contains('touch') ? action.touch : action.key; txt.textContent = action.text; }
