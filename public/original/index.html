@@ -4239,6 +4239,7 @@ function effectivePrice(item) { return Math.max(1, Math.round(item.price * (1 - 
 // ===================================================================
 const victims = [];     // gente sentada en los estadios (les puedes robar)
 const stadiums = [];    // centros (para el mini-mapa)
+const gradas = [];      // asientos de las tribunas: con E te sientas a ver el partido
 const soccer = { ball: null, vel: new THREE.Vector3(), players: [], cx: 0, cz: 0, scoreRed: 0, scoreBlue: 0 };   // partido de fútbol
 const basketball = { ball: null, vel: new THREE.Vector3(), players: [], cx: 0, cz: 0, holder: null, shotTeam: null, scoreRed: 0, scoreBlue: 0, resetIn: 0 };
 const tennis = { ball: null, vel: new THREE.Vector3(), players: [], cx: 0, cz: 0, server: 0, lastHit: 1, bounceSide: null, bounces: 0, points: [0, 0], games: [0, 0], serveIn: 1 };
@@ -4282,7 +4283,12 @@ function makeStadium(cx, cz, fieldColor, name) {
       paso.position.set(cx + dx + (largoX ? 0 : fuera * (g * .62 - .1)), (.55 + g * .5) / 2 + .55, cz + dz + (largoX ? fuera * (g * .62 - .1) : 0));
       paso.castShadow = true; paso.receiveShadow = true; scene.add(paso);
       const asientos = new THREE.Mesh(smoothBox(largoX ? w - .4 : .46, .22, largoX ? .46 : d - .4), mat(asientoCols[(idx + g) % asientoCols.length]));
-      asientos.position.set(paso.position.x, paso.position.y + (.55 + g * .5) / 2 + .11, paso.position.z); scene.add(asientos);
+      asientos.position.set(paso.position.x, paso.position.y + (.55 + g * .5) / 2 + .11, paso.position.z);
+      asientos.userData.grada = true;
+      asientos.userData.miraX = cx;
+      asientos.userData.miraZ = cz;
+      scene.add(asientos);
+      gradas.push(asientos);
     }
     const baranda = new THREE.Mesh(smoothBox(largoX ? w : .1, .1, largoX ? .1 : d), mat(0xe2e8f0));
     baranda.position.set(cx + dx - (largoX ? 0 : Math.sign(dx) * 1.1), 2.75, cz + dz - (largoX ? Math.sign(dz) * 1.1 : 0)); scene.add(baranda);
@@ -8485,10 +8491,46 @@ function nearestSeat(maxD = 2.6) {
   }
   return best;
 }
+function nearestGrada(maxD = 2.8) {
+  if (state.planet !== 'tierra' || state.sportGame) return null;
+  let best = null, bd = maxD;
+  for (const s of gradas) {
+    const d = dist2D(player.position, s.position);
+    if (d < bd) { bd = d; best = s; }
+  }
+  return best;
+}
+function trySitGrada() {
+  if (sitOn && sitOn.grada) return standUp(false);
+  if (sitOn || state.sportGame) return false;
+  const seat = nearestGrada();
+  if (!seat) return false;
+  const dx = seat.userData.miraX - seat.position.x, dz = seat.userData.miraZ - seat.position.z;
+  const face = Math.atan2(dx, dz);
+  const top = seat.position.y + 0.11;
+  const out = 1.7;
+  sitOn = {
+    grada: true,
+    key: 'grada',
+    mesh: { position: { x: seat.position.x, y: top - 0.1, z: seat.position.z }, rotation: { y: face } },
+    stand: { x: seat.position.x - Math.sin(face) * out, z: seat.position.z - Math.cos(face) * out },
+  };
+  yaw = Math.atan2(-dx, -dz);
+  toast('🏟️ Sentado en la grada · E para levantarte');
+  beep(380, .1, .04);
+  return true;
+}
 function standUp(silent) {
   if (!sitOn) return false;
-  const p = sitOn.mesh.position, era = sitOn.key, plane = sitOn.flightSeat;
+  const p = sitOn.mesh.position, era = sitOn.key, plane = sitOn.flightSeat, grada = sitOn.grada, stand = sitOn.stand;
   sitOn = null;
+  if (grada && stand) {
+    const piso = sueloReal(stand.x, stand.z);
+    player.position.set(stand.x, piso + PLAYER_EYE, stand.z);
+    vy = 0; grounded = true;
+    if (!silent) { toast('🏟️ Te levantaste de la grada'); beep(520, .08, .04); }
+    return true;
+  }
   if (plane) {
     player.position.set(FLIGHT.x, FLIGHT.y + PLAYER_EYE, plane.z);
     if (!silent) { toast('🚶 De vuelta al pasillo · camina o siéntate otra vez con E'); beep(520, .08, .04); }
@@ -14620,7 +14662,7 @@ function tryInteract() {
   if (tryJobInteract()) return;   // recados: calmar al perro / abrir el cajón
   if (tryDoor()) return;          // abrir / cerrar la puerta de tu casa
   if (tryBuyPlot()) return;       // comprar el terreno del condominio
-  if (!tryRefuelCar() && !trySkiResort() && !tryWorldSites() && !tryArcadeRewards() && !tryArcadeZone() && !tryHarvestMiner() && !toggleBoat() && !tryIslandTempleChest() && !tryFocusedFurniture() && !tryLeaderboard() && !tryAirport() && !countryHello() && !tryParkFood() && !tryParkRide() && !tryRepairBuilding() && !tryHarvest() && !tryDiscoverSecret() && !tryWorldEvent() && !tryMount() && !toggleCar() && !tryShelter() && !tryRuins() && !tryCastle() && !tryColiseum() && !tryRocket() && !tryBank() && !trySportInteract() && !tryBusiness() && !tryFamilyOrCitizenInteract() && !tryVendorHere() && !tryHelperHere()) { if (!tryCollectGolden() && !tryRob() && !sellHouse()) tryGardenHere(); }
+  if (!tryRefuelCar() && !trySkiResort() && !tryWorldSites() && !tryArcadeRewards() && !tryArcadeZone() && !tryHarvestMiner() && !toggleBoat() && !tryIslandTempleChest() && !tryFocusedFurniture() && !tryLeaderboard() && !tryAirport() && !countryHello() && !tryParkFood() && !tryParkRide() && !tryRepairBuilding() && !tryHarvest() && !tryDiscoverSecret() && !tryWorldEvent() && !tryMount() && !toggleCar() && !tryShelter() && !tryRuins() && !tryCastle() && !tryColiseum() && !tryRocket() && !tryBank() && !trySitGrada() && !trySportInteract() && !tryBusiness() && !tryFamilyOrCitizenInteract() && !tryVendorHere() && !tryHelperHere()) { if (!tryCollectGolden() && !tryRob() && !sellHouse()) tryGardenHere(); }
 }
 addEventListener('keydown', e => {
   if (e.code === 'KeyI' && ui('help').style.display === 'flex') { toggleHelp(false); return; }
@@ -22112,6 +22154,12 @@ try { if (new URLSearchParams(location.search).has('debug')) {
   };
   timDump.unlockDavid = (k) => { if (!davidKeyOk(k)) return false; davidGateOpen = true; return true; };
   timDump.setPos = (x, y, z) => { player.position.set(x, y, z); vy = 0; grounded = false; };
+  timDump.gradas = () => gradas.length;
+  timDump.sentarGrada = () => {
+    const ok = trySitGrada();
+    const s = sitOn;
+    return { ok, sentado: !!(s && s.grada), y: +player.position.y.toFixed(2), x: +player.position.x.toFixed(2), z: +player.position.z.toFixed(2) };
+  };
   timDump.exitIslandMine = () => {
     const h = holes.find(hh => hh.islandMine);
     if (!h) return null;
@@ -22816,7 +22864,7 @@ function updateContextPrompt() {
       else if (sitOn && nearestPlay(3.8)) action = playHasTv(nearestPlay(3.8))
         ? { key: 'I · E', touch: '🎮', text: 'I juega en la Play · E para pararte' }
         : { key: 'E', touch: '📺', text: 'Pon una tele en la mesa para jugar' };
-      else if (sitOn) action = { key: 'E', touch: '🤝', text: sitOn.key === 'cama' ? 'Levantarte de la cama' : sitOn.key === 'bano' ? 'Levantarte del baño' : 'Pararte' };
+      else if (sitOn) action = { key: 'E', touch: '🤝', text: sitOn.grada ? 'Levantarte de la grada' : sitOn.key === 'cama' ? 'Levantarte de la cama' : sitOn.key === 'bano' ? 'Levantarte del baño' : 'Pararte' };
       else if (furniture && furniture.key === 'teclado_gamer') action = { key: 'E', touch: '⌨️', text: 'Usar el teclado gamer' };
       else if (furniture && furniture.key === 'parlante_gamer') action = { key: 'E', touch: '🔊', text: activeGamerSpeaker === furniture ? 'Apagar la música gamer' : 'Encender la música gamer' };
       else if (furniture && furniture.key === 'alexa') action = { key: 'E / Shift+E', touch: '🔵', text: 'Hablar / escribir a Alexa' };
@@ -22857,6 +22905,7 @@ function updateContextPrompt() {
       else if (state.worldEvent && state.worldEvent.id === 'search' && dist2D(player.position, state.worldEvent.target) < 5) action = { key: 'E', touch: '🤝', text: 'Ayudar al vecino perdido' };
       else if (!state.plot && state.planet === 'tierra' && !state.country && loteEnVentaCerca(7)) action = { key: 'E', touch: '🪧', text: 'Comprar este terreno · $' + PRECIO_TERRENO + ' · aquí construyes tu casa' };
       else if (nearestWorldSecret()) action = { key: 'E', touch: '🗺️', text: 'Descubrir secreto del mundo' };
+      else if (nearestGrada()) action = { key: 'E', touch: '🏟️', text: 'Sentarte en la grada' };
       else if (nearestSport()) action = { key: 'E', touch: '🏟️', text: 'Unirte al partido · sesión de 45 segundos' };
       else if (dist2D(player.position, HOUSE) < 8 && houseStats().full) action = { key: 'E', touch: '🏪', text: state.business ? 'Administrar ' + BUSINESS_TYPES[state.business.type].name : 'Abrir un negocio familiar' };
       else if (nearestCitizen() || (dad.visible && dist2D(dad.position, player.position) < 3.4)) action = { key: 'E', touch: '💬', text: 'Hablar o ayudar' };
