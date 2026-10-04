@@ -15443,12 +15443,14 @@ function eatFood() {
 // seguía caminando solo al cerrar el menú).
 addEventListener('keyup', e => {
   keys[e.code] = false;
+  if (e.code === 'KeyE') skiQuitando = false;
   if (e.code === 'KeyE' && bowDrawSrc === 'key') releaseBow();
 });
 // Soltar TODAS las entradas: al perder el foco (alt+tab, cambiar de pestaña, abrir un menú)
 // no llega el keyup/touchend y el personaje se quedaba "caminando solo".
 function clearInput() {
   for (const k in keys) keys[k] = false;
+  skiQuitando = false;
   touch.moveX = touch.moveY = 0; touch.jump = false; touch.jumpHeld = false; touch.heliDown = false;
   state.blocking = false;
   cancelBowDraw();
@@ -19326,6 +19328,7 @@ function updateSkiLiftRide(dt) {
 }
 function trySkiResort() {
   if (!inSkiResort()) return false;
+  if (skiQuitando) return true;
   const dg = dist2D(player.position, SKI_RESORT.gate), de = dist2D(player.position, SKI_RESORT.gear), de2 = dist2D(player.position, SKI_RESORT.gear2);
   const lift = nearSkiLiftBoarding();
   if (lift) {
@@ -19338,6 +19341,7 @@ function trySkiResort() {
       : '🪝 Subiendo en el arrastre · espera arriba');
     return true;
   }
+  if (state.skiing) { quitarEsquis(); return true; }
   if (dg < 14) {
     if (!state.skiPass) {
       if (state.money < 500) { toast('🎫 La tarjeta del centro de esquí cuesta $500'); return true; }
@@ -22132,13 +22136,39 @@ function updateSkiMovement(dt) {
   camera.rotation.y = yaw; camera.rotation.x = pitch;
   return true;
 }
-let skiRemoveHold = 0, skiAccessWarnAt = 0, skiJumpVy = 0, skiJumpHeld = false, skiTrickActive = false, skiRampBoost = 0, skiVelX = 0, skiVelZ = 0, skiRampRide = null;
+let skiRemoveHold = 0, skiQuitando = false, skiAccessWarnAt = 0, skiJumpVy = 0, skiJumpHeld = false, skiTrickActive = false, skiRampBoost = 0, skiVelX = 0, skiVelZ = 0, skiRampRide = null;
+function quitarEsquis() {
+  state.skiing = false;
+  state.skiGearWorn = false;
+  stopSkiCarve();
+  skiJumpVy = 0;
+  skiTrickActive = false;
+  if (!creativeFlying) {
+    vy = 0;
+    grounded = true;
+    let piso = mountainHeightAt(player.position.x, player.position.z);
+    const rampa = rampaBajoEsqui(player.position.x, player.position.z);
+    if (rampa && rampa.surface > piso) piso = rampa.surface;
+    player.position.y = piso + PLAYER_EYE;
+  }
+  const visual = ensurePlayerSkiVisual();
+  soltarFlexionEsquis(visual);
+  visual.rotation.set(0, 0, 0);
+  visual.position.x = 0;
+  visual.visible = false;
+  skiRemoveHold = 0;
+  skiQuitando = true;
+  toast('🥾 Te quitaste los ' + (state.skiGear === 'snowboard' ? 'snowboard' : 'esquís'));
+  saveGame();
+}
 function updateSkiGearHold(dt) {
   if (!state.skiGear) { skiRemoveHold = 0; return; }
-  if (keys['KeyE'] && !state.skiing && !state.skiLiftRide) {
-    skiRemoveHold += dt;
-    if (skiRemoveHold >= 1.15) { state.skiGearWorn = !state.skiGearWorn; skiRemoveHold = 0; const visual = ensurePlayerSkiVisual(); visual.visible = state.skiGearWorn; toast(state.skiGearWorn ? '⛷️ Te pusiste los ' + (state.skiGear === 'snowboard' ? 'snowboard' : 'esquís') : '🥾 Te quitaste los ' + (state.skiGear === 'snowboard' ? 'snowboard' : 'esquís')); saveGame(); }
-  } else skiRemoveHold = Math.max(0, skiRemoveHold - dt * 2);
+  if (!keys['KeyE']) { skiQuitando = false; skiRemoveHold = Math.max(0, skiRemoveHold - dt * 2); return; }
+  if (state.skiLiftRide) { skiRemoveHold = 0; return; }
+  if (state.skiing) { quitarEsquis(); return; }
+  if (skiQuitando) return;
+  skiRemoveHold += dt;
+  if (skiRemoveHold >= 1.15) { state.skiGearWorn = !state.skiGearWorn; skiRemoveHold = 0; const visual = ensurePlayerSkiVisual(); visual.visible = state.skiGearWorn; toast(state.skiGearWorn ? '⛷️ Te pusiste los ' + (state.skiGear === 'snowboard' ? 'snowboard' : 'esquís') : '🥾 Te quitaste los ' + (state.skiGear === 'snowboard' ? 'snowboard' : 'esquís')); saveGame(); }
 }
 function updateVineRide(dt) {
   if (!vineRide) return false;
@@ -22851,6 +22881,15 @@ try { if (new URLSearchParams(location.search).has('debug')) {
     playerChair: playerChair ? { v: playerChair.visible, x: +playerChair.position.x.toFixed(2), y: +playerChair.position.y.toFixed(2), z: +playerChair.position.z.toFixed(2) } : null,
   });
   timDump.setSkiVel = (vx, vz) => { skiVelX = vx; skiVelZ = vz; };
+  timDump.estadoEsquis = () => {
+    const nieve = mountainHeightAt(player.position.x, player.position.z);
+    return {
+      skiing: !!state.skiing, worn: !!state.skiGearWorn, quitando: !!skiQuitando,
+      y: +player.position.y.toFixed(2), nieve: +nieve.toFixed(2), ojo: +(nieve + PLAYER_EYE).toFixed(2),
+      vy: +vy.toFixed(2), grounded: !!grounded, salto: +skiJumpVy.toFixed(2),
+      visible: !!(skiGearMesh && skiGearMesh.visible),
+    };
+  };
   timDump.estadoRescate = () => {
     const c = caidaChoque;
     const aviso = ui('toast');
@@ -23427,7 +23466,7 @@ function updateContextPrompt() {
       else if (nearSkiLift) { const lift = nearSkiLiftBoarding(); action = { key: 'E', touch: '🚡', text: 'Subir al ' + (lift.kind === 'cumbre' ? 'andarivel a la cumbre' : lift.kind === 'arrastre' ? 'arrastre' : 'andarivel') }; }
       else if (nearSkiGate) action = { key: 'E', touch: '🎫', text: state.skiPass ? (state.skiGear ? 'Empezar / parar esquí · E' : 'Compra equipo en la caseta azul') : 'Comprar tarjeta de esquí · $500' };
       else if (nearSkiGear) action = { key: 'E', touch: '⛷️', text: dist2D(player.position, SKI_RESORT.gear2) < dist2D(player.position, SKI_RESORT.gear) ? 'Comprar snowboard · $200' : 'Comprar esquís · $200' };
-      else if (state.skiPass && state.skiGear && inSkiResort() && !state.skiLiftRide) action = { key: 'E', touch: state.skiing ? '🛑' : '⛷️', text: state.skiing ? 'Dejar de esquiar' : 'Largar / esquiar ahora' };
+      else if (state.skiPass && state.skiGear && inSkiResort() && !state.skiLiftRide) action = { key: 'E', touch: state.skiing ? '🥾' : '⛷️', text: state.skiing ? 'Soltar los esquís' : 'Largar / esquiar ahora' };
       else if (gymPrompt()) action = gymPrompt();
       else if (worldSitePrompt()) action = worldSitePrompt();
       else if (nearArcadeRewards) action = { key: 'E', touch: '🎁', text: 'Canjear premios · tickets' };
