@@ -19819,6 +19819,46 @@ function updateMeteorVisual(dt) {
   state.meteor.position.set(far, Math.max(320 - prog * 305, 14), far);   // baja desde muy alto hasta cerca del suelo
   state.meteor.rotation.x += dt * 0.6; state.meteor.rotation.y += dt * 0.4;
 }
+// La bola que va a tocar la Tierra es dura y de fuego: no se atraviesa, y el choque quema.
+let meteorBurnCd = 0;
+function resolverMeteorito(dt) {
+  const m = state.meteor;
+  if (!m || !state.meteorTriggered || state.cinematic) { meteorBurnCd = 0; return false; }
+  const radio = Math.abs(m.scale.x) || 1;
+  const c = m.position;
+  const bodyY = player.position.y - 0.9;
+  let dx = player.position.x - c.x, dy = bodyY - c.y, dz = player.position.z - c.z;
+  let dist = Math.hypot(dx, dy, dz);
+  const piel = radio + 0.55;
+  if (dist >= piel) { meteorBurnCd = Math.max(0, meteorBurnCd - dt); return false; }
+  if (dist < 0.001) { dx = 1; dy = 0; dz = 0; dist = 1; }
+  const enSuelo = dy < 1.2;
+  if (enSuelo) {
+    let hd = Math.hypot(dx, dz);
+    if (hd < 0.05) { dx = 1; dz = 0; hd = 1; }
+    const falta = piel * piel - dy * dy;
+    const meta = falta > 0.04 ? Math.sqrt(falta) : piel;
+    if (hd < meta) {
+      player.position.x = c.x + (dx / hd) * meta;
+      player.position.z = c.z + (dz / hd) * meta;
+    }
+  } else {
+    const nx = dx / dist, ny = dy / dist, nz = dz / dist;
+    const empuje = piel - dist;
+    player.position.x += nx * empuje;
+    player.position.y += ny * empuje;
+    player.position.z += nz * empuje;
+    if (ny > 0) vy = Math.max(vy, 0);
+  }
+  meteorBurnCd -= dt;
+  if (meteorBurnCd <= 0) {
+    meteorBurnCd = 0.7;
+    damagePlayer(12, m.position, true);
+    toast('🔥 Te quemas: el meteorito es de fuego.');
+    floatText(player.position.clone().setY(player.position.y + 0.4), '-12', '#f97316', 16);
+  }
+  return true;
+}
 // Cuenta regresiva del meteorito: si llega a 0 sin escapar -> game over
 function updateEscape(dt) {
   if (!state.meteorTriggered) { ui('escape').style.display = 'none'; return; }
@@ -21748,6 +21788,7 @@ function loop() {
     updateCar(dt);                         // vida del auto (los monstruos lo dañan)
     updatePlants(dt * (state.weather === 'rain' ? 2 : 1) * (state.worldEvent && state.worldEvent.id === 'harvest' ? 2 : 1));
     updateMeteorVisual(dt);                // el meteorito que se ve caer del cielo
+    resolverMeteorito(dt);
     if (state.cinematic) updateCinematic(dt);
     updatePolice(dt);                      // policía persigue si estás buscado
     if (onPlatus) {
@@ -22640,6 +22681,26 @@ try { if (new URLSearchParams(location.search).has('debug')) {
   timDump.unlockDavid = (k) => { if (!davidKeyOk(k)) return false; davidGateOpen = true; return true; };
   timDump.setPos = (x, y, z) => { player.position.set(x, y, z); vy = 0; grounded = false; };
   timDump.gradas = () => gradas.length;
+  timDump.probarMeteorito = (segundos) => {
+    if (!state.meteorTriggered) triggerMeteor();
+    state.escapeTimer = segundos == null ? 40 : segundos;
+    updateMeteorVisual(0.016);
+    meteorBurnCd = 0;
+    const m = state.meteor;
+    player.position.set(m.position.x, PLAYER_EYE, m.position.z);
+    const antes = { x: player.position.x, y: player.position.y, z: player.position.z, hp: state.hp };
+    const choco = resolverMeteorito(0.05);
+    const dx = player.position.x - m.position.x, dy = (player.position.y - 0.9) - m.position.y, dz = player.position.z - m.position.z;
+    return {
+      choco, antes, hp: state.hp,
+      pos: { x: +player.position.x.toFixed(2), y: +player.position.y.toFixed(2), z: +player.position.z.toFixed(2) },
+      centro: { x: +m.position.x.toFixed(2), y: +m.position.y.toFixed(2), z: +m.position.z.toFixed(2) },
+      radio: +m.scale.x.toFixed(2),
+      dist: +Math.hypot(dx, dy, dz).toFixed(2),
+      toast: ui('toast').textContent,
+    };
+  };
+  timDump.empujarMeteorito = () => resolverMeteorito(0.05);
   timDump.gymEstado = () => ({
     streak: state.gym.streak, lastNight: state.gym.lastNight, bonus: gymRachaLista(),
     dmg: danoDeEspada(), correr: velocidadCorrer(), inGym: !!state.inGym, money: state.money,
