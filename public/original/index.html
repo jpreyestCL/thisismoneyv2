@@ -2021,6 +2021,31 @@ function makeVoxelSword(color = 0xcbd5e1, scale = 1) {
   const punta = new THREE.Mesh(new THREE.ConeGeometry(.11, .3, 4), filo); punta.position.y = 1.42; punta.rotation.y = Math.PI / 4; punta.castShadow = true; g.add(punta);
   g.scale.setScalar(scale); g.userData.toolKind = 'sword'; g.userData.toolColor = color; return g;
 }
+function sostenerEspada(w, x, y, z, eje) {
+  w.userData.agarre = { x, y, z, eje: eje || 'z' };
+  aplicarEmpujeEspada(w, 0);
+}
+function aplicarEmpujeEspada(w, golpe) {
+  const a = w.userData.agarre;
+  if (!a) return;
+  const t = Math.max(0, golpe || 0) * .9;
+  if (a.eje === 'y') {
+    w.rotation.set(Math.PI, 0, 0);
+    w.position.set(a.x, a.y - t, a.z);
+  } else {
+    w.rotation.set(Math.PI / 2, 0, 0);
+    w.position.set(a.x, a.y, a.z + t);
+  }
+}
+function empujarEspadaDe(obj) {
+  if (!obj || !obj.userData) return;
+  const anim = obj.userData.attackAnim || 0;
+  const portador = (obj.userData.weapon && obj.userData.weapon.userData.agarre) ? obj : obj.userData.rider;
+  const w = portador && portador.userData && portador.userData.weapon;
+  if (!w || !w.userData.agarre) return;
+  const golpe = anim > 0 ? Math.sin((1 - Math.min(anim, .34) / .34) * Math.PI) : 0;
+  aplicarEmpujeEspada(w, golpe);
+}
 function makeVoxelShovel(color = 0x9ca3af, scale = 1) {
   const g = new THREE.Group();
   const metal = new THREE.MeshStandardMaterial({ color, roughness: .35, metalness: .78, flatShading: false });
@@ -12865,8 +12890,9 @@ function makeKnight() {   // comandante de los toros: sentado en el trono, espad
     limbs.armL.rotation.x = -.35;
     limbs.armR.rotation.x = -1.55;
     const sword = makeVoxelSword(0xe2e8f0, .46);
-    sword.position.set(0, -.92, .06); sword.rotation.x = Math.PI;
+    sostenerEspada(sword, 0, -.92, .08, 'y');
     limbs.armR.add(sword);
+    g.userData.weapon = sword;
   }
   return makeBullThrone(g);
 }
@@ -13395,6 +13421,7 @@ function updateEnemyFX(dt) {
     if (ud.hitPulse > 0) { ud.hitPulse = Math.max(0, ud.hitPulse - dt); const pulse = 1 + Math.sin((ud.hitPulse / .2) * Math.PI) * .11; if (ud.baseScale) e.scale.copy(ud.baseScale).multiplyScalar(pulse); }
     else if (ud.baseScale) e.scale.copy(ud.baseScale);
     if (ud.attackAnim > 0) ud.attackAnim = Math.max(0, ud.attackAnim - dt);
+    empujarEspadaDe(e);
     if (ud.bar) {
       ud.bar.g.position.set(e.position.x, e.position.y + (ud.barY || 2.6), e.position.z); ud.bar.g.quaternion.copy(camera.quaternion);
       const f = Math.max(0, Math.min(1, ud.hp / ud.maxhp)); ud.bar.fg.scale.x = f || 0.001;
@@ -13828,9 +13855,13 @@ const helpers = [];
 const HELPER_COLORS = [0xf472b6, 0x60a5fa, 0xfacc15, 0x4ade80, 0xc084fc, 0xfb923c];
 const helperTarget = new THREE.Vector3();
 function applyHelperGearTo(h) {   // pone/quita arma y armadura a UN hijo según el estado comprado
-  if (state.helperWeapon && !h.userData.weapon) {   // espada voxel en la mano
-    const w = makeVoxelSword(0xf59e0b, .42); w.position.set(0.55, 1.45, 0.3); w.rotation.x = Math.PI; h.add(w); h.userData.weapon = w;
+  if (state.helperWeapon && !h.userData.weapon) {
+    const w = makeVoxelSword(0xf59e0b, .42);
+    const mano = h.userData.limbs && h.userData.limbs.armR;
+    sostenerEspada(w, 0, -.9, .12, 'z');
+    (mano || h).add(w); h.userData.weapon = w;
   }
+  if (h.userData.weapon && !h.userData.weapon.userData.agarre) sostenerEspada(h.userData.weapon, 0, -.9, .12, 'z');
   if (h.userData.weapon) h.userData.weapon.visible = !!state.helperWeapon;
   const wantArmor = state.helperArmor ? 'metal' : null;   // armadura completa estilo minecraft
   if ((h.userData.mcArmorTier || null) !== wantArmor) applyMinecraftArmor(h, wantArmor);
@@ -13870,7 +13901,7 @@ function updateHelpers(dt) {
       helperTarget.set(near.position.x + Math.sin(angle) * radius, 0, near.position.z + Math.cos(angle) * radius);
       const slotDist = dist2D(h.position, helperTarget);
       if (slotDist > 0.35) { moveToward(h, helperTarget, 3 * dt); h.rotation.y = Math.atan2(near.position.x - h.position.x, near.position.z - h.position.z); }
-      else { h.userData.atkCd -= dt; if (h.userData.atkCd <= 0) { h.userData.atkCd = cd; hitEnemy(near, dmg, h.position); } }
+      else { h.userData.atkCd -= dt; if (h.userData.atkCd <= 0) { h.userData.atkCd = cd; h.userData.attackAnim = .34; hitEnemy(near, dmg, h.position); } }
     } else {
       // Formación detrás del jugador: filas de hasta 5 hijos con separación visible.
       const row = Math.floor(hi / cols), inRow = Math.min(cols, helpers.length - row * cols);
@@ -13882,6 +13913,11 @@ function updateHelpers(dt) {
       );
       const d = dist2D(h.position, helperTarget);
       if (d > 0.35) { moveToward(h, helperTarget, 3 * dt); h.rotation.y = Math.atan2(helperTarget.x - h.position.x, helperTarget.z - h.position.z); }
+    }
+    h.userData.attackAnim = Math.max(0, (h.userData.attackAnim || 0) - dt);
+    if (h.userData.weapon && h.userData.weapon.visible) {
+      const golpe = h.userData.attackAnim > 0 ? Math.sin((1 - h.userData.attackAnim / .34) * Math.PI) : 0;
+      aplicarEmpujeEspada(h.userData.weapon, golpe);
     }
     swingLimbs(h, dt);
   }
@@ -14436,7 +14472,7 @@ function toggleDadRest() {
 }
 function ensureDadWeapon() {   // crea el arma del papá una sola vez
   if (!dad.userData.weapon) {
-    const w = makeVoxelSword(0xcbd5e1, .62); w.position.set(.62, 1.35, .28); w.rotation.set(Math.PI, 0, -.8); dad.add(w); dad.userData.weapon = w;
+    const w = makeVoxelSword(0xcbd5e1, .62); sostenerEspada(w, .42, 1.05, .28, 'z'); dad.add(w); dad.userData.weapon = w;
   }
   return dad.userData.weapon;
 }
@@ -14481,6 +14517,17 @@ function toggleDadArm() {
   toast(dad.userData.armed ? '🔫 Papá armado: peleará de noche' : 'Papá desarmado');
 }
 const dadIntercept = new THREE.Vector3();
+const manoPapa = new THREE.Vector3();
+function espadaEnLaManoDelPapa(w, golpe) {
+  if (!dad.userData.manoDer && dad.userData.model) dad.userData.model.traverse(o => { if (o.name === 'RightHand') dad.userData.manoDer = o; });
+  const hueso = dad.userData.manoDer;
+  const t = Math.max(0, golpe || 0) * .9;
+  if (!hueso) { aplicarEmpujeEspada(w, golpe); return; }
+  hueso.updateWorldMatrix(true, false);
+  dad.worldToLocal(hueso.getWorldPosition(manoPapa));
+  w.rotation.set(Math.PI / 2, 0, 0);
+  w.position.set(manoPapa.x, manoPapa.y, manoPapa.z + .12 + t);
+}
 function updateDad(dt) {
   if (!dad.visible) return;
   if (state.inFlight) {
@@ -14493,9 +14540,11 @@ function updateDad(dt) {
   const attackAnim = Math.max(0, (dad.userData.attackAnim || 0) - dt), defendAnim = Math.max(0, (dad.userData.defendAnim || 0) - dt);
   dad.userData.attackAnim = attackAnim; dad.userData.defendAnim = defendAnim;
   if (dad.userData.weapon) {
+    if (!dad.userData.weapon.userData.agarre) sostenerEspada(dad.userData.weapon, .42, 1.05, .28, 'z');
     const strike = attackAnim > 0 ? Math.sin((1 - attackAnim / .34) * Math.PI) : 0;
     const parry = defendAnim > 0 ? Math.sin((defendAnim / .3) * Math.PI) : 0;
-    dad.userData.weapon.rotation.set(Math.PI - strike * 1.7 - parry * .55, 0, -.8 - strike * .9 + parry * 1.45); dad.userData.weapon.position.set(.62 - parry * .38, 1.35 + strike * .2 + parry * .18, .28 + strike * .38 + parry * .38);
+    espadaEnLaManoDelPapa(dad.userData.weapon, strike);
+    if (parry > 0) { dad.userData.weapon.position.y += parry * .12; dad.userData.weapon.rotation.y = parry * .35; }
   }
   if (dad.userData.shield) {
     const guarding = !!dad.userData.guarding || defendAnim > 0;
@@ -23249,8 +23298,13 @@ function swingLimbs(o, dt) {
   const s = walking ? Math.sin(o.userData.walkPhase) * 0.6 : 0;
   if (o.userData.attackAnim > 0) {
     const strike = Math.sin((1 - o.userData.attackAnim / .34) * Math.PI);
-    l.armL.rotation.x = -1.15 - strike * 1.05; l.armR.rotation.x = -1.15 - strike * 1.05;
-    l.armL.rotation.z = .18 + strike * .28; l.armR.rotation.z = -.18 - strike * .28;
+    if (o.userData.weapon) {
+      l.armR.rotation.set(-.4 - strike * .3, 0, -.2);
+      l.armL.rotation.set(-.15, 0, .08);
+    } else {
+      l.armL.rotation.x = -1.15 - strike * 1.05; l.armR.rotation.x = -1.15 - strike * 1.05;
+      l.armL.rotation.z = .18 + strike * .28; l.armR.rotation.z = -.18 - strike * .28;
+    }
     l.legL.rotation.x = s * .35; l.legR.rotation.x = -s * .35; return;
   }
   l.armL.rotation.z = 0; l.armR.rotation.z = 0;
