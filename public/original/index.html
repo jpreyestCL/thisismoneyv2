@@ -15295,7 +15295,7 @@ const state = {
   hasJetpack: false, jetOn: false,                     // tecnología alien de Platus: jetpack (volar)
   laserGun: false, hasShield: false, shieldHp: 0, shieldMax: 60, shieldCd: 0,   // pistola láser + escudo de energía
   laserEnergy: 100, laserCooling: false, laserCoolLeft: 0, laserIdle: 0, laserWarned: false,   // barra del láser: 20 s de recarga al agotarse
-  guns: {}, gun: null, ammo: 0, clip: 0, reloadT: 0, gadgetCharges: {}, handGadget: null,   // armas de fuego: cargador de 20, balas de reserva y bombas de mano
+  guns: {}, gun: null, ammo: 0, clip: 0, reloadT: 0, gunMags: {}, gadgetCharges: {}, handGadget: null,   // cada arma de fuego tiene su cargador y su recarga
   planetSky: 0xd98c5f, planetHazard: 'cold', planetGrav: 1, planetCreature: 'yeti', inRuins: false, ruinsCleared: false,   // rasgos del planeta actual + ruinas
   contract: null,   // contrato activo del vendedor alien
   incubTime: 0, eggQueue: 0, eggKind: null, eggLine: [], petPoint: null,   // huevos alien: incubación + cola + banderita de reunión 🚩
@@ -16063,9 +16063,11 @@ function equipHandItem(it) {
     if (held === 'sword' || held === 'shovel') rememberMeleeWeapon(state.weaponName, state.weaponDmg, weaponVisualColor);
     cancelBowDraw();
     state.gun = it.key; state.weaponName = g.name; state.weaponDmg = g.dmg; setWeaponColor(g.color);
+    aplicarCargadorEnMano();
     return true;
   }
   state.gun = null;
+  aplicarCargadorEnMano();
   if (it.t === 'gadget') {
     const held = weaponKindFromName(state.weaponName);
     if (held === 'sword' || held === 'shovel') rememberMeleeWeapon(state.weaponName, state.weaponDmg, weaponVisualColor);
@@ -16895,7 +16897,7 @@ function startGame() {
   state.creative = false;   // el botón 🎨 lo vuelve a activar después de llamar startGame
   removePet(); removeAlienPet(); removeAllFloors2(); state.floor2Rot = 0; removeBase(); leaveParkRide(true); standUp(true);
   state.hasJetpack = false; state.laserGun = false; state.hasShield = false; state.shieldHp = 0; state.shieldCd = 0;
-  state.guns = {}; state.gun = null; state.ammo = 0; state.clip = 0; state.reloadT = 0; state.gadgetCharges = {}; state.handGadget = null;   // tecnología alien: se compra de nuevo
+  state.guns = {}; state.gun = null; state.ammo = 0; state.clip = 0; state.reloadT = 0; state.gunMags = {}; state.gadgetCharges = {}; state.handGadget = null;   // tecnología alien: se compra de nuevo
   state.baseLevel = 0; state.baseTurrets = 0; state.baseGenerator = false;   // base espacial: se compra de nuevo
   houseTier = 0;
   newMissions();
@@ -17844,7 +17846,7 @@ function saveGame() {
       arcadeTickets: state.arcadeTickets || 0, arcadePrizes: state.arcadePrizes || {},
       pet: !!pet, petHp: pet?.userData.hp, hasFloor2: !!state.hasFloor2, floor2Rot: state.floor2Rot || 0, floors2: state.floors2 || [], unlocked: state.unlocked || {},   // desbloqueos del medio juego (floors2: TODOS los segundos pisos)
       petAlien: !!petAlien, petAlienHp: petAlien?.userData.hp, hasJetpack: !!state.hasJetpack, laserGun: !!state.laserGun, hasShield: !!state.hasShield,   // tecnología alien de Platus
-      guns: state.guns || {}, gun: state.gun || null, ammo: state.ammo || 0, clip: state.clip || 0, gadgetCharges: state.gadgetCharges || {}, handGadget: state.handGadget || null,   // armas de fuego y bombas de mano
+      guns: state.guns || {}, gun: state.gun || null, ammo: state.ammo || 0, clip: state.clip || 0, gunMags: exportarCargadores(), gadgetCharges: state.gadgetCharges || {}, handGadget: state.handGadget || null,   // cada arma guarda su cargador y lo que le queda de recarga
       creative: !!state.creative,
       hasPhone: !!state.hasPhone, skiPass: !!state.skiPass, skiGear: state.skiGear || null, skiGearWorn: !!state.skiGearWorn,
       cameraMode: cameraMode,
@@ -18777,6 +18779,7 @@ function loadGame() {
   removeAlienPet(); if (d.petAlien && d.petAlienHp !== 0) spawnAlienPet(d.petAlienHp);
   state.hasJetpack = !!d.hasJetpack; state.laserGun = !!d.laserGun;
   state.guns = d.guns || {}; state.gun = (d.gun && GUN_SPECS[d.gun] && state.guns[d.gun]) ? d.gun : null; state.ammo = d.ammo || 0; state.clip = d.clip || 0; state.reloadT = 0; state.gadgetCharges = d.gadgetCharges || {}; state.handGadget = d.handGadget || null;
+  restaurarCargadores(d.gunMags);
   state.hasShield = !!d.hasShield; state.shieldHp = state.hasShield ? state.shieldMax : 0; state.shieldCd = 0;
   sanitizeWeaponPockets();   // partidas viejas: no dejar Puños si tenías espada en la mano o pistola láser comprada
   leaveParkRide(true); standUp(true);
@@ -18869,7 +18872,7 @@ function resetAll() {
   placed.slice().forEach(removePlaced); removeCar();
   clearWaves(); clearDirt(); clearJobs(); clearSmoke(); clearConfetti(); clearPolice(); clearPlants(); removePet(); removeAlienPet(); removeAllFloors2(); state.floor2Rot = 0; removeBase(); leaveParkRide(true); standUp(true); state.unlocked = {}; state.wanted = 0; state.wantedLevel = 0; state.policeDelay = 0;
   state.hasJetpack = false; state.laserGun = false; state.hasShield = false; state.shieldHp = 0; state.shieldCd = 0;
-  state.guns = {}; state.gun = null; state.ammo = 0; state.clip = 0; state.reloadT = 0; state.gadgetCharges = {}; state.handGadget = null;
+  state.guns = {}; state.gun = null; state.ammo = 0; state.clip = 0; state.reloadT = 0; state.gunMags = {}; state.gadgetCharges = {}; state.handGadget = null;
   state.baseLevel = 0; state.baseTurrets = 0; state.baseGenerator = false;
   state.inRuins = false; if (ruinsRoom) ruinsRoom.visible = false;
   clearEggPets(); state.incubTime = 0; state.eggQueue = 0; state.eggKind = null; state.eggLine = []; clearPetPoint(); endEclipse(); removeMount(); state.inCastle = false; setCastleVisible(false); clearTitan(); state.inArena = false; setColiVisible(false); clearArenaFoes(); state.inHotel = false; if (hotelLobby) hotelLobby.visible = false;
@@ -20198,9 +20201,9 @@ function buyItem(item) {
     if (!state.creative && state.money < item.price) { toast('💸 Te falta plata'); return; }
     if (!state.creative) state.money -= item.price;
     if (!state.guns) state.guns = {};
-    const primera = !Object.keys(state.guns).length;
     state.guns[item.key] = true;
-    if (primera) { state.clip = GUN_CLIP; state.ammo = (state.ammo || 0) + 0; }   // viene con el cargador puesto
+    const magNueva = cargadorDe(item.key);
+    magNueva.clip = GUN_CLIP; magNueva.reloadUntil = 0; state.clip = GUN_CLIP;   // cada arma trae su propio cargador
     equipHandItem({ t: 'gun', key: item.key });
     toast(g.icon + ' ' + g.name + ' · ' + g.dmg + ' de daño' + (g.scope ? ' · con MIRA: en la cabeza x' + g.head : ' · en la cabeza x' + g.head) + ' · ' + gunAmmoText());
     storyProgress('alley', 5); saveGame(); return;
@@ -21091,7 +21094,84 @@ function updateLaserEnergy(dt) {
 //  caen los casquillos al suelo, el arma se pone de lado y entran balas nuevas.
 // ===================================================================
 const bullets = [], shells = [];   // trazadoras que vuelan · casquillos que caen
-let gunCd = 0, gunFlash = 0, reloadAnim = 0, gunIdle = 0;
+let gunCd = 0, gunFlash = 0, reloadAnim = 0, gunIdle = 0, gunClock = 0;
+function asegurarCargadores() {
+  if (!state.gunMags) state.gunMags = {};
+  return state.gunMags;
+}
+function cargadorDe(key) {
+  const mags = asegurarCargadores();
+  if (!mags[key]) mags[key] = { clip: GUN_CLIP, reloadUntil: 0 };
+  return mags[key];
+}
+function quedaRecarga(mag) {
+  if (!mag || !mag.reloadUntil) return 0;
+  return Math.max(0, mag.reloadUntil - gunClock);
+}
+function exportarCargadores() {
+  const out = {};
+  const mags = state.gunMags || {};
+  for (const key in mags) {
+    const mag = mags[key];
+    if (!mag) continue;
+    out[key] = { clip: mag.clip | 0, reloadLeft: +quedaRecarga(mag).toFixed(3) };
+  }
+  return out;
+}
+function restaurarCargadores(saved) {
+  const mags = {};
+  const prev = saved && typeof saved === 'object' ? saved : null;
+  for (const key in (state.guns || {})) {
+    if (!GUN_SPECS[key]) continue;
+    const row = prev && prev[key];
+    if (row && typeof row.clip === 'number') {
+      const left = Math.max(0, Math.min(GUN_RELOAD, +row.reloadLeft || 0));
+      mags[key] = { clip: Math.max(0, Math.min(GUN_CLIP, row.clip | 0)), reloadUntil: left > 0 ? gunClock + left : 0 };
+    } else if (state.gun === key) {
+      mags[key] = { clip: Math.max(0, Math.min(GUN_CLIP, state.clip | 0)), reloadUntil: 0 };
+    } else mags[key] = { clip: GUN_CLIP, reloadUntil: 0 };
+  }
+  state.gunMags = mags;
+  aplicarCargadorEnMano();
+}
+function aplicarCargadorEnMano() {
+  if (!firearmEquipped() || !state.gun) {
+    state.reloadT = 0;
+    reloadAnim = 0;
+    return;
+  }
+  const mag = cargadorDe(state.gun);
+  const queda = quedaRecarga(mag);
+  if (queda <= 0) mag.reloadUntil = 0;
+  state.clip = mag.clip || 0;
+  state.reloadT = queda;
+  reloadAnim = queda;
+}
+function cerrarRecarga(key, mag) {
+  mag.reloadUntil = 0;
+  const falta = GUN_CLIP - (mag.clip || 0);
+  const toma = Math.min(Math.max(0, falta), state.ammo || 0);
+  mag.clip = (mag.clip || 0) + toma;
+  state.ammo = Math.max(0, (state.ammo || 0) - toma);
+  if (state.gun === key && firearmEquipped()) {
+    state.clip = mag.clip;
+    state.reloadT = 0;
+    reloadAnim = 0;
+    beep(520, .07, .05); setTimeout(() => beep(720, .06, .05), 90);
+    toast(toma > 0 ? '🔫 Cargador listo: ' + state.clip + '/' + GUN_CLIP + ' balas' : '🧰 Te quedaste sin balas · cómprale una caja de 50 a Tito ($600)');
+  }
+}
+function avanzarRecargas(dt) {
+  gunClock += dt;
+  const mags = state.gunMags;
+  if (!mags) return;
+  for (const key in mags) {
+    const mag = mags[key];
+    if (!mag || !mag.reloadUntil || mag.reloadUntil > gunClock) continue;
+    cerrarRecarga(key, mag);
+  }
+  aplicarCargadorEnMano();
+}
 let aimFov = 72, ctxWantsE = false;
 const CAM_FOV = 72;
 function tryGunShot() {   // el CLIC solo dispara (un tiro por clic)
@@ -21144,7 +21224,8 @@ function spawnTracer(from, to) {   // la bala que se ve volar
 }
 function updateBullets(dt) {
   gunCd = Math.max(0, gunCd - dt);
-  if (currentGunSpec() && state.reloadT <= 0) {   // si dejas de disparar, el cargador se completa solo
+  avanzarRecargas(dt);
+  if (currentGunSpec() && state.reloadT <= 0) {   // si dejas de disparar, el cargador de ESTA arma se completa solo
     gunIdle += dt;
     if (gunIdle > 3.5 && (state.clip || 0) < GUN_CLIP && (state.ammo || 0) > 0) startReload(true);
   }
@@ -21165,21 +21246,15 @@ function updateBullets(dt) {
   if (gunFlash > 0) gunFlash = Math.max(0, gunFlash - dt);
   const flash = viewmodel.userData.toolMount && viewmodel.userData.toolMount.children[0] && viewmodel.userData.toolMount.children[0].userData.muzzleFlash;
   if (flash) flash.visible = gunFlash > 0;
-  if (state.reloadT > 0) {
-    state.reloadT = Math.max(0, state.reloadT - dt);
-    reloadAnim = state.reloadT;
-    if (state.reloadT === 0) {
-      const falta = GUN_CLIP - (state.clip || 0), toma = Math.min(falta, state.ammo || 0);
-      state.clip = (state.clip || 0) + toma; state.ammo = Math.max(0, (state.ammo || 0) - toma);
-      beep(520, .07, .05); setTimeout(() => beep(720, .06, .05), 90);
-      toast(toma > 0 ? '🔫 Cargador listo: ' + state.clip + '/' + GUN_CLIP + ' balas' : '🧰 Te quedaste sin balas · cómprale una caja de 50 a Tito ($600)');
-    }
-  }
 }
 function startReload(auto) {
-  if (state.reloadT > 0) return false;
-  if ((state.clip || 0) >= GUN_CLIP) return false;
+  if (!firearmEquipped() || !state.gun) return false;
+  const mag = cargadorDe(state.gun);
+  if (quedaRecarga(mag) > 0) return false;
+  if ((mag.clip || 0) >= GUN_CLIP) return false;
   if ((state.ammo || 0) <= 0) { if (!auto) toast('🧰 No te quedan balas · compra una caja de 50 en el mercado negro ($600)'); beep(120, .12, .05); return false; }
+  mag.reloadUntil = gunClock + GUN_RELOAD;
+  state.clip = mag.clip || 0;
   state.reloadT = GUN_RELOAD; reloadAnim = GUN_RELOAD;
   for (let i = 0; i < 6; i++) spawnShell(i);   // caen los casquillos al suelo
   beep(180, .12, .05); toast('🔄 Recargando… ' + GUN_RELOAD + ' segundos');
@@ -21226,6 +21301,7 @@ function fireGun(spec) {
   if (gunCd > 0) return true;
   if ((state.clip || 0) <= 0) { startReload(true) || beep(110, .1, .05); return true; }
   gunCd = spec.rate; state.clip--; gunIdle = 0;
+  if (state.gun) cargadorDe(state.gun).clip = state.clip;
   vmSwing = .6; gunFlash = .06; cameraShake = Math.max(cameraShake, spec.kind === 'shotgun' ? .3 : .16);
   beep(spec.kind === 'shotgun' ? 130 : 240, .09, .06); vibr(25);
   const dir = new THREE.Vector3(); getAimDirection(dir);
@@ -23582,6 +23658,52 @@ try { if (new URLSearchParams(location.search).has('debug')) {
     renderer.render(scene, camera);
     return medidaGym(m);
   };
+  timDump.probarRecarga = () => {
+    state.guns = { bm_pistola: true, bm_rifle: true };
+    state.ammo = 80;
+    state.gunMags = {
+      bm_pistola: { clip: 0, reloadUntil: 0 },
+      bm_rifle: { clip: GUN_CLIP, reloadUntil: 0 },
+    };
+    state.laserGun = true;
+    const pose = () => {
+      updateViewmodel(0);
+      const rz = +viewmodel.rotation.z.toFixed(2);
+      return {
+        gun: state.gun, arma: state.weaponName, clip: state.clip,
+        reloadT: +state.reloadT.toFixed(3), rz,
+        recargando: !!(firearmEquipped() && state.reloadT > 0 && Math.abs(rz + 1.25) < 0.08),
+      };
+    };
+    equipHandItem({ t: 'gun', key: 'bm_pistola' });
+    const arranco = startReload(true);
+    const alEmpezar = pose();
+    updateBullets(2);
+    const aLos2 = pose();
+    const hasta = state.gunMags.bm_pistola.reloadUntil;
+    equipHandItem({ t: 'gun', key: 'bm_rifle' });
+    const rifle = pose();
+    fireGun(GUN_SPECS.bm_rifle);
+    const rifleTiro = pose();
+    updateBullets(1);
+    const pistolaLejos = { left: +quedaRecarga(state.gunMags.bm_pistola).toFixed(3), clip: state.gunMags.bm_pistola.clip, hastaIgual: state.gunMags.bm_pistola.reloadUntil === hasta };
+    equipHandItem({ t: 'gun', key: 'bm_pistola' });
+    const reinicio = startReload(false);
+    const vuelta = pose();
+    updateBullets(3);
+    const lista = pose();
+    state.gunMags.bm_pistola.clip = 2;
+    state.gunMags.bm_pistola.reloadUntil = 0;
+    state.clip = 2;
+    equipHandItem({ t: 'gun', key: 'bm_pistola' });
+    startReload(true);
+    equipHandItem({ t: 'laser' });
+    const laser = pose();
+    updateBullets(6);
+    equipHandItem({ t: 'gun', key: 'bm_pistola' });
+    const yaLista = pose();
+    return { arranco, alEmpezar, aLos2, rifle, rifleTiro, pistolaLejos, reinicio, vuelta, lista, laser, yaLista };
+  };
   timDump.sentarGrada = () => {
     const ok = trySitGrada();
     const s = sitOn;
@@ -24076,7 +24198,7 @@ function updateViewmodel(dt) {
   if (kind === 'bow' && bowDrawing) {
     viewmodel.position.set(.2 - bowDrawT * .05, -.4, -.76);
     viewmodel.rotation.set(-.14, .28, -.52 - bowDrawT * .12);
-  } else if (kind === 'gun' && state.reloadT > 0) {
+  } else if (kind === 'gun' && firearmEquipped() && state.reloadT > 0) {
     const t = 1 - state.reloadT / GUN_RELOAD;                       // 0 → 1 durante los 5 s
     const meter = Math.sin(Math.min(1, Math.max(0, (t - .25) / .7)) * Math.PI * 5) * .06;   // van entrando las balas
     viewmodel.position.set(0.5, -0.78 + bob + meter, -0.82);
