@@ -10974,7 +10974,7 @@ function encuadrarGym() {
   animarMaquinaGym(m, gymSesion.t, gymSesion.rutina);
   playerAvatar.visible = true;
   viewmodel.visible = false;
-  const fp = cameraMode === 0;
+  const fp = cameraMode === 0 && m.tipo !== 'banca';
   (playerAvatar.userData.cabeza || []).forEach(o => { o.visible = !fp; });
   const foco = m.tipo === 'bici' ? (m.partes.pedalL || m.partes.eje)
     : m.tipo === 'banca' || m.tipo === 'rack' || m.tipo === 'pesas' ? m.partes.barra
@@ -11008,14 +11008,16 @@ function encuadrarGym() {
 function actualizarMaquinasGym(dt) {
   if (!gymSesion) return;
   gymSesion.t += dt;
-  animarMaquinaGym(gymSesion.m, gymSesion.t, gymSesion.rutina);
-  if (gymSesion.t < gymSesion.dur) return;
+  let fallo = false;
+  try { animarMaquinaGym(gymSesion.m, gymSesion.t, gymSesion.rutina); }
+  catch (e) { fallo = true; }
+  if (!fallo && gymSesion && gymSesion.t < gymSesion.dur) return;
   const tipo = gymSesion.m.tipo;
   gymSesion = null;
   posarDePie(playerAvatar);
   playerAvatar.rotation.set(0, yaw + Math.PI, 0);
-  marcarMaquinaGym(tipo);
-  toast('😮 No puedes más.');
+  if (!fallo) marcarMaquinaGym(tipo);
+  toast(fallo ? '🏋️ Soltaste la barra.' : '😮 No puedes más.');
   beep(220, 0.09, 0.04);
 }
 function tryGym() {
@@ -24252,6 +24254,10 @@ function dadWalkBob(dt) {
     dad.userData.bobT = (dad.userData.bobT || 0) + (walking ? dt * 9 : 0);
     m.position.y = (m.userData.footY || 0) + (walking ? Math.abs(Math.sin(dad.userData.bobT)) * 0.12 : 0);
   }
+}
+function posarManosGym() {
+  viewmodel.visible = false;
+  if (viewmodel.userData.manoLavado) viewmodel.userData.manoLavado.visible = false;
 }
 function updateViewmodel(dt) {
   if (gymSesion && state.inGym) { posarManosGym(); return; }
