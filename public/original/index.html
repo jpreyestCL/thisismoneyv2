@@ -1823,9 +1823,10 @@ let pisosAplanados = [];
 let casasPorAsentar = [];
 let parquesAplanados = [];
 let montanasEsquiListas = false;
+let earthMountains = null;
 function showEarthGround(earth) {
-  earthTerrain.visible = !!earth;
-  ground.visible = !earth;
+  earthTerrain.visible = !!earth && !state.inGym;
+  ground.visible = !earth && !state.inGym;
 }
 
 // ===================================================================
@@ -1934,7 +1935,7 @@ function updateGrassField(dt) {
   if (poolPatch) poolPatch.visible = state.planet !== 'tierra' || !!state.country;   // fuera de la Tierra el hueco de la piscina se tapa
   if (!grassField) return;
   const visible = state.planet === 'tierra' && !state.country && !state.underground && !state.inCastle
-    && !state.inRuins && !state.inArena && !state.mission && !(perfMode && perfExtra);
+    && !state.inRuins && !state.inArena && !state.inGym && !state.mission && !(perfMode && perfExtra);
   grassField.visible = visible;
   if (!visible) return;
   if ((creativeFlying || state.jetOn) && player.position.y > 16) { grassField.visible = false; return; }
@@ -7429,7 +7430,7 @@ function mcMountain(parent, cx, cz, r, h, rock, cap, seed, planet, opts) {
   }
 }
 function buildEarthMountains() {
-  const g = new THREE.Group(); scene.add(g);
+  const g = new THREE.Group(); g.name = 'cerros'; earthMountains = g; scene.add(g);
   // Los cerros viven fuera del anillo de la ciudad (ver src/city-map.js).
   CERROS.forEach((cerro, i) => mcMountain(g, cerro.x, cerro.z, cerro.r, cerro.h, 0x6b7280, 0xf8fafc, i + 1));   // roca gris con nieve arriba
   // Cordillera extra: el bioma de nieve y el resto del mapa tienen muchos más cerros.
@@ -10553,7 +10554,7 @@ function construirGym() {
   piezaGym(inn, -6, 2.3, GYM_IN.d / 2 - 0.2, GYM_IN.w - 12, 4.6, 0.4, 0xe7e5e4);
   piezaGym(inn, 6, 2.3, GYM_IN.d / 2 - 0.2, GYM_IN.w - 12, 4.6, 0.4, 0xe7e5e4);
   piezaGym(inn, 0, 4.55, 0, GYM_IN.w, 0.25, GYM_IN.d, 0xf5f5f4);
-  const luz = new THREE.PointLight(0xfff7ed, 1.5, 28, 1.2);
+  const luz = new THREE.PointLight(0xfff7ed, 2.4, 36, 1.1);
   luz.position.set(0, 4.1, 0); inn.add(luz);
   const senora = new THREE.Group();
   senora.position.set(0, 0, GYM_IN.d / 2 - 6.4);
@@ -10577,6 +10578,7 @@ function construirGym() {
   ponerMaquina(inn, -4, -1, 'rack', armarRack);
   ponerMaquina(inn, 2, -1, 'mancuernas', armarMancuernas);
   ponerMaquina(inn, 8, -1, 'pesas', armarPesas);
+  inn.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
   scene.add(inn);
   gymLobby = inn;
 }
@@ -10625,15 +10627,39 @@ function cobrarDiaGym() {
   g.lastNight = day;
   return { ok: true, mismoDia: false, antes, ahora: g.streak, pago: !state.creative };
 }
+function ocultarExteriorGym() {
+  for (let i = 0; i < earthMeshes.length; i++) {
+    const m = earthMeshes[i];
+    if (m !== gymLobby) m.visible = false;
+  }
+  earthTerrain.visible = false;
+  if (earthMountains) earthMountains.visible = false;
+  if (grassField) grassField.visible = false;
+  if (gymLobby) gymLobby.visible = true;
+}
 function entrarAlGym() {
   const cobro = cobrarDiaGym();
   if (!cobro.ok) {
     say('Señora del gym', 'La entrada son $2000. Hoy no puedes pasar.');
     return false;
   }
+  creativeFlying = false;
+  state.jetOn = false;
+  state.skiing = false;
+  state.skiLiftRide = null;
+  stopSkiCarve();
+  state.driving = false;
+  state.riding = false;
+  vineRide = null;
+  if (sitOn) standUp(true);
+  state.underground = false;
+  state.sailing = false;
+  caidaLeve = null;
+  rescate = null;
+  caidaChoque = null;
   state.inGym = true;
   state.gymReturn = { x: player.position.x, y: player.position.y, z: player.position.z };
-  if (gymLobby) gymLobby.visible = true;
+  ocultarExteriorGym();
   player.position.set(GYM_IN.x, PLAYER_EYE, GYM_IN.z + 7.2);
   yaw = 0; pitch = 0; vy = 0; grounded = true;
   if (cobro.pago) toast('Pagaste $2000 de entrada.');
@@ -10688,6 +10714,7 @@ function salirDelGym() {
   }
   state.inGym = false;
   if (gymLobby) gymLobby.visible = false;
+  if (state.planet === 'tierra' && !state.country) setEarthWorld(true);
   const r = state.gymReturn || gymDoor();
   player.position.set(r.x, r.y || PLAYER_EYE, r.z);
   posarDePie(playerAvatar);
@@ -11028,6 +11055,7 @@ function setEarthWorld(v) {   // muestra/oculta la Tierra completa (con sus coli
   for (const m of earthMeshes) m.visible = v;
   if (hotelLobby) hotelLobby.visible = !!v && !!state.inHotel;
   if (gymLobby) gymLobby.visible = !!v && !!state.inGym;
+  if (state.inGym) ocultarExteriorGym();
   if (!v) { for (const o of earthObstacles) { const i = obstacles.indexOf(o); if (i >= 0) obstacles.splice(i, 1); } }
   else { for (const o of earthObstacles) if (!obstacles.includes(o)) obstacles.push(o); }
   setCityVisible(v);
@@ -23120,6 +23148,7 @@ function apoyarTechosDeVuelo(pos, fromY) {
   }
 }
 function updateCreativeFlight(dt) {
+  if (state.inGym) return;
   const lookSpeed = 1.8 * dt;
   if (keys['ArrowLeft']) yaw += lookSpeed;
   if (keys['ArrowRight']) yaw -= lookSpeed;
@@ -23152,7 +23181,39 @@ function updateCreativeFlight(dt) {
   if (inTreasureIsland(player.position.x, player.position.z)) noteIslandArrival('🏝️ Llegaste volando a la ISLA DEL TESORO');
   grounded = false; vy = 0; camera.rotation.y = yaw; camera.rotation.x = pitch;
 }
+function mantenerEnElGym(dt) {
+  const lookSpeed = 1.8 * dt;
+  if (keys['ArrowLeft']) yaw += lookSpeed;
+  if (keys['ArrowRight']) yaw -= lookSpeed;
+  if (keys['ArrowUp']) pitch += lookSpeed;
+  if (keys['ArrowDown']) pitch -= lookSpeed;
+  pitch = Math.max(-1.4, Math.min(1.4, pitch));
+  ocultarExteriorGym();
+  if (gymSesion) {
+    camera.rotation.y = yaw; camera.rotation.x = pitch;
+    return;
+  }
+  const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  const rightV = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+  const crouch = keys['ControlLeft'] || keys['ControlRight'] || touch.crouch;
+  const running = (keys['ShiftLeft'] || keys['ShiftRight'] || touch.run) && state.hunger > 5 && !crouch;
+  let spd = running ? velocidadCorrer() : (crouch ? 4 : 9);
+  if (state.hunger <= 0) spd = 6;
+  let ax = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
+  let az = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
+  az += touch.moveY; ax += touch.moveX;
+  const mag = Math.hypot(ax, az); if (mag > 1) { ax /= mag; az /= mag; }
+  const step = spd * dt;
+  player.position.addScaledVector(forward, az * step);
+  player.position.addScaledVector(rightV, ax * step);
+  player.position.x = THREE.MathUtils.clamp(player.position.x, GYM_IN.x - GYM_IN.w / 2 + 1.3, GYM_IN.x + GYM_IN.w / 2 - 1.3);
+  player.position.z = THREE.MathUtils.clamp(player.position.z, GYM_IN.z - GYM_IN.d / 2 + 1.3, GYM_IN.z + GYM_IN.d / 2 - 1.3);
+  player.position.y = crouch ? CROUCH_EYE : PLAYER_EYE;
+  vy = 0; grounded = true;
+  camera.rotation.y = yaw; camera.rotation.x = pitch;
+}
 function updateMovement(dt) {
+  if (state.inGym) { mantenerEnElGym(dt); return; }
   if (state.skiLiftRide || nearSkiNow()) {
     updateAndariveles(dt);
     syncCuerposSolidos();
