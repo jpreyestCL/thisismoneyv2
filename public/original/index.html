@@ -16877,6 +16877,15 @@ function volverACasa() {
   state.underground = false; state.groundY = 0; state.shelterHole = null;
   creativeFlying = false; state.jetOn = false; vy = 0;
   abortFlight();
+  if (state.planet === 'platus') {
+    if (state.inGym) { state.inGym = false; gymSesion = null; if (gymLobby) gymLobby.visible = false; }
+    const cohete = (state.rocket && state.rocket.position) ? state.rocket.position : LUGARES.cohete;
+    player.position.set(cohete.x, PLAYER_EYE, cohete.z + 3);
+    yaw = 0; pitch = 0; grounded = true;
+    if (dad && dad.visible && !dad.userData.resting) dad.position.set(cohete.x + 1.6, 0, cohete.z + 3);
+    toast('🚀 Volviste a la base del cohete, en ' + (state.planetName || 'Platus'));
+    return;
+  }
   if (state.country) { state.country = null; setCountryVisible(false); }
   if (state.planet !== 'tierra') { state.planet = 'tierra'; setPlatusVisible(false); }
   setEarthWorld(true);
