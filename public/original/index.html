@@ -1050,7 +1050,7 @@
           <kbd>WASD</kbd><span>Caminar. Shift corre, Espacio salta y Ctrl agacha.</span>
           <kbd>Espacio ×3</kbd><span>Llamar al mayordomo y darle una orden o encargarle compras. Primero contrátalo en el súper por $500. Su sueldo es $100 cada 7 días del juego.</span>
           <kbd>P</kbd><span>Llamar por celular a tus amigos cuando estés en una partida online.</span>
-          <kbd>E</kbd><span>Interactuar, entrar a vehículos, banco, cohete, tesoros, edificios y la puerta del callejón de Tito (misión a $20.000). Con el arco en la mano, mantén E (o el clic) para tensar: cuanto más tiempo, más fuerte sale la flecha. Daño del arco: tensado bajo 9, medio 12 y máximo 18 (si tu arco es de 16). Mira hacia arriba para que vuele lejos; abajo llega menos. Si tienes espada, láser y arco: pulsa 1 una vez para la espada (o el láser), 1 otra vez para cambiar entre espada y láser, y 1 dos veces seguidas para el arco. En casa, E en la Play abre juegos de consola (fútbol, Gran Prix y Héroes), pero la mesa tiene que tener una tele.</span>
+          <kbd>E</kbd><span>Interactuar, entrar a vehículos, banco, cohete, tesoros, edificios y la puerta del callejón de Tito (misión a $20.000). En el Banco Central, con el sistema hacker del mercado negro, mantén E 10 segundos en la puerta de la bóveda y después abre cada cajón. Con el arco en la mano, mantén E (o el clic) para tensar: cuanto más tiempo, más fuerte sale la flecha. Daño del arco: tensado bajo 9, medio 12 y máximo 18 (si tu arco es de 16). Mira hacia arriba para que vuele lejos; abajo llega menos. Si tienes espada, láser y arco: pulsa 1 una vez para la espada (o el láser), 1 otra vez para cambiar entre espada y láser, y 1 dos veces seguidas para el arco. En casa, E en la Play abre juegos de consola (fútbol, Gran Prix y Héroes), pero la mesa tiene que tener una tele.</span>
           <kbd>Y</kbd><span>Abrir el catálogo del vendedor cuando estés cerca.</span>
           <kbd>B / G</kbd><span>Activa construcción con B. En ese modo, G abre planos completos; F coloca y X quita.</span>
           <kbd>1–9 · 0</kbd><span>Elegir herramienta o pieza de la pestaña activa (🏠 casa · 🛡️ defensa · 🪑 muebles). La tecla 1: un toque = espada, pala o pistola láser (nunca los puños si ya las compraste); dos toques seguidos = arco. La rueda recorre TODO el inventario y Shift+rueda cambia de pestaña.</span>
@@ -2386,6 +2386,7 @@ function applyPlayerArmor() {
   }
   viewmodel.userData.bracer.visible = !!tier;
   if (tier) viewmodel.userData.bracer.material = mat(ARMOR_TIERS[tier].color);
+  applyThiefLook();
 }
 
 function replaceToolInMount(mount, kind, color, scale, flip) {
@@ -3573,6 +3574,9 @@ const BLACK_MARKET = [
   { key: 'bm_gancho', name: 'Gancho trepador', price: 700, color: 0x78716c, gadget: 'gancho', icon: '🪝', blurb: 'Saltas más alto, como de techo a techo.' },
   { key: 'bm_confeti', name: 'Granada de confeti', price: 240, color: 0xec4899, gadget: 'confeti', icon: '🎉', blurb: 'Una nube de papelitos. Aturde a los monstruos cerca.' },
   { key: 'bm_radio', name: 'Radio chatarra', price: 380, color: 0x334155, gadget: 'radio', icon: '📻', blurb: 'Pitido cuando se acerca un patrullero.' },
+  { key: 'bm_naranjo', name: 'Traje naranjo de ladrón', price: 1200, color: 0xf97316, icon: '🟠', thief: 'naranjo', blurb: 'Uniforme naranja de la cárcel. Con el gorro puesto, el cartel del banco es una cámara desde arriba y no muestra tu cara.' },
+  { key: 'bm_gorro', name: 'Gorro con hoyos', price: 700, color: 0x111827, icon: '🎭', thief: 'gorro', blurb: 'Gorro negro con hoyos para los ojos. Si robas el banco sin este gorro, el cartel de buscado lleva tu cara.' },
+  { key: 'bm_hacker', name: 'Sistema hacker', price: 2200, color: 0x22d3ee, icon: '💻', thief: 'hacker', blurb: 'Abre la puerta de la bóveda del Banco Central en 10 segundos. Cada cajón tiene $1000.' },
 ];
 // Armas de fuego de verdad (las del mercado negro). Cargador de 20 balas, 5 s de recarga.
 const GUN_CLIP = 20, GUN_RELOAD = 5;
@@ -3974,8 +3978,10 @@ function renderBlackMarket() {
   const list = ui('blackList'), money = ui('blackMoney'); if (!list) return;
   if (money) money.textContent = state.creative ? '$∞' : '$' + state.money;
   list.innerHTML = BLACK_MARKET.map(it => {
-    const have = (it.gadget && !GADGET_HAND[it.gadget] && state.gadgets && state.gadgets[it.gadget]) || (GUN_SPECS[it.key] && state.guns && state.guns[it.key]) || (!GUN_SPECS[it.key] && it.dmg && state.weaponName === it.name);
-    return '<button type="button" data-bm="' + it.key + '" style="pointer-events:all; cursor:pointer; text-align:left; background:rgba(127,29,29,.2); border:1px solid #7f1d1d; color:#fecaca; border-radius:9px; padding:8px 10px;"><b style="color:#fecaca">' + it.icon + ' ' + it.name + '</b> · $' + it.price + (have ? (GUN_SPECS[it.key] ? ' · ya la tienes (toca para llevarla en la mano)' : ' · ya lo tienes') : '') + (it.ammo ? ' · llevas ' + (state.ammo || 0) + ' balas' : '') + (GADGET_HAND[it.gadget] ? ' · tienes ' + ((state.gadgetCharges || {})[it.gadget] || 0) : '') + '<br><span style="opacity:.75; font-size:11px">' + it.blurb + (GUN_SPECS[it.key] ? '<br>💥 daño ' + GUN_SPECS[it.key].dmg + ' · 🎯 cabeza x' + GUN_SPECS[it.key].head + ' (' + Math.round(GUN_SPECS[it.key].dmg * GUN_SPECS[it.key].head) + ') · 📏 ' + GUN_SPECS[it.key].range + ' m · ⏱️ ' + GUN_SPECS[it.key].rate + ' s' : '') + '</span></button>';
+    const puesto = it.thief && state.thief && state.thief[it.thief] && (it.thief === 'hacker' || state.thief[it.thief === 'naranjo' ? 'wearNaranjo' : 'wearGorro']);
+    const have = (it.thief && state.thief && state.thief[it.thief]) || (it.gadget && !GADGET_HAND[it.gadget] && state.gadgets && state.gadgets[it.gadget]) || (GUN_SPECS[it.key] && state.guns && state.guns[it.key]) || (!GUN_SPECS[it.key] && it.dmg && state.weaponName === it.name);
+    const ya = !have ? '' : it.thief === 'hacker' ? ' · ya lo tienes' : it.thief ? (puesto ? ' · puesto (toca para sacártelo)' : ' · toca para ponértelo') : GUN_SPECS[it.key] ? ' · ya la tienes (toca para llevarla en la mano)' : ' · ya lo tienes';
+    return '<button type="button" data-bm="' + it.key + '" style="pointer-events:all; cursor:pointer; text-align:left; background:rgba(127,29,29,.2); border:1px solid #7f1d1d; color:#fecaca; border-radius:9px; padding:8px 10px;"><b style="color:#fecaca">' + it.icon + ' ' + it.name + '</b> · $' + it.price + ya + (it.ammo ? ' · llevas ' + (state.ammo || 0) + ' balas' : '') + (GADGET_HAND[it.gadget] ? ' · tienes ' + ((state.gadgetCharges || {})[it.gadget] || 0) : '') + '<br><span style="opacity:.75; font-size:11px">' + it.blurb + (GUN_SPECS[it.key] ? '<br>💥 daño ' + GUN_SPECS[it.key].dmg + ' · 🎯 cabeza x' + GUN_SPECS[it.key].head + ' (' + Math.round(GUN_SPECS[it.key].dmg * GUN_SPECS[it.key].head) + ') · 📏 ' + GUN_SPECS[it.key].range + ' m · ⏱️ ' + GUN_SPECS[it.key].rate + ' s' : '') + '</span></button>';
   }).join('');
 }
 function applyBlackMarketGadget(item) {
@@ -4778,6 +4784,11 @@ const BANK = { x: LUGARES.banco.x, z: LUGARES.banco.z, w: 20, d: 11, h: 6.4, t: 
 BANK.frente = BANK.z + BANK.d / 2;   // la puerta mira al norte, hacia la avenida
 let bankTeller = null;
 const bankAtms = [];
+const bankStaff = [];
+let bankVaultDoor = null;
+const bankHeist = { ready: false, open: false, hack: 0, door: null, doorHome: null, obs: null, spot: null, drawers: [] };
+const busPosters = [];
+let posterMaterial = null;
 function buildBank() {
   const { x: cx, z: cz, w, d, h, t } = BANK, frente = BANK.frente, fondo = cz - d / 2;
   const piedra = 0xe9e1cb, piedraOsc = 0xcfc4a6, bronce = 0x8a6a2f, marmol = 0xf1efe6;
@@ -4884,6 +4895,7 @@ function buildBank() {
   edifCaja(bvx, 1.9, cz - 2.6, .5, 3.8, 4, 0x64748b, 'banco', false);
   const puertaB = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, .5, 20), mat(0x94a3b8));
   puertaB.rotation.z = Math.PI / 2; puertaB.position.set(bvx + .45, 1.9, cz - 2.6); puertaB.castShadow = true; scene.add(puertaB);
+  bankVaultDoor = puertaB;
   const rueda = new THREE.Mesh(new THREE.TorusGeometry(.55, .1, 8, 16), mat(0xfacc15));
   rueda.rotation.y = Math.PI / 2; rueda.position.set(bvx + .78, 1.9, cz - 2.6); scene.add(rueda);
   const cartelB = makeSign('BOVEDA', 0xcbd5e1); cartelB.scale.set(.28, .28, .28);
@@ -4908,6 +4920,7 @@ function buildBank() {
       { material: new THREE.MeshStandardMaterial({ color: 0xfff3c4, emissive: 0xfde68a, emissiveIntensity: .8 }), sombra: false });
     if (!preferLowPerf) { const pl = new THREE.PointLight(0xfff4cf, .6, 18, 2); pl.position.set(cx + sx, h - 1.5, cz); scene.add(pl); }
   }
+  prepararRoboBanco();
 }
 
 // ===================================================================
@@ -5215,7 +5228,403 @@ function updatePolice(dt) {
     }
   } else if (police.length || state.wantedLevel) { clearPolice(); state.wantedLevel = 0; }   // se acabó la búsqueda
 }
-function policeCatch() { state.wanted = 0; state.wantedLevel = 0; state.driving = false; clearPolice(); toast('🚔 ¡Te atrapó la policía! A la cárcel…'); goToJail(); }
+function policeCatch() {
+  const banco = !!state.bankChase;
+  state.jailPorBanco = banco;
+  state.bankChase = false;
+  quitarCarteles();
+  state.wanted = 0; state.wantedLevel = 0; state.driving = false; clearPolice();
+  toast(banco ? '🚔 ¡Te atraparon! La búsqueda se reinicia. Nueve minutos en la celda.' : '🚔 ¡Te atrapó la policía! A la cárcel…');
+  goToJail();
+}
+
+// Robo del Banco Central que ya existe: traje naranjo, gorro, hacker, cajones y carteles.
+function disfrazDeBanco() {
+  return !!(state.thief && state.thief.wearNaranjo && state.thief.wearGorro);
+}
+function texturaCartel(kind) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 384;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f3e6c4';
+  g.fillRect(0, 0, 256, 384);
+  g.strokeStyle = '#7f1d1d'; g.lineWidth = 8; g.strokeRect(8, 8, 240, 368);
+  g.fillStyle = '#7f1d1d'; g.font = 'bold 34px sans-serif'; g.textAlign = 'center';
+  g.fillText('BUSCADO', 128, 52);
+  if (kind === 'camara') {
+    g.fillStyle = '#0b1220'; g.fillRect(28, 70, 200, 210);
+    g.strokeStyle = '#67e8f9'; g.lineWidth = 3; g.strokeRect(36, 78, 184, 194);
+    g.fillStyle = '#a5f3fc'; g.font = '12px monospace';
+    g.fillText('CAM 03  VISTA SUPERIOR', 128, 98);
+    g.fillStyle = '#f97316';
+    g.beginPath(); g.ellipse(128, 196, 34, 46, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#ea580c';
+    g.beginPath(); g.arc(128, 142, 18, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#fff7ed';
+    for (let i = 0; i < 3; i++) g.fillRect(100, 168 + i * 16, 56, 4);
+    g.fillStyle = '#334155'; g.font = 'bold 15px sans-serif';
+    g.fillText('CÁMARA · TRAJE NARANJA', 128, 308);
+    g.font = '13px sans-serif'; g.fillText('Sin rostro', 128, 332);
+  } else {
+    g.fillStyle = '#e0ac69';
+    g.beginPath(); g.arc(128, 178, 72, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#3b2b1f';
+    g.beginPath(); g.arc(128, 150, 72, Math.PI, 0); g.fill();
+    g.fillStyle = '#fff';
+    g.beginPath(); g.arc(104, 178, 13, 0, Math.PI * 2); g.arc(152, 178, 13, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#1f2937';
+    g.beginPath(); g.arc(106, 180, 6, 0, Math.PI * 2); g.arc(154, 180, 6, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#9a3412'; g.lineWidth = 3;
+    g.beginPath(); g.arc(128, 210, 16, 0.25, Math.PI - 0.25); g.stroke();
+    g.fillStyle = '#7f1d1d'; g.font = 'bold 16px sans-serif';
+    g.fillText('SE BUSCA · TU CARA', 128, 312);
+  }
+  g.fillStyle = '#111827'; g.font = 'bold 14px sans-serif';
+  g.fillText('BANCO CENTRAL', 128, 358);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+function asegurarPosterMaterial() {
+  if (!posterMaterial) posterMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  return posterMaterial;
+}
+function ponerLaminaBuscado(parent, x, y, z, rotY) {
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 1.72), asegurarPosterMaterial());
+  plane.position.set(x, y, z);
+  plane.rotation.y = rotY || 0;
+  plane.visible = false;
+  parent.add(plane);
+  busPosters.push(plane);
+  return plane;
+}
+function ponerParadaBus(x, z, rot) {
+  const g = new THREE.Group();
+  const poste = new THREE.Mesh(smoothBox(0.14, 2.5, 0.14), mat(0x475569));
+  poste.position.y = 1.25; g.add(poste);
+  const marco = new THREE.Mesh(smoothBox(1.35, 1.9, 0.08), mat(0x1f2937));
+  marco.position.y = 1.7; g.add(marco);
+  g.position.set(x, 0, z); g.rotation.y = rot || 0; scene.add(g);
+  ponerLaminaBuscado(g, 0, 1.7, 0.06, 0);
+}
+function ponerCartelesEnTrafico() {
+  let n = 0;
+  for (const car of traffic) {
+    if (!car.userData.moving || (n++ % 3)) continue;
+    car.userData.bus = true;
+    ponerLaminaBuscado(car, 1.08, 1.35, 0.15, Math.PI / 2);
+    ponerLaminaBuscado(car, -1.08, 1.35, 0.15, -Math.PI / 2);
+  }
+}
+function mostrarCartelesBuscado(kind) {
+  const tex = texturaCartel(kind);
+  const matPoster = asegurarPosterMaterial();
+  if (matPoster.map && matPoster.map !== tex) matPoster.map.dispose();
+  matPoster.map = tex;
+  matPoster.needsUpdate = true;
+  for (const p of busPosters) p.visible = true;
+}
+function quitarCarteles() {
+  for (const p of busPosters) p.visible = false;
+}
+function iniciarPersecucionBanco() {
+  if (state.bankChase && state.wanted > 0) return;
+  const camara = disfrazDeBanco();
+  state.bankPoster = camara ? 'camara' : 'cara';
+  mostrarCartelesBuscado(state.bankPoster);
+  state.bankChase = true;
+  state.wantedLevel = Math.max(3, Math.min(5, state.wantedLevel || 3));
+  state.wanted = 180;
+  state.policeDelay = 0;
+  toast(camara
+    ? '🚨 Robo al banco. Te persiguen 3 minutos. Los carteles son una cámara desde arriba, con el traje naranja, sin tu cara.'
+    : '🚨 Robo al banco. Te persiguen 3 minutos. Sin el traje y el gorro, los carteles de buscado llevan tu cara.');
+}
+function cajonCerca(maxD) {
+  if (!bankHeist.ready) return null;
+  let cerrado = null, abierto = null, mejorC = maxD, mejorA = maxD;
+  for (const d of bankHeist.drawers) {
+    const dist = Math.hypot(player.position.x - d.x, player.position.z - d.z);
+    if (!d.open && dist < mejorC) { mejorC = dist; cerrado = d; }
+    else if (d.open && dist < mejorA) { mejorA = dist; abierto = d; }
+  }
+  return cerrado || abierto;
+}
+function cajonesCerrados() { return bankHeist.drawers.reduce((n, d) => n + (d.open ? 0 : 1), 0); }
+function cercaDeLaPuertaBanco() {
+  return !!(bankHeist.spot && dist2D(player.position, bankHeist.spot) < 3.6);
+}
+function abrirBoveda() {
+  if (!bankHeist.ready || bankHeist.open) return;
+  bankHeist.open = true;
+  bankHeist.hack = 10;
+  state.bankVaultOpen = true;
+  if (bankHeist.obs) {
+    const i = obstacles.indexOf(bankHeist.obs);
+    if (i >= 0) obstacles.splice(i, 1);
+    bankHeist.obs = null;
+  }
+  if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.z = bankHeist.doorHome.z + 2.3;
+  beep(520, .1, .05);
+  toast('💻 Puerta abierta. Abre cada cajón con E · $1000 · son 20.');
+  iniciarPersecucionBanco();
+}
+function prepararRoboBanco() {
+  const door = bankVaultDoor;
+  if (!door || bankHeist.ready) return;
+  bankHeist.ready = true;
+  bankHeist.door = door;
+  bankHeist.doorHome = door.position.clone();
+  bankHeist.spot = new THREE.Vector3(door.position.x + 1.35, 0, door.position.z);
+  bankHeist.obs = addObstacle(door.position.x, door.position.z, 0.7, 3.1, 3.6, 'banco');
+  const ox = BANK.x - 6.5, oz = BANK.z - 4.55;
+  for (let row = 0, i = 0; row < 4; row++) for (let col = 0; col < 5; col++, i++) {
+    const x = ox + col * 0.82, y = 0.48 + row * 0.5, z = oz;
+    const mesh = new THREE.Mesh(smoothBox(0.7, 0.38, 0.42), new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.5, metalness: 0.35 }));
+    mesh.position.set(x, y, z); mesh.castShadow = true; scene.add(mesh);
+    const tirador = new THREE.Mesh(smoothBox(0.22, 0.06, 0.06), mat(0xfacc15));
+    tirador.position.set(x, y, z + 0.24); scene.add(tirador);
+    bankHeist.drawers.push({ i, mesh, tirador, open: false, home: mesh.position.clone(), x, z: z + 0.55 });
+  }
+  const puestos = [
+    [BANK.x - 2.2, BANK.z + 1.2, 0xe2e8f0, 0xd6a77a],
+    [BANK.x + 3.4, BANK.z + 1.6, 0x1e3a8a, 0xf1c27d],
+    [BANK.x + 6.2, BANK.z - 0.4, 0xf8fafc, 0xc4a574],
+  ];
+  for (const [x, z, ropa, piel] of puestos) {
+    const p = makePerson(ropa, piel);
+    p.position.set(x, 0, z);
+    p.userData.bankStaff = true;
+    p.userData.dead = false;
+    p.userData.home = p.position.clone();
+    scene.add(p);
+    bankStaff.push(p);
+  }
+  if (bankTeller) {
+    bankTeller.userData.bankStaff = true;
+    bankTeller.userData.dead = false;
+    bankTeller.userData.wasSeated = true;
+    bankTeller.userData.seatY = 1.05;
+    bankTeller.userData.home = bankTeller.position.clone();
+    bankStaff.push(bankTeller);
+  }
+  ponerParadaBus(BANK.x + 14, BANK.z + 12, 0.4);
+  ponerParadaBus(BANK.x - 16, BANK.z + 8, -0.5);
+  ponerParadaBus(LUGARES.super.x + 12, LUGARES.super.z + 10, 1.1);
+  ponerParadaBus(JAIL.x, JAIL.z + JAIL.d / 2 + 8, Math.PI);
+}
+function matarEmpleadoBanco(person) {
+  if (!person || person.userData.dead) return;
+  person.userData.dead = true;
+  person.userData.seated = false;
+  const l = person.userData.limbs;
+  if (l) { l.legL.rotation.x = 0; l.legR.rotation.x = 0; l.armL.rotation.x = 0; l.armR.rotation.x = 0; }
+  person.rotation.x = -Math.PI / 2;
+  person.position.y = 0.35;
+  voxelImpact(person.position.clone().setY(1.1), 0xb91c1c, 10);
+  iniciarPersecucionBanco();
+  toast('🚨 Mataste a alguien del banco. La policía te persigue tres minutos.');
+}
+function tryBankHeist() {
+  if (state.planet !== 'tierra' || state.country || !bankHeist.ready) return false;
+  if (bankHeist.open) {
+    const d = cajonCerca(1.7);
+    if (!d) return false;
+    const ahora = performance.now();
+    if (ahora - (bankHeist.lastDrawer || 0) < 420) return true;
+    if (d.open) { toast('Ese cajón ya está vacío'); return true; }
+    bankHeist.lastDrawer = ahora;
+    d.open = true;
+    d.mesh.material.color.setHex(0x1c1917);
+    d.mesh.position.z = d.home.z + 0.22;
+    if (d.tirador) d.tirador.position.z = d.home.z + 0.46;
+    if (!state.bankLooted) state.bankLooted = [];
+    state.bankLooted.push(d.i);
+    addMoney(1000);
+    iniciarPersecucionBanco();
+    const quedan = cajonesCerrados();
+    toast(quedan ? '💵 Sacaste $1000 · quedan ' + quedan + ' cajones' : '💵 Sacaste $1000 · la bóveda quedó vacía');
+    beep(680, .06, .04);
+    return true;
+  }
+  if (cercaDeLaPuertaBanco()) {
+    if (!(state.thief && state.thief.hacker)) toast('💻 Esa puerta se abre con el sistema hacker del mercado negro');
+    return true;
+  }
+  return false;
+}
+function bankHeistPrompt() {
+  if (state.planet !== 'tierra' || state.country || !bankHeist.ready || state.mission === 'alley') return null;
+  if (bankHeist.open) {
+    const d = cajonCerca(1.7);
+    if (!d) return null;
+    return { key: 'E', touch: '💵', force: true, text: d.open ? 'Cajón vacío' : 'Abrir cajón · $1000 · quedan ' + cajonesCerrados() };
+  }
+  if (!cercaDeLaPuertaBanco()) return null;
+  if (!(state.thief && state.thief.hacker)) return { key: '🔒', touch: '💻', text: 'Puerta de la bóveda · cómprala con el sistema hacker' };
+  const s = Math.min(10, bankHeist.hack || 0);
+  return { key: 'E', touch: '💻', force: true, text: s > 0.08 ? 'Hackeando la puerta · ' + Math.max(0, 10 - s).toFixed(1) + ' s' : 'Mantén E diez segundos para abrir la puerta' };
+}
+function updateBankHack(dt) {
+  if (!bankHeist.ready) return;
+  if (state.bankChase && state.wanted <= 0 && !condena) {
+    state.bankChase = false;
+    quitarCarteles();
+  }
+  const puede = state.running && !state.paused && !typing && !condena && state.planet === 'tierra' && !state.country && !bankHeist.open && state.thief && state.thief.hacker && cercaDeLaPuertaBanco();
+  const holding = !!(keys['KeyE'] || touch.useHeld);
+  if (puede && holding) {
+    bankHeist.hack += dt;
+    if (bankHeist.hack >= 10) abrirBoveda();
+  } else if (!bankHeist.open && bankHeist.hack > 0) bankHeist.hack = Math.max(0, bankHeist.hack - dt * 2.5);
+}
+function restaurarRoboBanco() {
+  if (!bankHeist.ready) return;
+  if (state.bankVaultOpen) {
+    if (!bankHeist.open) abrirBovedaSilencio();
+  } else if (bankHeist.open || (bankHeist.door && bankHeist.doorHome && Math.abs(bankHeist.door.position.z - bankHeist.doorHome.z) > 0.2)) {
+    bankHeist.open = false;
+    bankHeist.hack = 0;
+    if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.copy(bankHeist.doorHome);
+    if (!bankHeist.obs && bankHeist.doorHome) bankHeist.obs = addObstacle(bankHeist.doorHome.x, bankHeist.doorHome.z, 0.7, 3.1, 3.6, 'banco');
+  }
+  for (const d of bankHeist.drawers) {
+    d.open = false;
+    d.mesh.material.color.setHex(0x64748b);
+    d.mesh.position.copy(d.home);
+    if (d.tirador) d.tirador.position.set(d.home.x, d.home.y, d.home.z + 0.24);
+  }
+  const looted = new Set(state.bankLooted || []);
+  for (const d of bankHeist.drawers) {
+    if (!looted.has(d.i)) continue;
+    d.open = true;
+    d.mesh.material.color.setHex(0x1c1917);
+    d.mesh.position.z = d.home.z + 0.22;
+    if (d.tirador) d.tirador.position.z = d.home.z + 0.46;
+  }
+  applyThiefLook();
+}
+function abrirBovedaSilencio() {
+  bankHeist.open = true;
+  bankHeist.hack = 10;
+  state.bankVaultOpen = true;
+  if (bankHeist.obs) {
+    const i = obstacles.indexOf(bankHeist.obs);
+    if (i >= 0) obstacles.splice(i, 1);
+    bankHeist.obs = null;
+  }
+  if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.z = bankHeist.doorHome.z + 2.3;
+}
+function resetRoboBanco() {
+  state.thief = { naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false };
+  state.bankVaultOpen = false;
+  state.bankLooted = [];
+  state.bankChase = false;
+  state.bankPoster = null;
+  state.jailPorBanco = false;
+  quitarCarteles();
+  if (!bankHeist.ready) { applyThiefLook(); return; }
+  bankHeist.open = false;
+  bankHeist.hack = 0;
+  if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.copy(bankHeist.doorHome);
+  if (!bankHeist.obs && bankHeist.doorHome) bankHeist.obs = addObstacle(bankHeist.doorHome.x, bankHeist.doorHome.z, 0.7, 3.1, 3.6, 'banco');
+  for (const d of bankHeist.drawers) {
+    d.open = false;
+    d.mesh.material.color.setHex(0x64748b);
+    d.mesh.position.copy(d.home);
+    if (d.tirador) d.tirador.position.set(d.home.x, d.home.y, d.home.z + 0.24);
+  }
+  for (const p of bankStaff) {
+    p.userData.dead = false;
+    p.rotation.x = 0;
+    p.position.y = 0;
+    if (p.userData.home) p.position.copy(p.userData.home);
+    if (p.userData.wasSeated) {
+      const l = p.userData.limbs;
+      if (l) {
+        l.legL.rotation.x = -Math.PI / 2; l.legR.rotation.x = -Math.PI / 2;
+        l.armL.rotation.x = -.5; l.armR.rotation.x = -.5;
+      }
+      p.userData.seated = true;
+    }
+  }
+  applyThiefLook();
+}
+function comprarTrajeLadron(item) {
+  if (!state.thief) state.thief = { naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false };
+  const id = item.thief;
+  if (state.thief[id]) {
+    if (id === 'hacker') { toast('💻 Ya tienes el sistema hacker'); return; }
+    const puesto = id === 'naranjo' ? 'wearNaranjo' : 'wearGorro';
+    state.thief[puesto] = !state.thief[puesto];
+    applyThiefLook();
+    toast(state.thief[puesto] ? 'Te pusiste ' + item.name : 'Te sacaste ' + item.name);
+    saveGame(); return;
+  }
+  if (!state.creative && state.money < item.price) { toast('💸 Te falta plata'); return; }
+  if (!state.creative) state.money -= item.price;
+  state.thief[id] = true;
+  if (id === 'naranjo') state.thief.wearNaranjo = true;
+  if (id === 'gorro') state.thief.wearGorro = true;
+  applyThiefLook();
+  toast(id === 'hacker' ? '💻 Sistema hacker listo · en el banco mantén E en la puerta de la bóveda' : 'Te pusiste ' + item.name);
+  saveGame();
+}
+function applyThiefLook() {
+  if (!playerAvatar) return;
+  const wearN = !!(state.thief && state.thief.wearNaranjo);
+  const wearG = !!(state.thief && state.thief.wearGorro);
+  const naranjo = 0xf97316, verde = 0x3f6212, pantalon = 0x1f2937;
+  if (!playerAvatar.userData.torsoLadron) {
+    playerAvatar.userData.torsoLadron = playerAvatar.children.find(o => o.isMesh && o.geometry && o.geometry.type === 'CapsuleGeometry') || null;
+  }
+  const pintarCapsulas = (grupo, hex) => {
+    if (!grupo) return;
+    grupo.traverse(o => { if (o.isMesh && o.geometry && o.geometry.type === 'CapsuleGeometry' && o.material && o.material.color) o.material.color.setHex(hex); });
+  };
+  if (playerAvatar.userData.torsoLadron && playerAvatar.userData.torsoLadron.material) playerAvatar.userData.torsoLadron.material.color.setHex(wearN ? naranjo : verde);
+  const limbs = playerAvatar.userData.limbs || {};
+  pintarCapsulas(limbs.armL, wearN ? naranjo : verde);
+  pintarCapsulas(limbs.armR, wearN ? naranjo : verde);
+  pintarCapsulas(limbs.legL, wearN ? naranjo : pantalon);
+  pintarCapsulas(limbs.legR, wearN ? naranjo : pantalon);
+  if (playerAvatar.userData.mcArmor) for (const m of playerAvatar.userData.mcArmor) m.visible = !wearN;
+  if (!playerAvatar.userData.rayasNaranjas) {
+    const g = new THREE.Group();
+    const blanco = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.7 });
+    for (let i = 0; i < 3; i++) {
+      const r = new THREE.Mesh(smoothBox(0.5, 0.06, 0.42), blanco);
+      r.position.set(0, 1.12 + i * 0.18, 0.02); g.add(r);
+    }
+    playerAvatar.add(g);
+    playerAvatar.userData.rayasNaranjas = g;
+  }
+  playerAvatar.userData.rayasNaranjas.visible = wearN;
+  if (!playerAvatar.userData.gorroHoyos) {
+    const g = new THREE.Group();
+    const negro = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 10), negro);
+    cap.position.set(0, 1.98, 0.01); g.add(cap);
+    const mask = new THREE.Mesh(new THREE.SphereGeometry(0.31, 12, 10), negro);
+    mask.scale.set(1.02, 0.9, 0.78); mask.position.set(0, 1.86, 0.05); g.add(mask);
+    for (const sx of [-0.09, 0.09]) {
+      const hueco = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.12, 8), new THREE.MeshStandardMaterial({ color: 0xe0ac69 }));
+      hueco.rotation.x = Math.PI / 2; hueco.position.set(sx, 1.93, 0.28); g.add(hueco);
+      const pupila = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), new THREE.MeshStandardMaterial({ color: 0x111827 }));
+      pupila.position.set(sx, 1.93, 0.34); g.add(pupila);
+    }
+    playerAvatar.add(g);
+    playerAvatar.userData.gorroHoyos = g;
+  }
+  playerAvatar.userData.gorroHoyos.visible = wearG;
+  const manga = viewmodel.children[0];
+  if (manga && manga.material && manga.material.color) {
+    const tier = armorTierFor(state.armorFactor);
+    manga.material.color.setHex(wearN ? naranjo : (tier ? ARMOR_TIERS[tier].color : verde));
+  }
+  if (viewmodel.userData.bracer) viewmodel.userData.bracer.visible = !wearN && !!armorTierFor(state.armorFactor);
+}
 
 // ===================================================================
 //  MENÚ EN RUEDA (Tab) — todas las órdenes sueltas en un solo botón
@@ -6294,6 +6703,7 @@ function spawnCars() {
   });
 }
 spawnCars();
+ponerCartelesEnTrafico();
 
 // ===== SEMÁFOROS en los nueve cruces del centro =====
 const trafficLights = [];
@@ -15358,6 +15768,8 @@ const state = {
   foundSecrets: {}, secretsFound: 0, stamina: 100, blocking: false, dodgeCd: 0, invulnerable: 0,
   hasPhone: false, skiPass: false, skiGear: null, skiGearWorn: false, skiing: false, skiLiftRide: null,
   story: {}, storyRewarded: {}, gadgets: {}, mission: null,
+  thief: { naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false },
+  bankVaultOpen: false, bankLooted: [], bankChase: false, jailPorBanco: false,
 };
 let lastHp = 100;   // para detectar cuándo te hacen daño
 
@@ -15855,7 +16267,7 @@ function algunRecuadroAbierto() {
   return TYPING_BOXES.some(id => { const el = ui(id); return el && el.style.display === 'flex'; });
 }
 // Estado de los controles táctiles (celular). moveX/moveY: joystick analógico (-1..1)
-const touch = { moveX: 0, moveY: 0, run: false, crouch: false, jump: false, jumpHeld: false, heliDown: false , hitHeld: false, hitRepeat: 0 };
+const touch = { moveX: 0, moveY: 0, run: false, crouch: false, jump: false, jumpHeld: false, heliDown: false , hitHeld: false, hitRepeat: 0, useHeld: false };
 // La tecla E hace TODO lo que tengas delante. Estas son las últimas de la lista:
 // solo se activan cuando no hay nada más cerca con qué interactuar.
 function tryVendorHere() {   // hablarle al vendedor sin acordarse de la Y
@@ -15881,7 +16293,7 @@ function tryInteract() {
   if (tryJobInteract()) return;   // recados: calmar al perro / abrir el cajón
   if (tryDoor()) return;          // abrir / cerrar la puerta de tu casa
   if (tryBuyPlot()) return;       // comprar el terreno del condominio
-  if (!tryRefuelCar() && !trySkiResort() && !tryWorldSites() && !tryArcadeRewards() && !tryArcadeZone() && !tryHarvestMiner() && !toggleBoat() && !tryIslandTempleChest() && !tryFocusedFurniture() && !tryLeaderboard() && !tryAirport() && !countryHello() && !tryParkFood() && !tryParkRide() && !tryRepairBuilding() && !tryHarvest() && !tryDiscoverSecret() && !tryWorldEvent() && !tryMount() && !toggleCar() && !tryShelter() && !tryRuins() && !tryCastle() && !tryColiseum() && !tryRocket() && !tryBank() && !trySitGrada() && !trySportInteract() && !tryBusiness() && !tryFamilyOrCitizenInteract() && !tryVendorHere() && !tryHelperHere()) { if (!tryCollectGolden() && !tryRob() && !sellHouse()) tryGardenHere(); }
+  if (!tryRefuelCar() && !trySkiResort() && !tryWorldSites() && !tryArcadeRewards() && !tryArcadeZone() && !tryHarvestMiner() && !toggleBoat() && !tryIslandTempleChest() && !tryFocusedFurniture() && !tryLeaderboard() && !tryAirport() && !countryHello() && !tryParkFood() && !tryParkRide() && !tryRepairBuilding() && !tryHarvest() && !tryDiscoverSecret() && !tryWorldEvent() && !tryMount() && !toggleCar() && !tryShelter() && !tryRuins() && !tryCastle() && !tryColiseum() && !tryRocket() && !tryBankHeist() && !tryBank() && !trySitGrada() && !trySportInteract() && !tryBusiness() && !tryFamilyOrCitizenInteract() && !tryVendorHere() && !tryHelperHere()) { if (!tryCollectGolden() && !tryRob() && !sellHouse()) tryGardenHere(); }
 }
 addEventListener('keydown', e => {
   if (e.code === 'KeyI' && ui('help').style.display === 'flex') { toggleHelp(false); return; }
@@ -16184,7 +16596,11 @@ function eatFood() {
   if ((state.inv.food || 0) <= 0) { toast('No tienes comida (cómprala en el SÚPER)'); return; }
   if (state.hunger >= 100) { toast('No tienes hambre todavía'); return; }
   state.inv.food--; state.hunger = Math.min(100, state.hunger + 45); state.hp = Math.min(100, state.hp + 8);
-  toast('🍖 Comiste (+45 hambre)'); beep(440, 0.08, 0.04);
+  if (condena && condena.hambreMuerte && state.hunger > 0) {
+    condena.hambreMuerte = false;
+    toast('🍖 Comiste. Ya puedes cumplir lo que te quede de condena.');
+  } else toast('🍖 Comiste (+45 hambre)');
+  beep(440, 0.08, 0.04);
 }
 // OJO: soltar una tecla SIEMPRE la limpia, aunque en ese momento haya un menú abierto
 // (antes, si abrías el vendedor caminando con W, el keyup se ignoraba y el personaje
@@ -16842,6 +17258,7 @@ function setWatchMode(on) { watchForced = on; try { localStorage.setItem('tim_wa
       if (act === 'closeMore') { closeMorePanel(); return; }   // ✖️ cerrar el panel
       if (act === 'jump') touch.jumpHeld = true;   // mantener presionado = jetpack (en Platus)
       if (act === 'hit') { touch.hitHeld = true; touch.hitRepeat = .35; }   // mantener = seguir disparando / pegando
+      if (act === 'interact') touch.useHeld = true;
       if (act === 'rotate') { rotHold = 1; el.dataset.downAt = String(performance.now()); state.buildMode = true; return; }   // mantener = giro libre
       if ((act === 'hit' || act === 'interact') && bowEquipped() && (act !== 'interact' || !bowContextBlocksDraw())) {
         startBowDraw(act === 'hit' ? 'touch' : 'key');
@@ -16853,6 +17270,7 @@ function setWatchMode(on) { watchForced = on; try { localStorage.setItem('tim_wa
     }, { passive: false });
     const release = e => {
       touch.hitHeld = false;
+      touch.useHeld = false;
       const el = e.target.closest && e.target.closest('.tbtn'); if (!el) return;
       if (el.dataset.act === 'jump') touch.jumpHeld = false;
       if (el.dataset.act === 'rotate') { if (performance.now() - (+el.dataset.downAt || 0) < 220) rotateBuild(1); rotHold = 0; }   // toque corto = 15°
@@ -16862,7 +17280,7 @@ function setWatchMode(on) { watchForced = on; try { localStorage.setItem('tim_wa
     };
     container.addEventListener('pointerup', release);
     container.addEventListener('pointercancel', release);
-    container.addEventListener('pointerleave', () => { touch.hitHeld = false; touch.jumpHeld = false; rotHold = 0; touch.heliDown = false; const b = ui('heliDownBtn'); if (b) b.classList.remove('on'); });
+    container.addEventListener('pointerleave', () => { touch.hitHeld = false; touch.useHeld = false; touch.jumpHeld = false; rotHold = 0; touch.heliDown = false; const b = ui('heliDownBtn'); if (b) b.classList.remove('on'); });
   }
   bindButtons(ui('touchBtns'));
   bindButtons(ui('moveBtns'));
@@ -16957,6 +17375,7 @@ function startGame() {
   houseTier = 0;
   newMissions();
   state.story = {}; state.storyRewarded = {}; state.gadgets = {}; state.alleyUnlockedToast = false;
+  resetRoboBanco();
   alley.following = false; alley.wp = 0; alley.returnTo = null; alley.followIn = 0;
   showAlleyWorld(false);
   setAlleyDoorOpen(false);
@@ -17940,6 +18359,7 @@ function saveGame() {
       },
       missions: state.missions || null,   // misiones del día con su progreso
       story: state.story || {}, storyRewarded: state.storyRewarded || {}, gadgets: state.gadgets || {}, alleyOpen: !!alley.open, mission: state.mission || null, alleyReturn: alley.returnTo || null, alleyUnlockedToast: !!state.alleyUnlockedToast,
+      thief: state.thief || null, bankVaultOpen: !!state.bankVaultOpen, bankLooted: state.bankLooted || [],
       bestiary: state.bestiary || {},     // colección de monstruos
       album: state.album || {}, albumDone: !!state.albumDone,   // álbum de criaturas alien
       baseLevel: state.baseLevel || 0, baseTurrets: state.baseTurrets || 0, baseGenerator: !!state.baseGenerator,   // base espacial propia
@@ -18865,6 +19285,11 @@ function loadGame() {
   applyDadArmor(state.dadArmor < 1);             // repone la armadura del papá si la compraste
   if (d.missions && d.missions.length) { state.missions = d.missions; renderMissions(); } else newMissions();
   state.story = d.story || {}; state.storyRewarded = d.storyRewarded || {}; state.gadgets = d.gadgets || {};
+  state.thief = Object.assign({ naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false }, d.thief || {});
+  state.bankVaultOpen = !!d.bankVaultOpen;
+  state.bankLooted = Array.isArray(d.bankLooted) ? d.bankLooted.slice() : [];
+  state.bankChase = false;
+  restaurarRoboBanco();
   state.alleyUnlockedToast = !!d.alleyUnlockedToast || (state.totalEarned || 0) >= ALLEY.unlock;
   alley.returnTo = d.alleyReturn || null;
   alley.followIn = 0; alley.following = false;
@@ -18944,6 +19369,7 @@ function resetAll() {
   resetWeather();
   removeRocket();
   state.story = {}; state.storyRewarded = {}; state.gadgets = {}; state.alleyUnlockedToast = false;
+  resetRoboBanco();
   alley.following = false; alley.wp = 0; alley.returnTo = null; alley.followIn = 0;
   showAlleyWorld(false);
   setAlleyDoorOpen(false);
@@ -20229,6 +20655,7 @@ function paintHouse(color, label) {
   toast('🎨 Pintaste tu casa (' + n + ' piezas) de ' + label.replace('Pintura ', '')); beep(520, 0.1, 0.04);
 }
 function buyItem(item) {
+  if (item && item.thief) { comprarTrajeLadron(item); return; }
   const fromAlley = !!(item && (item.gadget || (item.key && String(item.key).indexOf('bm_') === 0)));
   if (item.ammo) {   // caja de balas del mercado negro
     if (!state.creative && state.money < item.price) { toast('💸 Te falta plata'); return; }
@@ -21339,8 +21766,8 @@ function gunRaycastEnemy(from, dir, range) {
 function gunRaycastPerson(from, dir, range) {
   let best = null, bestT = range, bestHead = false, bestPoint = null;
   const rel = new THREE.Vector3();
-  for (const person of npcs.concat(victims)) {
-    if (!person.visible) continue;
+  for (const person of npcs.concat(victims, bankStaff)) {
+    if (!person.visible || person.userData.dead) continue;
     rel.copy(person.position).sub(from);
     const t = rel.dot(dir);
     if (t < 0 || t > bestT) continue;
@@ -21366,6 +21793,10 @@ function fireGun(spec) {
   const to = persona ? persona.point.clone() : hit ? hit.point.clone() : from.clone().addScaledVector(dir, spec.range);
   spawnTracer(from, to);
   if (persona) {
+    if (persona.person.userData.bankStaff) {
+      matarEmpleadoBanco(persona.person);
+      return true;
+    }
     const push = new THREE.Vector3().subVectors(persona.person.position, player.position).setY(0).normalize().multiplyScalar(persona.head ? 2.2 : 1.3);
     persona.person.position.add(push);
     voxelImpact(persona.point.clone(), 0xb91c1c, 8);
@@ -22079,6 +22510,7 @@ function meterEnCelda() {
 }
 function salirDeLaCelda() {
   const c = condena && condena.celda;
+  const banco = !!(condena && condena.banco);
   if (c && c.preso) c.preso.userData.jailQuieto = false;
   condena = null;
   soltarManosLavado();
@@ -22087,7 +22519,8 @@ function salirDeLaCelda() {
   posarDePie(playerAvatar);
   player.position.set(JAIL_GATE.x, PLAYER_EYE, JAIL_GATE.z + 6);
   vy = 0; grounded = true;
-  toast('🚪 Cumpliste el minuto. Sales de la celda.');
+  state.wanted = 0; state.wantedLevel = 0; state.bankChase = false; clearPolice();
+  toast(banco ? '🚪 Cumpliste los nueve minutos. La policía ya no te persigue.' : '🚪 Cumpliste el minuto. Sales de la celda.');
 }
 function entrarACelda(n) {
   const celda = celdaDeCastigo(n);
@@ -22109,20 +22542,38 @@ function entrarACelda(n) {
     celda.preso.position.set(celda.maxX - .05, 0, celda.maxZ - .15);
     celda.preso.userData.jailQuieto = true;
   }
-  condena = { celda, left: 60, pose: null, lavando: false, camLavado: false };
+  const segundos = state.jailPorBanco ? 540 : 60;
+  state.jailPorBanco = false;
+  condena = { celda, left: segundos, pose: null, lavando: false, camLavado: false, hambreMuerte: false, banco: segundos >= 540 };
   player.position.set(celda.ex, PLAYER_EYE, (celda.minZ + celda.maxZ) / 2);
   yaw = Math.PI; pitch = 0; vy = 0; grounded = true;
-  toast('🚔 Celda ' + celda.n + ' · te quedas un minuto. E en el lavamanos o en la cama.');
+  toast(segundos >= 540
+    ? '🚔 Celda ' + celda.n + ' · nueve minutos. Si te mueres de hambre no puedes salir. Al terminar, la policía no te sigue.'
+    : '🚔 Celda ' + celda.n + ' · te quedas un minuto. E en el lavamanos o en la cama.');
   return true;
 }
 function frenarCondena(dt) {
   if (!condena) return false;
   condena.left -= dt;
+  if (condena.left < 0) condena.left = 0;
   creativeFlying = false;
   state.jetOn = false;
   state.skiing = false;
   state.driving = false;
-  if (condena.left <= 0) { salirDeLaCelda(); return true; }
+  if (condena.left <= 0) {
+    if (condena.hambreMuerte || state.hunger <= 0) {
+      condena.hambreMuerte = true;
+      condena.avisoHambre = (condena.avisoHambre || 0) - dt;
+      if (condena.avisoHambre <= 0) {
+        condena.avisoHambre = 8;
+        toast('😵 Te moriste de hambre. No puedes salir de la cárcel hasta que comas.');
+      }
+      if (condena.pose || condena.lavando) colocarCuerpoCondena();
+      return !!(condena.pose || condena.lavando);
+    }
+    salirDeLaCelda();
+    return true;
+  }
   if (condena.pose || condena.lavando) {
     colocarCuerpoCondena();
     return true;
@@ -22236,11 +22687,13 @@ function encuadrarCondena(dt) {
 function promptCondena() {
   const c = condena.celda;
   const seg = Math.max(0, Math.ceil(condena.left));
-  if (condena.lavando || condena.camLavado) return { key: 'F5', touch: '💧', text: 'Te lavas la cara · las manos se refriegan y cae agua · celda ' + c.n };
-  if (condena.pose === 'acostado') return { key: 'E', touch: '🛏️', text: 'Levantarte de la cama · celda ' + c.n + ' · ' + seg + ' s' };
+  const reloj = condena.banco ? (Math.floor(seg / 60) + ':' + String(seg % 60).padStart(2, '0')) : (seg + ' s');
+  if (condena.hambreMuerte) return { key: 'Q', touch: '🍖', text: 'Te moriste de hambre · come para salir de la celda ' + c.n };
+  if (condena.lavando || condena.camLavado) return { key: 'F5', touch: '💧', text: 'Te lavas la cara · las manos se refriegan y cae agua · celda ' + c.n + ' · ' + reloj };
+  if (condena.pose === 'acostado') return { key: 'E', touch: '🛏️', text: 'Levantarte de la cama · celda ' + c.n + ' · ' + reloj };
   if (Math.hypot(player.position.x - c.lavabo.x, player.position.z - c.lavabo.z) < 1.7) return { key: 'E · F5', touch: '💧', text: 'Lavarte la cara en el lavamanos · F5 pone esa cámara' };
   if (Math.hypot(player.position.x - c.cama.x, player.position.z - c.cama.z) < 1.8) return { key: 'E', touch: '🛏️', text: 'Acostarte en la cama · celda ' + c.n };
-  return { key: '🔒', touch: '🔒', text: 'Celda ' + c.n + ' · te quedan ' + seg + ' s' };
+  return { key: '🔒', touch: '🔒', text: 'Celda ' + c.n + ' · te quedan ' + reloj };
 }
 function tryCelda() {
   if (!condena) return false;
@@ -22284,7 +22737,10 @@ function goToJail() {
   if (state.phase === 'JAIL') return;
   if (state.inFlight) abortFlight();
   state.driving = false; removeMount(); leaveParkRide(true); standUp(true);
-  state.wanted = 0; state.wantedLevel = 0; clearPolice();   // sales de la cárcel sin búsqueda pendiente
+  state.wanted = 0; state.wantedLevel = 0; clearPolice();
+  state.bankChase = false;
+  quitarCarteles();
+  // sales de la cárcel sin búsqueda pendiente
   // En los planetas NO hay cárcel (ni policía): te rescata el cohete y despiertas ahí
   const alien = state.planet === 'platus';
   if (!alien) { entrarACelda(); return; }
@@ -22704,6 +23160,7 @@ function loop() {
     resolverMeteorito(dt);
     if (state.cinematic) updateCinematic(dt);
     updatePolice(dt);                      // policía persigue si estás buscado
+    updateBankHack(dt);
     if (onPlatus) {
       updateCold(dt);                        // noches heladas de Platus (fogatas)
       updateMeteorShower(dt);                // lluvia de meteoritos de noche en Platus (botín)
@@ -22780,12 +23237,28 @@ function updateHunger(dt) {
   const drain = placed.some(o => o.key === 'heladera') ? 0.119 : 0.238;   // con heladera el hambre baja a la mitad
   state.hunger = Math.max(0, state.hunger - drain * dt);   // 100/0.238 ≈ 420s = 7 minutos exactos
   if (state.hunger <= 0) {
+    if (condena) {
+      state.hp = Math.max(1, state.hp - 2 * dt);
+      if (state.hp <= 1) {
+        state.hp = 1;
+        condena.hambreMuerte = true;
+      }
+      return;
+    }
     state.hp -= 2 * dt;
     if (state.hp <= 0) faintFromHunger();
   }
 }
 // Morir de hambre: te desmayas y revives en casa (no es la cárcel; es por no comer)
 function faintFromHunger() {
+  if (condena) {
+    condena.hambreMuerte = true;
+    state.hp = 1;
+    state.hunger = 0;
+    toast('😵 Te moriste de hambre. No puedes salir de la cárcel hasta que comas.');
+    beep(90, 0.25, 0.06);
+    return;
+  }
   state.hp = 60; state.hunger = 45; lastHp = 60; state.driving = false; state.riding = false;
   if (state.inFlight) abortFlight();
   state.wanted = 0; state.wantedLevel = 0; clearPolice();   // al desmayarte se pierde la búsqueda
@@ -24572,6 +25045,7 @@ function updateContextPrompt() {
       else if (owned) action = { key: 'E', touch: '🤝', text: owned.helicopter ? 'Pilotar helicóptero' : 'Conducir vehículo' };
       else if (nearestStreetCar(6)) action = { key: 'E', touch: '🤝', text: 'Robar vehículo · la policía te perseguirá' };
       else if (nearKeeper()) action = { key: 'E', touch: '🛒', text: 'Hablar con el vendedor y comprar' };
+      else if (bankHeistPrompt()) action = bankHeistPrompt();
       else if (bankDeskNear() === 'cajera') action = { key: 'E', touch: '🏦', text: 'Hablar con la cajera · depósitos, retiros y préstamos' };
       else if (bankDeskNear() === 'cajero') action = { key: 'E', touch: '🏧', text: 'Usar el cajero automático' };
       else if (state.planet === 'tierra' && !state.country && dist2D(player.position, BANK_POS) < 14) action = { key: '🚪', touch: '🏦', text: 'Entra al banco y habla con la cajera del mesón' };
@@ -24606,7 +25080,7 @@ function updateContextPrompt() {
   }
   if (!action && currentGunSpec()) action = { key: 'E', touch: '🔭', text: state.aiming ? 'Bajar la mira · CLIC dispara' : 'E pone la MIRA · CLIC dispara' };
   if (caidaChoque) action = null;
-  ctxWantsE = !!(action && String(action.key).includes('E') && !currentGunSpec());   // hay algo del mundo que usa la E
+  ctxWantsE = !!(action && String(action.key).includes('E') && (!currentGunSpec() || action.force));   // hay algo del mundo que usa la E; el hacker del banco también, aunque lleves pistola
   box.classList.toggle('visible', !!action);
   if (action) { key.textContent = document.body.classList.contains('touch') ? action.touch : action.key; txt.textContent = action.text; }
 }
@@ -24729,6 +25203,9 @@ function renderHUD() {
   if (state.gadgets && state.gadgets.gafas) gear.push('🥽 noche');
   if (state.gadgets && state.gadgets.gancho) gear.push('🪝 salto');
   if (state.gadgets && state.gadgets.radio) gear.push('📻 radio');
+  if (state.thief && state.thief.wearNaranjo) gear.push('🟠 traje naranjo');
+  if (state.thief && state.thief.wearGorro) gear.push('🎭 gorro');
+  if (state.bankChase && state.wanted > 0) gear.push(state.bankPoster === 'camara' ? '📷 cartel: cámara desde arriba' : '📰 cartel con tu cara');
   if (state.secretsFound > 0) gear.push('🗺️ secretos ' + state.secretsFound + '/' + SECRET_DEFS.length);
   if (state.business) gear.push(BUSINESS_TYPES[state.business.type].icon + ' negocio nv.' + state.business.level + ' · 📦' + state.business.stock);
   const medalCount = Object.keys(state.medals || {}).length; if (medalCount) gear.push('🏅 ' + medalCount + '/3 deportes');
