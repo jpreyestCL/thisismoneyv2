@@ -1187,13 +1187,11 @@
   </div>
 </div>
 <div id="win" class="screen hidden" style="background:linear-gradient(rgba(6,40,20,.88),rgba(2,6,23,.95));">
-  <h1 style="color:#4ade80;">🌟 ¡VERDANIA!</h1>
-  <p style="max-width:460px;">Después de tanto trabajar, sobrevivir y viajar por las galaxias, tu familia encontró
-     un planeta verde y en paz. <b>¡GANASTE!</b></p>
+  <h1 style="color:#4ade80;">🪐 El viaje sigue</h1>
+  <p style="max-width:460px;">Llegar a Platus no termina la partida. El cohete sigue ahí: puedes seguir jugando.</p>
   <div id="winStats" style="background:rgba(0,0,0,.4); border-radius:12px; padding:12px 22px; font-size:15px; line-height:1.9; margin:8px 0 14px;"></div>
   <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
-    <button class="btn" id="winContinue" style="background:linear-gradient(90deg,#38bdf8,#0284c7);">SEGUIR JUGANDO 🌍</button>
-    <button class="btn" id="winNG">⭐ NUEVA PARTIDA+ ($10.000)</button>
+    <button class="btn" id="winContinue" style="background:linear-gradient(90deg,#38bdf8,#0284c7);">SEGUIR JUGANDO</button>
   </div>
   <p style="font-size:12px; opacity:.6; margin-top:14px;">Hecho con ❤️ — This is Money</p>
 </div>
@@ -19034,7 +19032,7 @@ function takePhoto() {
 }
 
 // ===================================================================
-//  HISTORIA: intro, diálogos de la familia y final en VERDANIA
+//  HISTORIA: intro y diálogos de la familia. Llegar a Platus no es el final.
 // ===================================================================
 const INTRO_CARDS = [
   { e: '🏚️', t: 'Lo perdieron todo', x: 'Vives con tu papá. Un mal negocio les quitó la casa, los ahorros… todo. Solo les quedan $1.000 y las ganas de salir adelante.' },
@@ -19081,32 +19079,14 @@ function updateDialogues(dt) {
   say('👨 Papá', pool[Math.floor(Math.random() * pool.length)]);
 }
 const VENDOR_LINES = ['¡Bienvenido, casero! Lo mejor de la galaxia.', '¡Ofertas! Bueno… los mismos precios de siempre.', 'Un gusto verte de nuevo, campeón.', 'Dicen que un meteorito se acerca… yo vendo cohetes, por si acaso.'];
-// FINAL: Verdania — se llega lanzando el cohete desde Platus con $10M ganados (o 4+ viajes)
-function verdaniaReady() { return state.totalEarned >= 10000000 || (state.trips || 0) >= 4; }
-function showVictory() {
-  state.phase = 'WIN'; state.running = false;
-  ui('hud').style.display = 'none'; ui('fade').style.opacity = '0';
-  const kills = Object.values(state.bestiary || {}).reduce((a, b) => a + b, 0);
-  ui('winStats').innerHTML =
-    '💰 Total ganado: <b>$' + state.totalEarned + '</b><br>' +
-    '⭐ Etapa alcanzada: <b>' + state.stage + '</b> · 🌙 Noches sobrevividas: <b>' + state.night + '</b><br>' +
-    '⚔️ Monstruos derrotados: <b>' + kills + '</b> · 🚀 Viajes espaciales: <b>' + (state.trips || 0) + '</b>' +
-    (state.ngplus ? '<br>⭐ (Partida+)' : '');
-  ui('win').classList.remove('hidden');
-  tone(523, .18, .06, 'triangle'); setTimeout(() => tone(659, .18, .06, 'triangle'), 180); setTimeout(() => tone(784, .18, .06, 'triangle'), 360); setTimeout(() => tone(1046, .3, .07, 'triangle'), 540);
-  updateBest(); saveGame();
+// No hay planeta final ni partida nueva con $10.000. Llegar a Platus deja la partida abierta.
+function cerrarPantallaFinal() {
+  ui('win').classList.add('hidden'); ui('hud').style.display = '';
+  state.nextDest = null;
+  if (state.phase === 'WIN') state.phase = 'DAY';
+  state.running = true;
 }
-ui('winContinue').onclick = () => {
-  ui('win').classList.add('hidden'); ui('hud').style.display = '';
-  state.running = true; state.trips = (state.trips || 0) + 1; goToPlanet();   // seguir explorando: otro planeta nuevo
-  say('👨 Papá', 'Verdania fue hermoso… pero el universo es enorme. ¡Sigamos explorando, hijo!');
-};
-ui('winNG').onclick = () => {
-  ui('win').classList.add('hidden'); ui('hud').style.display = '';
-  startGame();
-  state.ngplus = true; state.money = 10000;
-  toast('⭐ NUEVA PARTIDA+: empiezas con $10.000. ¡A romper tu récord!');
-};
+ui('winContinue').onclick = () => cerrarPantallaFinal();
 
 // ===================================================================
 //  DESAFÍOS DE MATES (10-11 años): resuélvelos y gana plata (5 al día)
@@ -21276,8 +21256,7 @@ function tryLaunchRocket() {
   closeRocket();   // cerrar los cajones si se despegó desde el panel
   state.usedRocket = true;
   state.trips = (state.trips || 0) + 1;
-  state.nextDest = (state.planet === 'platus' && verdaniaReady()) ? 'verdania' : null;   // ¿el viaje final?
-  if (state.nextDest === 'verdania') toast('🌟 El cohete detectó un planeta VERDE en el radar… ¡rumbo a VERDANIA!');
+  state.nextDest = null;   // ningún despegue termina la partida
   startEscapeCinematic();
 }
 function debugEscapeCinematic() {
@@ -21411,13 +21390,13 @@ function updateCinematic(dt) {
     scene.background.copy(c.background); scene.fog.near=c.fogNear; scene.fog.far=c.fogFar; scene.fog.color.copy(c.fogColor);
     state.cinematic = false;
     document.body.classList.remove('cine'); ui('cineCaption').textContent='';
-    if (state.nextDest === 'verdania') { state.nextDest = null; showVictory(); }   // ¡FINAL DEL JUEGO!
-    else goToPlanet();   // Tierra→planeta, o planeta→SIGUIENTE planeta (nunca de vuelta a la Tierra)
+    state.nextDest = null;
+    goToPlanet();   // Tierra→Platus, o de un planeta al siguiente. La partida no se acaba.
     const f = ui('fade'); f.style.transition = 'opacity .9s'; f.style.opacity = '0';
   }
 }
-// Planetas alienígenas (todos hostiles: árboles muertos, carbón, frío). El cohete SOLO va
-// hacia adelante, a un planeta NUEVO cada vez — nunca de vuelta a la Tierra.
+// Planetas alienígenas (todos hostiles: árboles muertos, carbón, frío). El cohete sigue
+// viajando para siempre: de la Tierra a Platus y después al siguiente, sin pantalla de victoria.
 // Cada planeta es DISTINTO: color de suelo/cielo, lunas, árboles, peligro nocturno, gravedad y niebla.
 // hazard: 'cold' (frío, fogata) · 'toxic' (aire venenoso, fogata) · 'dark' (niebla espesa) · 'heat' (tormentas) · 'lava' (meteoritos también de día)
 const PLANETS = [
@@ -25384,7 +25363,7 @@ function renderHUD() {
   if (state.creative) gear.unshift('🎨 CREATIVO');
   if (playerAirborne()) gear.unshift('🪽 en el aire · 3 bloques · los de tierra no te pegan · policía no te atrapa');
   if (state.ngplus) gear.unshift('⭐ Partida+');
-  if (state.planet === 'platus') gear.unshift('🧑‍🚀 · ⚫ carbón ' + (state.inv.carbon || 0) + (verdaniaReady() ? ' · 🌟 ¡VERDANIA te espera! (cohete)' : ''));
+  if (state.planet === 'platus') gear.unshift('🧑‍🚀 · ⚫ carbón ' + (state.inv.carbon || 0) + (state.usedRocket ? '/10 para otro viaje' : ''));
   if (state.planet === 'platus' && state.contract) gear.push('📋 ' + state.contract.have + '/' + state.contract.need + (state.contract.done ? ' ✅ cobra (Y)' : ''));
   if (state.planet === 'platus' && !state.inRuins && !state.inCastle && hasShovelNow()) { const nb = nearestBuried(); if (nb) gear.push('🔎 ' + (nb.d < 6 ? '🔥 ¡CAVA AQUÍ!' : nb.d < 18 ? '🌡️ caliente' : nb.d < 40 ? '😐 tibio' : '❄️ frío')); }
   if (state.planet === 'platus') { const af = ALIEN_ALBUM.filter(k => (state.album || {})[k]).length; gear.push('🧬 ' + af + '/' + ALIEN_ALBUM.length); }
