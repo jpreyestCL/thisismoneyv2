@@ -828,6 +828,7 @@
         <button class="btn secondary" id="cloudLoginBtn">🌐 CONTINUAR CON CLAVE</button>
         <button class="btn" id="startBtn">NUEVA PARTIDA</button>
         <button class="btn secondary" id="creativeBtn">MODO CREATIVO</button>
+        <button class="btn secondary" id="thiefModeBtn">MODO LADRÓN: NO</button>
         <button class="btn secondary" id="startGuideBtn">VER GUÍA</button>
         <button class="btn secondary" id="startRankingBtn">🌎 RANKING MUNDIAL</button>
         <button class="btn secondary" id="friendsBtn">🌐 JUGAR CON AMIGOS</button>
@@ -2728,6 +2729,9 @@ const STORE_A = [   // SÚPER 1: construcción y comida
   { key: 'hijoarmadura', name: 'Armadura para hijos', price: 700, color: 0x94a3b8 },
   { key: 'traje',    name: 'Trajes espaciales', price: 2000, color: 0xe5e7eb },
   { key: 'rocket',   name: 'Cohete',       price: 15000, color: 0xf97316 },
+  { key: 'bm_naranjo', name: 'Traje naranjo de ladrón', price: 1200, color: 0xf97316, icon: '🟠', thief: 'naranjo' },
+  { key: 'bm_gorro', name: 'Gorro con hoyos', price: 700, color: 0x111827, icon: '🎭', thief: 'gorro' },
+  { key: 'bm_hacker', name: 'Sistema hacker', price: 2200, color: 0x22d3ee, icon: '💻', thief: 'hacker' },
 ];
 
 // Mayordomo: recibe órdenes con Espacio ×3, hace las compras con la plata del jugador
@@ -2762,7 +2766,7 @@ const BUTLER_ALIASES = {
   arco:['arco','arco y flechas','flechas'],
   semillas:['semillas de manzana'], semillas_zanahoria:['semillas de zanahoria'], semillas_trigo:['semillas de trigo'], semillas_tomate:['semillas de tomate']
 };
-function butlerCatalog() { return [...SHOP, ...ALIEN_TECH].filter(item => item.key !== 'mayordomo'); }
+function butlerCatalog() { return [...SHOP, ...ALIEN_TECH].filter(item => item.key !== 'mayordomo' && (state.thiefMode || !item.thief)); }
 function butlerProductWords(value) {
   return normalizeButlerText(value).replace(/\bx\d+\b/g, '').split(' ').filter(w => w && !['de','del','para','el','la','los','las'].includes(w)).map(w => w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w);
 }
@@ -2960,7 +2964,11 @@ const ALIEN_TECH = [
   { key: 'minero',        name: 'Minero automático', price: 1400, color: 0xf59e0b, alien: true },   // mina solo, incluso sin jugar
 ];
 // El vendedor de Platus ofrece TODO lo de la Tierra (menos autos/motos) + la tecnología alien exclusiva
-function shopCatalog() { return state.planet === 'platus' ? SHOP.filter(it => !it.car && !it.helicopter && it.key !== 'moto').concat(ALIEN_TECH) : SHOP; }
+function shopCatalog() {
+  const base = state.planet === 'platus' ? SHOP.filter(it => !it.car && !it.helicopter && it.key !== 'moto').concat(ALIEN_TECH) : SHOP;
+  const enSuper = dist2D(player.position, { x: LUGARES.super.x, z: LUGARES.super.z }) < 20;
+  return state.thiefMode && enSuper ? base : base.filter(it => !it.thief);
+}
 
 // Dibuja un producto que se parece a lo que es
 function makeProductMesh(key, color) {
@@ -3039,6 +3047,15 @@ function makeProductMesh(key, color) {
   } else if (key === 'ballesta' || key === 'torreta') {
     const base = new THREE.Mesh(smoothBox(0.5, 0.5, 0.7), mat(color)); base.position.y = 0.4; base.castShadow = true; g.add(base);
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.7), mat(0x1f2937)); barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.5, 0.4); g.add(barrel);
+  } else if (key === 'bm_naranjo') {
+    const cuerpo = new THREE.Mesh(smoothBox(0.5, 0.7, 0.32), mat(color)); cuerpo.position.y = 0.5; cuerpo.castShadow = true; g.add(cuerpo);
+    for (let i = 0; i < 3; i++) { const raya = new THREE.Mesh(smoothBox(0.52, 0.06, 0.34), mat(0xf8fafc)); raya.position.y = 0.28 + i * 0.18; g.add(raya); }
+  } else if (key === 'bm_gorro') {
+    const gorro = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 10), mat(color)); gorro.position.y = 0.5; gorro.castShadow = true; g.add(gorro);
+    for (const sx of [-0.09, 0.09]) { const ojo = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), mat(0xe0ac69)); ojo.position.set(sx, 0.52, 0.24); g.add(ojo); }
+  } else if (key === 'bm_hacker') {
+    const caja = new THREE.Mesh(smoothBox(0.55, 0.34, 0.4), mat(0x0f172a)); caja.position.y = 0.4; caja.castShadow = true; g.add(caja);
+    const pantalla = new THREE.Mesh(smoothBox(0.4, 0.2, 0.04), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.7 })); pantalla.position.set(0, 0.42, 0.21); g.add(pantalla);
   }
   return g;
 }
@@ -3139,17 +3156,22 @@ function makeStore(cx, cz, items, title, roofColor) {
   items.forEach((item, idx) => {
     const x = cols[idx % cols.length], z = rows[Math.floor(idx / cols.length)];
     item.pos = new THREE.Vector3(x, 0, z);
+    const stand = new THREE.Group();
+    stand.position.set(x, 0, z);
     const table = new THREE.Mesh(smoothBox(1.6, 1, 1.6), mat(0x94a3b8));
-    table.position.set(x, 0.5, z); table.castShadow = true; scene.add(table);
-    const tapa = new THREE.Mesh(smoothBox(1.75, .1, 1.75), mat(0xe2e8f0));   // tapa del mesón
-    tapa.position.set(x, 1.03, z); tapa.castShadow = true; scene.add(tapa);
-    const estante = new THREE.Mesh(smoothBox(1.5, .07, 1.4), mat(0xcbd5e1));  // repisa de abajo
-    estante.position.set(x, .42, z); scene.add(estante);
+    table.position.set(0, 0.5, 0); table.castShadow = true; stand.add(table);
+    const tapa = new THREE.Mesh(smoothBox(1.75, .1, 1.75), mat(0xe2e8f0));
+    tapa.position.set(0, 1.03, 0); tapa.castShadow = true; stand.add(tapa);
+    const estante = new THREE.Mesh(smoothBox(1.5, .07, 1.4), mat(0xcbd5e1));
+    estante.position.set(0, .42, 0); stand.add(estante);
     const franja = new THREE.Mesh(smoothBox(1.64, .16, .04), new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0x854d0e, emissiveIntensity: .35 }));
-    franja.position.set(x, .95, z + .82); scene.add(franja);                              // cintillo de precio
-    const prod = makeProductMesh(item.key, item.color); prod.position.set(x, 1.0, z); scene.add(prod);
+    franja.position.set(0, .95, .82); stand.add(franja);
+    const prod = makeProductMesh(item.key, item.color); prod.position.set(0, 1.0, 0); stand.add(prod);
     const price = makeSign(item.name + ' $' + item.price, 0xfacc15);
-    price.scale.set(.5, .5, .5); price.position.set(x, 2.3, z); scene.add(price);
+    price.scale.set(.5, .5, .5); price.position.set(0, 2.3, 0); stand.add(price);
+    if (item.thief) stand.visible = false;
+    item.stand = stand;
+    scene.add(stand);
     shopStands.push(item);
   });
   const keeper = makePerson(0x059669, 0xf1c27d); keeper.position.set(cx, 0, cz - 9); scene.add(keeper);
@@ -3977,7 +3999,8 @@ function closeBlackMarket() { const el = ui('blackbox'); if (el) el.style.displa
 function renderBlackMarket() {
   const list = ui('blackList'), money = ui('blackMoney'); if (!list) return;
   if (money) money.textContent = state.creative ? '$∞' : '$' + state.money;
-  list.innerHTML = BLACK_MARKET.map(it => {
+  const oferta = BLACK_MARKET.filter(it => !it.thief || state.thiefMode);
+  list.innerHTML = oferta.map(it => {
     const puesto = it.thief && state.thief && state.thief[it.thief] && (it.thief === 'hacker' || state.thief[it.thief === 'naranjo' ? 'wearNaranjo' : 'wearGorro']);
     const have = (it.thief && state.thief && state.thief[it.thief]) || (it.gadget && !GADGET_HAND[it.gadget] && state.gadgets && state.gadgets[it.gadget]) || (GUN_SPECS[it.key] && state.guns && state.guns[it.key]) || (!GUN_SPECS[it.key] && it.dmg && state.weaponName === it.name);
     const ya = !have ? '' : it.thief === 'hacker' ? ' · ya lo tienes' : it.thief ? (puesto ? ' · puesto (toca para sacártelo)' : ' · toca para ponértelo') : GUN_SPECS[it.key] ? ' · ya la tienes (toca para llevarla en la mano)' : ' · ya lo tienes';
@@ -15866,6 +15889,7 @@ const state = {
   foundSecrets: {}, secretsFound: 0, stamina: 100, blocking: false, dodgeCd: 0, invulnerable: 0,
   hasPhone: false, skiPass: false, skiGear: null, skiGearWorn: false, skiing: false, skiLiftRide: null,
   story: {}, storyRewarded: {}, gadgets: {}, mission: null,
+  thiefMode: false,
   thief: { naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false },
   bankVaultOpen: false, bankLooted: [], bankChase: false, bankDispatched: false, bankGrace: 0, jailPorBanco: false,
 };
@@ -16778,6 +16802,7 @@ function renderContractRow(list) {   // fila del contrato arriba de la tienda (s
   list.appendChild(row);
 }
 function shopIcon(item) {
+  if (item.thief && item.icon) return item.icon;
   if (item.key === 'mayordomo') return '🤵';
   if (item.phone) return '📱';
   if (item.key === 'helicoptero') return '🚁';
@@ -16980,6 +17005,31 @@ ui('thickPlusBtn').onclick = () => resizeBuild('thickness', 1);
 ui('thickMinusBtn').onclick = () => resizeBuild('thickness', -1);
 // Nueva partida: primero pregunta TU NOMBRE (cada jugador tiene su propia partida guardada)
 let pendingMode = 'normal';
+let menuThiefMode = false;
+try { menuThiefMode = localStorage.getItem('tim_thief_mode') === '1'; } catch (e) {}
+function pintarBotonLadron() {
+  const b = ui('thiefModeBtn');
+  if (!b) return;
+  b.textContent = menuThiefMode ? 'MODO LADRÓN: SÍ' : 'MODO LADRÓN: NO';
+}
+function aplicarModoLadronDelMenu() {
+  state.thiefMode = !!menuThiefMode;
+  if (!state.thiefMode) {
+    state.thief = { naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false };
+    if (bankHeist && !bankHeist.open) bankHeist.hack = 0;
+  }
+  for (const it of shopStands) if (it.thief && it.stand) it.stand.visible = !!state.thiefMode;
+  if (typeof applyThiefLook === 'function') applyThiefLook();
+}
+pintarBotonLadron();
+ui('thiefModeBtn').onclick = () => {
+  menuThiefMode = !menuThiefMode;
+  try { localStorage.setItem('tim_thief_mode', menuThiefMode ? '1' : '0'); } catch (e) {}
+  pintarBotonLadron();
+  toast(menuThiefMode
+    ? '🟠 Modo ladrón en SÍ. Al continuar o empezar, en el súper puedes comprar el traje, el gorro y el hacker.'
+    : 'Modo ladrón en NO. El mundo queda normal: sin traje, sin gorro y sin hacker.');
+};
 function openNamebox(mode) {
   pendingMode = mode;
   ui('namebox').style.display = 'flex';
@@ -17067,7 +17117,7 @@ function openProfilebox() {
   const box = ui('profileList'); box.innerHTML = '';
   list.forEach(n => {
     let info = '';
-    try { const d = JSON.parse(localStorage.getItem(profileKey(n))); info = 'Etapa ' + (d.stage || 1) + ' · $' + (d.money || 0) + (d.planet === 'platus' ? ' · 🪐' : '') + (d.creative ? ' · 🎨' : ''); } catch (e) {}
+    try { const d = JSON.parse(localStorage.getItem(profileKey(n))); info = 'Etapa ' + (d.stage || 1) + ' · $' + (d.money || 0) + (d.planet === 'platus' ? ' · 🪐' : '') + (d.creative ? ' · 🎨' : '') + (d.thiefMode ? ' · 🟠 ladrón' : '') + (d.jail && d.jail.left > 0 ? ' · 🚔 cárcel' : ''); } catch (e) {}
     const row = document.createElement('div'); row.style.cssText = 'display:flex; gap:8px; align-items:stretch;';
     const b = document.createElement('button'); b.className = 'bankBtn'; b.style.flex = '1'; b.style.textAlign = 'left';
     b.style.display = 'flex'; b.style.alignItems = 'center'; b.style.gap = '10px';
@@ -17434,6 +17484,7 @@ function saveAndExit() {
 
 function startGame() {
   if (isDavidAccount(activeProfile()) && !davidGateOpen) { toast('🔒 La cuenta David está cerrada con clave'); return; }
+  if (typeof terminarCondenaEnMemoria === 'function') terminarCondenaEnMemoria();
   hideScreens();
   closeBlueprintPanel(); activeBlueprintId = null; blueprintGhost.visible = false;
   clearSave();   // JUGAR DE NUEVO = empezar de cero (borra la partida guardada)
@@ -17488,8 +17539,10 @@ function startGame() {
   scene.fog.far = 1800;   // niebla de la Tierra: deja ver biomas y el faro de esquí
   resetWeather();
   syncFarWorld();
+  aplicarModoLadronDelMenu();
   toast('Empiezas con $' + START_MONEY + ': el terreno vale $' + PRECIO_TERRENO + ' y lo que sobre es para el súper 🛒');
   toast('📍 PRIMER PASO · Sigue la flecha al cartel 🪧 TERRENO EN VENTA del condominio y pulsa E');
+  if (state.thiefMode) toast('🟠 Modo ladrón: en el súper están el traje naranjo, el gorro y el hacker.');
 }
 // Guardado / carga de la partida (localStorage)
 // ===================================================================
@@ -18457,7 +18510,8 @@ function saveGame() {
       },
       missions: state.missions || null,   // misiones del día con su progreso
       story: state.story || {}, storyRewarded: state.storyRewarded || {}, gadgets: state.gadgets || {}, alleyOpen: !!alley.open, mission: state.mission || null, alleyReturn: alley.returnTo || null, alleyUnlockedToast: !!state.alleyUnlockedToast,
-      thief: state.thief || null, bankVaultOpen: !!state.bankVaultOpen, bankLooted: state.bankLooted || [],
+      thiefMode: !!state.thiefMode, thief: state.thief || null, bankVaultOpen: !!state.bankVaultOpen, bankLooted: state.bankLooted || [],
+      jail: condena ? { n: condena.celda && condena.celda.n, left: Math.max(0, condena.left || 0), banco: !!condena.banco, hambreMuerte: !!condena.hambreMuerte } : null,
       bestiary: state.bestiary || {},     // colección de monstruos
       album: state.album || {}, albumDone: !!state.albumDone,   // álbum de criaturas alien
       baseLevel: state.baseLevel || 0, baseTurrets: state.baseTurrets || 0, baseGenerator: !!state.baseGenerator,   // base espacial propia
@@ -19273,6 +19327,7 @@ function checkDailyStreak() {
 function clearSave() { try { localStorage.removeItem(saveKey()); } catch (e) {} }
 function loadGame() {
   if (isDavidAccount(activeProfile()) && !davidGateOpen) { toast('🔒 La cuenta David pide clave'); return false; }
+  if (typeof terminarCondenaEnMemoria === 'function') terminarCondenaEnMemoria();
   let d; try { d = JSON.parse(localStorage.getItem(saveKey())); } catch (e) { return false; }
   if (!d) return false;
   closeBlueprintPanel(); activeBlueprintId = null; blueprintGhost.visible = false;
@@ -19375,6 +19430,7 @@ function loadGame() {
   (d.helpers || []).filter(h => h.hp !== 0).forEach(h => makeHelperAt(h.x, h.z, h.hp));                   // reponer ayudantes (ya equipados)
   const spawnY = (state.planet === 'tierra' && d.px != null && inTreasureIsland(d.px, d.pz)) ? TREASURE_ISLAND.surface + PLAYER_EYE : PLAYER_EYE;
   player.position.set(d.px != null ? d.px : 10, spawnY, d.pz != null ? d.pz : 16); yaw = 0; pitch = 0;
+  if (!restaurarCondenaGuardada(d.jail)) sacarDeCeldaSiNoHayCondena();
   dad.visible = true; dad.position.set(d.dadX != null ? d.dadX : 12, 0, d.dadZ != null ? d.dadZ : 13);
   dad.userData.mode = d.dadMode || 'follow';
   dad.userData.resting = false; dad.rotation.x = 0;
@@ -19383,6 +19439,7 @@ function loadGame() {
   applyDadArmor(state.dadArmor < 1);             // repone la armadura del papá si la compraste
   if (d.missions && d.missions.length) { state.missions = d.missions; renderMissions(); } else newMissions();
   state.story = d.story || {}; state.storyRewarded = d.storyRewarded || {}; state.gadgets = d.gadgets || {};
+  state.thiefMode = !!d.thiefMode;
   state.thief = Object.assign({ naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false }, d.thief || {});
   state.bankVaultOpen = !!d.bankVaultOpen;
   state.bankLooted = Array.isArray(d.bankLooted) ? d.bankLooted.slice() : [];
@@ -19423,6 +19480,8 @@ function continueGame() {
   hideScreens();
   state.running = true;
   if (!loadGame()) { startGame(); return; }
+  aplicarModoLadronDelMenu();
+  if (state.thiefMode) toast('🟠 Modo ladrón: en el súper puedes comprar el traje, el gorro y el hacker.');
   const bits = [];
   if (state.phase === 'NIGHT') bits.push('sigue de noche');
   if (state.weather === 'dust') bits.push('tormenta de polvo');
@@ -19483,7 +19542,7 @@ let buyHold = 0;
 function updateBuying(dt) {
   const ring = ui('buyring');
   if (state.phase !== 'DAY' || state.buildMode || state.planet === 'platus') { ring.style.display = 'none'; buyHold = 0; return; }
-  let near = null; for (const it of shopStands) { if (dist2D(player.position, it.pos) < 2.8) { near = it; break; } }
+  let near = null; for (const it of shopStands) { if (it.thief && !state.thiefMode) continue; if (dist2D(player.position, it.pos) < 2.8) { near = it; break; } }
   if (!near) { ring.style.display = 'none'; buyHold = 0; return; }
   ring.style.display = 'block';
   const enough = state.money >= near.price;
@@ -20755,7 +20814,10 @@ function paintHouse(color, label) {
   toast('🎨 Pintaste tu casa (' + n + ' piezas) de ' + label.replace('Pintura ', '')); beep(520, 0.1, 0.04);
 }
 function buyItem(item) {
-  if (item && item.thief) { comprarTrajeLadron(item); return; }
+  if (item && item.thief) {
+    if (!state.thiefMode) { toast('🟠 En este mundo el modo ladrón está apagado'); return; }
+    comprarTrajeLadron(item); return;
+  }
   const fromAlley = !!(item && (item.gadget || (item.key && String(item.key).indexOf('bm_') === 0)));
   if (item.ammo) {   // caja de balas del mercado negro
     if (!state.creative && state.money < item.price) { toast('💸 Te falta plata'); return; }
@@ -22621,6 +22683,53 @@ function salirDeLaCelda() {
   vy = 0; grounded = true;
   state.wanted = 0; state.wantedLevel = 0; state.bankChase = false; clearPolice();
   toast(banco ? '🚪 Cumpliste los nueve minutos. La policía ya no te persigue.' : '🚪 Cumpliste el minuto. Sales de la celda.');
+}
+function terminarCondenaEnMemoria() {
+  if (condena && condena.celda && condena.celda.preso) condena.celda.preso.userData.jailQuieto = false;
+  condena = null;
+  state.jailPorBanco = false;
+  if (typeof soltarManosLavado === 'function') soltarManosLavado();
+  if (typeof mostrarCamaCelda === 'function') mostrarCamaCelda(false);
+  if (playerAvatar) {
+    playerAvatar.rotation.order = 'XYZ';
+    if (typeof posarDePie === 'function') posarDePie(playerAvatar);
+  }
+}
+function jugadorDentroDeCelda() {
+  const x = player.position.x, z = player.position.z;
+  return CELDAS_PRESO.some(c => x > c.minX - 0.35 && x < c.maxX + 0.35 && z > c.minZ - 0.35 && z < c.maxZ + 0.35);
+}
+function sacarDeCeldaSiNoHayCondena() {
+  if (condena || !jugadorDentroDeCelda()) return;
+  player.position.set(JAIL_GATE.x, PLAYER_EYE, JAIL_GATE.z + 6);
+  vy = 0; grounded = true;
+}
+function restaurarCondenaGuardada(data) {
+  if (!data || typeof data !== 'object') return false;
+  const left = Math.max(0, Number(data.left) || 0);
+  if (left <= 0 && !data.hambreMuerte) return false;
+  const celda = (data.n && CELDAS_PRESO.find(c => c.n === data.n)) || celdaDeCastigo(data.n);
+  if (!celda) return false;
+  clearWaves();
+  state.phase = 'DAY';
+  creativeFlying = false;
+  state.jetOn = false;
+  state.skiing = false;
+  if (typeof stopSkiCarve === 'function') stopSkiCarve();
+  const pantalla = ui('jail'); if (pantalla) pantalla.classList.add('hidden');
+  if (ui('hud')) ui('hud').style.display = '';
+  if (celda.preso) {
+    posarDePie(celda.preso);
+    celda.preso.position.set(celda.maxX - .05, 0, celda.maxZ - .15);
+    celda.preso.userData.jailQuieto = true;
+  }
+  condena = { celda, left, pose: null, lavando: false, camLavado: false, hambreMuerte: !!data.hambreMuerte, banco: !!data.banco };
+  player.position.set(celda.ex, PLAYER_EYE, (celda.minZ + celda.maxZ) / 2);
+  yaw = Math.PI; pitch = 0; vy = 0; grounded = true;
+  const s = Math.max(0, Math.ceil(left));
+  const reloj = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  toast('🚔 Este mundo sigue en la cárcel · quedan ' + reloj + '. Los demás mundos no.');
+  return true;
 }
 function entrarACelda(n) {
   const celda = celdaDeCastigo(n);
@@ -25162,7 +25271,7 @@ function updateContextPrompt() {
       else if (nearestCitizen() || (dad.visible && dist2D(dad.position, player.position) < 3.4)) action = { key: 'E', touch: '💬', text: 'Hablar o ayudar' };
       else if (state.phase === 'DAY') {
         let product = null;
-        for (const it of shopStands) if (dist2D(player.position, it.pos) < 2.8) { product = it; break; }
+        for (const it of shopStands) { if (it.thief && !state.thiefMode) continue; if (dist2D(player.position, it.pos) < 2.8) { product = it; break; } }
         if (product) action = { key: 'E', touch: '🤝', text: 'Mantén para comprar ' + product.name + ' · $' + product.price };
         else { const crop = CROP_DEFS[selectedCrop]; if ((state.inv[crop.seedKey] || 0) > 0) action = { key: 'E', touch: crop.icon, text: 'Plantar ' + crop.name.toLowerCase() + ' · Shift+K cambia cultivo' }; }
         if (!action && houseStats().ready) action = { key: 'N', touch: '🌙', text: 'Empezar la noche cuando estés preparado' };
