@@ -1050,7 +1050,7 @@
           <kbd>WASD</kbd><span>Caminar. Shift corre, Espacio salta y Ctrl agacha.</span>
           <kbd>Espacio ×3</kbd><span>Llamar al mayordomo y darle una orden o encargarle compras. Primero contrátalo en el súper por $500. Su sueldo es $100 cada 7 días del juego.</span>
           <kbd>P</kbd><span>Llamar por celular a tus amigos cuando estés en una partida online.</span>
-          <kbd>E</kbd><span>Interactuar, entrar a vehículos, banco, cohete, tesoros, edificios y la puerta del callejón de Tito (misión a $20.000). En el Banco Central, con el sistema hacker del mercado negro, mantén E 10 segundos en la puerta de la bóveda y después abre cada cajón. Con el arco en la mano, mantén E (o el clic) para tensar: cuanto más tiempo, más fuerte sale la flecha. Daño del arco: tensado bajo 9, medio 12 y máximo 18 (si tu arco es de 16). Mira hacia arriba para que vuele lejos; abajo llega menos. Si tienes espada, láser y arco: pulsa 1 una vez para la espada (o el láser), 1 otra vez para cambiar entre espada y láser, y 1 dos veces seguidas para el arco. En casa, E en la Play abre juegos de consola (fútbol, Gran Prix y Héroes), pero la mesa tiene que tener una tele.</span>
+          <kbd>E</kbd><span>Interactuar, entrar a vehículos, banco, cohete, tesoros, edificios y la puerta del callejón de Tito (misión a $20.000). En el Banco Central, con el sistema hacker del mercado negro, mantén E 10 segundos en la puerta de la bóveda, entra a la sala y abre cada cajón de la pared. Las cajas grandes con diamantes no se abren. Al salir del banco la policía te persigue 3 minutos. Con el arco en la mano, mantén E (o el clic) para tensar: cuanto más tiempo, más fuerte sale la flecha. Daño del arco: tensado bajo 9, medio 12 y máximo 18 (si tu arco es de 16). Mira hacia arriba para que vuele lejos; abajo llega menos. Si tienes espada, láser y arco: pulsa 1 una vez para la espada (o el láser), 1 otra vez para cambiar entre espada y láser, y 1 dos veces seguidas para el arco. En casa, E en la Play abre juegos de consola (fútbol, Gran Prix y Héroes), pero la mesa tiene que tener una tele.</span>
           <kbd>Y</kbd><span>Abrir el catálogo del vendedor cuando estés cerca.</span>
           <kbd>B / G</kbd><span>Activa construcción con B. En ese modo, G abre planos completos; F coloca y X quita.</span>
           <kbd>1–9 · 0</kbd><span>Elegir herramienta o pieza de la pestaña activa (🏠 casa · 🛡️ defensa · 🪑 muebles). La tecla 1: un toque = espada, pala o pistola láser (nunca los puños si ya las compraste); dos toques seguidos = arco. La rueda recorre TODO el inventario y Shift+rueda cambia de pestaña.</span>
@@ -4782,11 +4782,12 @@ function sentarPersona(p, x, y, z, haciaY) {
 const BANK_POS = new THREE.Vector3(LUGARES.banco.x, 0, LUGARES.banco.z);
 const BANK = { x: LUGARES.banco.x, z: LUGARES.banco.z, w: 20, d: 11, h: 6.4, t: .6 };
 BANK.frente = BANK.z + BANK.d / 2;   // la puerta mira al norte, hacia la avenida
+BANK.boveda = { puertaX: BANK.x - 7.6, puertaZ: BANK.z - BANK.d / 2, puertaAncho: 1.9, gracia: 45 };
 let bankTeller = null;
 const bankAtms = [];
 const bankStaff = [];
 let bankVaultDoor = null;
-const bankHeist = { ready: false, open: false, hack: 0, door: null, doorHome: null, obs: null, spot: null, drawers: [] };
+const bankHeist = { ready: false, open: false, hack: 0, door: null, doorHome: null, obs: null, spot: null, drawers: [], diamonds: [], sala: null, doorSlide: 2.2 };
 const busPosters = [];
 let posterMaterial = null;
 function buildBank() {
@@ -4797,13 +4798,27 @@ function buildBank() {
   mcFloor(scene, cx, cz, w - t * 2, d - t * 2, marmol, .06);
   mcFloor(scene, cx, cz, w - 8, d - 5, 0xd8d2c2, .07);
   addNoGrassZone(cx, cz - .4, w + 2.5, d + 4);
-  // Muros: atrás, los dos costados y el frente partido en dos (hueco de puerta de 4)
-  edifCaja(cx, h / 2, fondo, w, h, t, piedra, 'banco', true);
+  // Muros: atrás (con el hueco de la bóveda), los dos costados y el frente partido en dos
+  const puertaX = BANK.boveda.puertaX, puertaAncho = BANK.boveda.puertaAncho;
+  const surMin = cx - w / 2, surMax = cx + w / 2;
+  const huecoMin = puertaX - puertaAncho / 2, huecoMax = puertaX + puertaAncho / 2;
+  const trozoSur = (x0, x1) => {
+    const ancho = x1 - x0;
+    if (ancho < 0.2) return;
+    edifCaja((x0 + x1) / 2, h / 2, fondo, ancho, h, t, piedra, 'banco', true);
+  };
+  trozoSur(surMin, huecoMin);
+  trozoSur(huecoMax, surMax);
+  edifCaja(puertaX, h - 0.55, fondo, puertaAncho + 0.3, 1.1, t + 0.05, piedra, 'banco', false);
   for (const sx of [-1, 1]) edifCaja(cx + sx * (w / 2 - t / 2), h / 2, cz, t, h, d, piedra, 'banco', true);
   for (const sx of [-1, 1]) edifCaja(cx + sx * (w / 4 + 1), h / 2, frente, w / 2 - 2, h, t, piedra, 'banco', true);
   edifCaja(cx, h - .55, frente, 4, 1.1, t, piedra, 'banco', false);   // dintel sobre la puerta
-  // Zócalo y cornisa que recorren el edificio
-  edifCaja(cx, .35, cz, w + .8, .7, d + .8, piedraOsc, 'banco', false);
+  // Zócalo y cornisa. El zócalo se corta en la puerta de la bóveda para poder entrar.
+  const zAncho = w + .8, zProf = d + .8, zMinX = cx - zAncho / 2, zMaxX = cx + zAncho / 2, zMin = cz - zProf / 2;
+  const labio = 1.15, corte0 = huecoMin - 0.15, corte1 = huecoMax + 0.15;
+  edifCaja(cx, .35, zMin + labio + (zProf - labio) / 2, zAncho, .7, zProf - labio, piedraOsc, 'banco', false);
+  edifCaja((zMinX + corte0) / 2, .35, zMin + labio / 2, corte0 - zMinX, .7, labio, piedraOsc, 'banco', false);
+  edifCaja((corte1 + zMaxX) / 2, .35, zMin + labio / 2, zMaxX - corte1, .7, labio, piedraOsc, 'banco', false);
   edifCaja(cx, h + .35, cz, w + 1.2, .7, d + 1.2, piedraOsc, 'banco', false);
   const techo = edifCaja(cx, h + .95, cz, w + .4, .5, d + .4, 0xb9ad91, 'banco', false);
   addLandingSurface(cx, cz, w + .4, d + .4, h + 1.2, techo);   // se puede aterrizar en el techo
@@ -4890,16 +4905,7 @@ function buildBank() {
   scene.add(bankTeller);
   const globo = makeSign('CAJERA · E', 0xa7f3d0); globo.scale.set(.32, .32, .32);
   globo.position.set(desk.x, 3.05, desk.z - .95); scene.add(globo);
-  // Bóveda acorazada en la pared del oeste
-  const bvx = cx - w / 2 + .9;
-  edifCaja(bvx, 1.9, cz - 2.6, .5, 3.8, 4, 0x64748b, 'banco', false);
-  const puertaB = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, .5, 20), mat(0x94a3b8));
-  puertaB.rotation.z = Math.PI / 2; puertaB.position.set(bvx + .45, 1.9, cz - 2.6); puertaB.castShadow = true; scene.add(puertaB);
-  bankVaultDoor = puertaB;
-  const rueda = new THREE.Mesh(new THREE.TorusGeometry(.55, .1, 8, 16), mat(0xfacc15));
-  rueda.rotation.y = Math.PI / 2; rueda.position.set(bvx + .78, 1.9, cz - 2.6); scene.add(rueda);
-  const cartelB = makeSign('BOVEDA', 0xcbd5e1); cartelB.scale.set(.28, .28, .28);
-  cartelB.position.set(bvx + .9, 4.2, cz - 2.6); scene.add(cartelB);
+  construirSalaBoveda();
   // Sala de espera: sillas, cordón de la fila y una planta
   for (let i = 0; i < 4; i++) {
     const sx = cx + w / 2 - 2.2, sz = cz - 2.4 + i * 1.5;
@@ -5328,18 +5334,34 @@ function mostrarCartelesBuscado(kind) {
 function quitarCarteles() {
   for (const p of busPosters) p.visible = false;
 }
+function dentroDelBanco(x, z) {
+  const enHall = Math.abs(x - BANK.x) < BANK.w / 2 - 0.15 && Math.abs(z - BANK.z) < BANK.d / 2 - 0.15;
+  const s = bankHeist.sala;
+  const enSala = !!(s && x > s.minX - 0.2 && x < s.maxX + 0.2 && z > s.minZ - 0.2 && z < s.maxZ + 0.2);
+  return enHall || enSala;
+}
 function iniciarPersecucionBanco() {
-  if (state.bankChase && state.wanted > 0) return;
+  if (state.bankChase) return;
   const camara = disfrazDeBanco();
   state.bankPoster = camara ? 'camara' : 'cara';
   mostrarCartelesBuscado(state.bankPoster);
   state.bankChase = true;
+  state.bankDispatched = false;
+  state.bankGrace = BANK.boveda.gracia;
+  toast(camara
+    ? '🚨 Alarma. Sal del banco: ahí empiezan los 3 minutos. Con el traje y el gorro, el cartel es una cámara, sin tu cara.'
+    : '🚨 Alarma. Sal del banco: ahí empiezan los 3 minutos. Sin el traje y el gorro, el cartel lleva tu cara.');
+}
+function despacharPoliciaBanco(alSalir) {
+  if (state.bankDispatched) return;
+  state.bankDispatched = true;
+  state.bankGrace = 0;
   state.wantedLevel = Math.max(3, Math.min(5, state.wantedLevel || 3));
   state.wanted = 180;
   state.policeDelay = 0;
-  toast(camara
-    ? '🚨 Robo al banco. Te persiguen 3 minutos. Los carteles son una cámara desde arriba, con el traje naranja, sin tu cara.'
-    : '🚨 Robo al banco. Te persiguen 3 minutos. Sin el traje y el gorro, los carteles de buscado llevan tu cara.');
+  toast(alSalir
+    ? '🚓 Saliste del banco. La policía te persigue 3 minutos.'
+    : '🚓 Te quedaste en el banco. Entra la policía y te persigue 3 minutos.');
 }
 function cajonCerca(maxD) {
   if (!bankHeist.ready) return null;
@@ -5352,6 +5374,14 @@ function cajonCerca(maxD) {
   return cerrado || abierto;
 }
 function cajonesCerrados() { return bankHeist.drawers.reduce((n, d) => n + (d.open ? 0 : 1), 0); }
+function diamanteCerca(maxD) {
+  let mejor = null, dist = maxD;
+  for (const d of bankHeist.diamonds) {
+    const dd = Math.hypot(player.position.x - d.x, player.position.z - d.z);
+    if (dd < dist) { dist = dd; mejor = d; }
+  }
+  return mejor;
+}
 function cercaDeLaPuertaBanco() {
   return !!(bankHeist.spot && dist2D(player.position, bankHeist.spot) < 3.6);
 }
@@ -5365,27 +5395,86 @@ function abrirBoveda() {
     if (i >= 0) obstacles.splice(i, 1);
     bankHeist.obs = null;
   }
-  if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.z = bankHeist.doorHome.z + 2.3;
+  if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.x = bankHeist.doorHome.x + bankHeist.doorSlide;
   beep(520, .1, .05);
-  toast('💻 Puerta abierta. Abre cada cajón con E · $1000 · son 20.');
+  toast('💻 Puerta abierta. Entra a la sala y abre los cajones de las paredes · $1000 · son 20.');
   iniciarPersecucionBanco();
+}
+function construirSalaBoveda() {
+  const { puertaX, puertaZ, puertaAncho } = BANK.boveda;
+  const vt = 0.42, alto = 5.2, acero = 0x4b5563;
+  const north = puertaZ - BANK.t / 2;
+  const south = north - 8.6;
+  const west = BANK.x - BANK.w / 2 + BANK.t + 0.25;
+  const east = BANK.x + 5.2;
+  bankHeist.sala = { minX: west, maxX: east, minZ: south, maxZ: north + 0.35 };
+  const muro = (x, z, w, d) => edifCaja(x, alto / 2, z, w, alto, d, acero, 'banco', true);
+  muro(west - vt / 2, (north + south) / 2, vt, north - south);
+  muro(east + vt / 2, (north + south) / 2, vt, north - south);
+  muro((west + east) / 2, south - vt / 2, east - west + vt * 2, vt);
+  edifCaja(puertaX - puertaAncho / 2 - 0.14, 1.7, puertaZ, 0.28, 3.5, 0.72, 0x334155, 'banco', false);
+  edifCaja(puertaX + puertaAncho / 2 + 0.14, 1.7, puertaZ, 0.28, 3.5, 0.72, 0x334155, 'banco', false);
+  const g = new THREE.Group();
+  g.position.set(puertaX, 0, puertaZ);
+  const hoja = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.38, 24), mat(0x94a3b8));
+  hoja.rotation.x = Math.PI / 2; hoja.position.y = 1.62; hoja.castShadow = true; g.add(hoja);
+  const rueda = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.07, 8, 16), mat(0xfacc15));
+  rueda.position.set(0, 1.62, 0.26); g.add(rueda);
+  scene.add(g);
+  bankVaultDoor = g;
+  const cartelB = makeSign('BOVEDA', 0xcbd5e1); cartelB.scale.set(.28, .28, .28);
+  cartelB.position.set(puertaX, 3.55, puertaZ + 0.7); scene.add(cartelB);
+  mcFloor(scene, (west + east) / 2, (north + south) / 2, east - west - 0.2, north - south - 0.2, 0x1f2937, 0.04);
+  const techo = new THREE.Mesh(smoothBox(east - west + vt, 0.28, north - south + vt), mat(0x374151));
+  techo.position.set((west + east) / 2, alto - 0.1, (north + south) / 2); scene.add(techo);
+  if (!preferLowPerf) {
+    const pl = new THREE.PointLight(0xdbeafe, 0.7, 16, 2);
+    pl.position.set((west + east) / 2, alto - 0.8, (north + south) / 2); scene.add(pl);
+  }
 }
 function prepararRoboBanco() {
   const door = bankVaultDoor;
-  if (!door || bankHeist.ready) return;
+  const sala = bankHeist.sala;
+  if (!door || !sala || bankHeist.ready) return;
   bankHeist.ready = true;
   bankHeist.door = door;
   bankHeist.doorHome = door.position.clone();
-  bankHeist.spot = new THREE.Vector3(door.position.x + 1.35, 0, door.position.z);
-  bankHeist.obs = addObstacle(door.position.x, door.position.z, 0.7, 3.1, 3.6, 'banco');
-  const ox = BANK.x - 6.5, oz = BANK.z - 4.55;
-  for (let row = 0, i = 0; row < 4; row++) for (let col = 0; col < 5; col++, i++) {
-    const x = ox + col * 0.82, y = 0.48 + row * 0.5, z = oz;
-    const mesh = new THREE.Mesh(smoothBox(0.7, 0.38, 0.42), new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.5, metalness: 0.35 }));
+  bankHeist.spot = new THREE.Vector3(BANK.boveda.puertaX, 0, BANK.boveda.puertaZ + 1.55);
+  bankHeist.obs = addObstacle(BANK.boveda.puertaX, BANK.boveda.puertaZ, BANK.boveda.puertaAncho - 0.2, 0.55, 3.3, 'banco');
+  const ponerCajon = (i, x, y, z, ox, oz) => {
+    const mesh = new THREE.Mesh(smoothBox(Math.abs(oz) > 0.5 ? 0.72 : 0.36, 0.4, Math.abs(ox) > 0.5 ? 0.72 : 0.36), new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.45, metalness: 0.4 }));
     mesh.position.set(x, y, z); mesh.castShadow = true; scene.add(mesh);
-    const tirador = new THREE.Mesh(smoothBox(0.22, 0.06, 0.06), mat(0xfacc15));
-    tirador.position.set(x, y, z + 0.24); scene.add(tirador);
-    bankHeist.drawers.push({ i, mesh, tirador, open: false, home: mesh.position.clone(), x, z: z + 0.55 });
+    const tirador = new THREE.Mesh(smoothBox(Math.abs(oz) > 0.5 ? 0.28 : 0.06, 0.06, Math.abs(ox) > 0.5 ? 0.28 : 0.06), mat(0xfacc15));
+    tirador.position.set(x + ox * 0.24, y, z + oz * 0.24); scene.add(tirador);
+    bankHeist.drawers.push({ i, mesh, tirador, open: false, home: mesh.position.clone(), ox, oz, x: x + ox * 0.9, z: z + oz * 0.9 });
+  };
+  const cx = (sala.minX + sala.maxX) / 2;
+  for (let row = 0, i = 0; row < 4; row++) for (let col = 0; col < 5; col++, i++) {
+    ponerCajon(i, cx + (col - 2) * 0.92, 0.55 + row * 0.5, sala.minZ + 0.16, 0, 1);
+  }
+  const ponerDiamante = (x, y, z, nx, nz, ancho, alto) => {
+    const profundo = 0.48;
+    const caja = new THREE.Mesh(smoothBox(Math.abs(nz) > 0.5 ? ancho : profundo, alto, Math.abs(nx) > 0.5 ? ancho : profundo), new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.72 }));
+    caja.position.set(x, y, z); caja.castShadow = true; scene.add(caja);
+    const vw = ancho * 0.62, vh = alto * 0.58;
+    const vidrio = new THREE.Mesh(smoothBox(Math.abs(nz) > 0.5 ? vw : 0.05, vh, Math.abs(nx) > 0.5 ? vw : 0.05), new THREE.MeshStandardMaterial({ color: 0xe0f2fe, transparent: true, opacity: 0.22, roughness: 0.04, metalness: 0.15 }));
+    vidrio.position.set(x + nx * (profundo * 0.5 + 0.03), y, z + nz * (profundo * 0.5 + 0.03)); scene.add(vidrio);
+    for (let k = 0; k < 5; k++) {
+      const gema = new THREE.Mesh(new THREE.OctahedronGeometry(0.13 + (k % 2) * 0.06, 0), new THREE.MeshStandardMaterial({ color: 0xf0f9ff, emissive: 0x67e8f9, emissiveIntensity: 0.9, roughness: 0.12, metalness: 0.55 }));
+      const lado = ((k % 3) - 1) * 0.24, sube = (k < 3 ? -0.16 : 0.2);
+      gema.position.set(x + nx * 0.02 + (Math.abs(nz) > 0.5 ? lado : 0), y + sube, z + nz * 0.02 + (Math.abs(nx) > 0.5 ? lado : 0));
+      gema.rotation.set(0.4, k * 0.7, 0.2); scene.add(gema);
+    }
+    bankHeist.diamonds.push({ x: x + nx * 1.05, z: z + nz * 1.05 });
+  };
+  ponerDiamante(sala.minX + 1.7, 1.7, sala.minZ + 0.2, 0, 1, 2.4, 2.6);
+  ponerDiamante(sala.maxX - 1.7, 1.7, sala.minZ + 0.2, 0, 1, 2.4, 2.6);
+  for (const z of [sala.minZ + 2.4, sala.minZ + 5.3]) {
+    ponerDiamante(sala.minX + 0.2, 1.7, z, 1, 0, 2.3, 2.6);
+    ponerDiamante(sala.maxX - 0.2, 1.7, z, -1, 0, 2.3, 2.6);
+  }
+  for (const x of [BANK.boveda.puertaX + 5.5, BANK.boveda.puertaX + 8.3, sala.maxX - 1.8]) {
+    ponerDiamante(x, 1.75, sala.maxZ - 0.55, 0, -1, 2.2, 2.55);
   }
   const puestos = [
     [BANK.x - 2.2, BANK.z + 1.2, 0xe2e8f0, 0xd6a77a],
@@ -5414,6 +5503,22 @@ function prepararRoboBanco() {
   ponerParadaBus(LUGARES.super.x + 12, LUGARES.super.z + 10, 1.1);
   ponerParadaBus(JAIL.x, JAIL.z + JAIL.d / 2 + 8, Math.PI);
 }
+function correrCajon(d, abierto) {
+  d.open = !!abierto;
+  d.mesh.material.color.setHex(d.open ? 0x1c1917 : 0x64748b);
+  const s = d.open ? 0.28 : 0;
+  d.mesh.position.set(d.home.x + d.ox * s, d.home.y, d.home.z + d.oz * s);
+  if (d.tirador) d.tirador.position.set(d.home.x + d.ox * (0.24 + s), d.home.y, d.home.z + d.oz * (0.24 + s));
+}
+function piezaBoveda() {
+  const cajon = cajonCerca(1.65);
+  const diam = diamanteCerca(1.5);
+  if (!cajon) return diam ? { tipo: 'diamante' } : null;
+  if (!diam) return { tipo: 'cajon', item: cajon };
+  const dc = Math.hypot(player.position.x - cajon.x, player.position.z - cajon.z);
+  const dd = Math.hypot(player.position.x - diam.x, player.position.z - diam.z);
+  return dc <= dd ? { tipo: 'cajon', item: cajon } : { tipo: 'diamante' };
+}
 function matarEmpleadoBanco(person) {
   if (!person || person.userData.dead) return;
   person.userData.dead = true;
@@ -5424,21 +5529,19 @@ function matarEmpleadoBanco(person) {
   person.position.y = 0.35;
   voxelImpact(person.position.clone().setY(1.1), 0xb91c1c, 10);
   iniciarPersecucionBanco();
-  toast('🚨 Mataste a alguien del banco. La policía te persigue tres minutos.');
 }
 function tryBankHeist() {
   if (state.planet !== 'tierra' || state.country || !bankHeist.ready) return false;
   if (bankHeist.open) {
-    const d = cajonCerca(1.7);
-    if (!d) return false;
+    const pieza = piezaBoveda();
+    if (!pieza) return false;
+    if (pieza.tipo === 'diamante') { toast('💎 Esa caja está sellada. Se ven los diamantes, pero no se abre.'); return true; }
+    const d = pieza.item;
     const ahora = performance.now();
     if (ahora - (bankHeist.lastDrawer || 0) < 420) return true;
     if (d.open) { toast('Ese cajón ya está vacío'); return true; }
     bankHeist.lastDrawer = ahora;
-    d.open = true;
-    d.mesh.material.color.setHex(0x1c1917);
-    d.mesh.position.z = d.home.z + 0.22;
-    if (d.tirador) d.tirador.position.z = d.home.z + 0.46;
+    correrCajon(d, true);
     if (!state.bankLooted) state.bankLooted = [];
     state.bankLooted.push(d.i);
     addMoney(1000);
@@ -5457,19 +5560,28 @@ function tryBankHeist() {
 function bankHeistPrompt() {
   if (state.planet !== 'tierra' || state.country || !bankHeist.ready || state.mission === 'alley') return null;
   if (bankHeist.open) {
-    const d = cajonCerca(1.7);
-    if (!d) return null;
+    const pieza = piezaBoveda();
+    if (!pieza) return null;
+    if (pieza.tipo === 'diamante') return { key: 'E', touch: '💎', force: true, text: 'Caja sellada · se ven diamantes' };
+    const d = pieza.item;
     return { key: 'E', touch: '💵', force: true, text: d.open ? 'Cajón vacío' : 'Abrir cajón · $1000 · quedan ' + cajonesCerrados() };
   }
   if (!cercaDeLaPuertaBanco()) return null;
   if (!(state.thief && state.thief.hacker)) return { key: '🔒', touch: '💻', text: 'Puerta de la bóveda · cómprala con el sistema hacker' };
   const s = Math.min(10, bankHeist.hack || 0);
-  return { key: 'E', touch: '💻', force: true, text: s > 0.08 ? 'Hackeando la puerta · ' + Math.max(0, 10 - s).toFixed(1) + ' s' : 'Mantén E diez segundos para abrir la puerta' };
+  return { key: 'E', touch: '💻', force: true, text: s > 0.08 ? 'Hackeando la puerta · ' + Math.max(0, 10 - s).toFixed(1) + ' s' : 'Mantén E diez segundos para abrir la puerta y entrar' };
 }
 function updateBankHack(dt) {
   if (!bankHeist.ready) return;
-  if (state.bankChase && state.wanted <= 0 && !condena) {
+  if (state.bankChase && !state.bankDispatched && !condena) {
+    state.bankGrace -= dt;
+    const afuera = !dentroDelBanco(player.position.x, player.position.z);
+    if (afuera || state.bankGrace <= 0) despacharPoliciaBanco(afuera);
+  }
+  if (state.bankChase && state.bankDispatched && state.wanted <= 0 && !condena) {
     state.bankChase = false;
+    state.bankDispatched = false;
+    state.bankGrace = 0;
     quitarCarteles();
   }
   const puede = state.running && !state.paused && !typing && !condena && state.planet === 'tierra' && !state.country && !bankHeist.open && state.thief && state.thief.hacker && cercaDeLaPuertaBanco();
@@ -5483,26 +5595,15 @@ function restaurarRoboBanco() {
   if (!bankHeist.ready) return;
   if (state.bankVaultOpen) {
     if (!bankHeist.open) abrirBovedaSilencio();
-  } else if (bankHeist.open || (bankHeist.door && bankHeist.doorHome && Math.abs(bankHeist.door.position.z - bankHeist.doorHome.z) > 0.2)) {
+  } else if (bankHeist.open || (bankHeist.door && bankHeist.doorHome && Math.abs(bankHeist.door.position.x - bankHeist.doorHome.x) > 0.2)) {
     bankHeist.open = false;
     bankHeist.hack = 0;
     if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.copy(bankHeist.doorHome);
-    if (!bankHeist.obs && bankHeist.doorHome) bankHeist.obs = addObstacle(bankHeist.doorHome.x, bankHeist.doorHome.z, 0.7, 3.1, 3.6, 'banco');
+    if (!bankHeist.obs && bankHeist.doorHome) bankHeist.obs = addObstacle(bankHeist.doorHome.x, bankHeist.doorHome.z, BANK.boveda.puertaAncho - 0.2, 0.55, 3.3, 'banco');
   }
-  for (const d of bankHeist.drawers) {
-    d.open = false;
-    d.mesh.material.color.setHex(0x64748b);
-    d.mesh.position.copy(d.home);
-    if (d.tirador) d.tirador.position.set(d.home.x, d.home.y, d.home.z + 0.24);
-  }
+  for (const d of bankHeist.drawers) correrCajon(d, false);
   const looted = new Set(state.bankLooted || []);
-  for (const d of bankHeist.drawers) {
-    if (!looted.has(d.i)) continue;
-    d.open = true;
-    d.mesh.material.color.setHex(0x1c1917);
-    d.mesh.position.z = d.home.z + 0.22;
-    if (d.tirador) d.tirador.position.z = d.home.z + 0.46;
-  }
+  for (const d of bankHeist.drawers) if (looted.has(d.i)) correrCajon(d, true);
   applyThiefLook();
 }
 function abrirBovedaSilencio() {
@@ -5514,13 +5615,15 @@ function abrirBovedaSilencio() {
     if (i >= 0) obstacles.splice(i, 1);
     bankHeist.obs = null;
   }
-  if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.z = bankHeist.doorHome.z + 2.3;
+  if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.x = bankHeist.doorHome.x + bankHeist.doorSlide;
 }
 function resetRoboBanco() {
   state.thief = { naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false };
   state.bankVaultOpen = false;
   state.bankLooted = [];
   state.bankChase = false;
+  state.bankDispatched = false;
+  state.bankGrace = 0;
   state.bankPoster = null;
   state.jailPorBanco = false;
   quitarCarteles();
@@ -5528,13 +5631,8 @@ function resetRoboBanco() {
   bankHeist.open = false;
   bankHeist.hack = 0;
   if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.copy(bankHeist.doorHome);
-  if (!bankHeist.obs && bankHeist.doorHome) bankHeist.obs = addObstacle(bankHeist.doorHome.x, bankHeist.doorHome.z, 0.7, 3.1, 3.6, 'banco');
-  for (const d of bankHeist.drawers) {
-    d.open = false;
-    d.mesh.material.color.setHex(0x64748b);
-    d.mesh.position.copy(d.home);
-    if (d.tirador) d.tirador.position.set(d.home.x, d.home.y, d.home.z + 0.24);
-  }
+  if (!bankHeist.obs && bankHeist.doorHome) bankHeist.obs = addObstacle(bankHeist.doorHome.x, bankHeist.doorHome.z, BANK.boveda.puertaAncho - 0.2, 0.55, 3.3, 'banco');
+  for (const d of bankHeist.drawers) correrCajon(d, false);
   for (const p of bankStaff) {
     p.userData.dead = false;
     p.rotation.x = 0;
@@ -15769,7 +15867,7 @@ const state = {
   hasPhone: false, skiPass: false, skiGear: null, skiGearWorn: false, skiing: false, skiLiftRide: null,
   story: {}, storyRewarded: {}, gadgets: {}, mission: null,
   thief: { naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false },
-  bankVaultOpen: false, bankLooted: [], bankChase: false, jailPorBanco: false,
+  bankVaultOpen: false, bankLooted: [], bankChase: false, bankDispatched: false, bankGrace: 0, jailPorBanco: false,
 };
 let lastHp = 100;   // para detectar cuándo te hacen daño
 
@@ -19289,6 +19387,8 @@ function loadGame() {
   state.bankVaultOpen = !!d.bankVaultOpen;
   state.bankLooted = Array.isArray(d.bankLooted) ? d.bankLooted.slice() : [];
   state.bankChase = false;
+  state.bankDispatched = false;
+  state.bankGrace = 0;
   restaurarRoboBanco();
   state.alleyUnlockedToast = !!d.alleyUnlockedToast || (state.totalEarned || 0) >= ALLEY.unlock;
   alley.returnTo = d.alleyReturn || null;
@@ -25205,7 +25305,8 @@ function renderHUD() {
   if (state.gadgets && state.gadgets.radio) gear.push('📻 radio');
   if (state.thief && state.thief.wearNaranjo) gear.push('🟠 traje naranjo');
   if (state.thief && state.thief.wearGorro) gear.push('🎭 gorro');
-  if (state.bankChase && state.wanted > 0) gear.push(state.bankPoster === 'camara' ? '📷 cartel: cámara desde arriba' : '📰 cartel con tu cara');
+  if (state.bankChase && !state.bankDispatched) gear.push('🚨 alarma · sal del banco');
+  else if (state.bankChase && state.wanted > 0) gear.push(state.bankPoster === 'camara' ? '📷 cartel: cámara desde arriba' : '📰 cartel con tu cara');
   if (state.secretsFound > 0) gear.push('🗺️ secretos ' + state.secretsFound + '/' + SECRET_DEFS.length);
   if (state.business) gear.push(BUSINESS_TYPES[state.business.type].icon + ' negocio nv.' + state.business.level + ' · 📦' + state.business.stock);
   const medalCount = Object.keys(state.medals || {}).length; if (medalCount) gear.push('🏅 ' + medalCount + '/3 deportes');
@@ -25241,6 +25342,7 @@ function renderHUD() {
     else if (!houseStats().ready) obj = '🛒 Compra en el súper (mantén E) y construye 4 paredes (B)';
     else obj = '⏩ Pulsa N: empieza la noche YA (+$100 por madrugar) · 🏆 casa dorada en la ciudad';
   } else if (state.phase === 'NIGHT') obj = (state.hordeOn ? '🚨 ¡HORDA FINAL! ' : (state.bossNight ? '⚔️ NOCHE JEFE (paga x3) · ' : '🗡️ ¡Defiende! ')) + 'Quedan ' + fmt(currentNightLength() - state.nightTime);
+  if (state.bankChase && !state.bankDispatched) obj = '🚨 Alarma del banco · sal del edificio para que empiecen los 3 minutos · si te quedas, entran en ' + Math.max(0, Math.ceil(state.bankGrace)) + 's';
   if (state.wanted > 0) obj = '🚨 BUSCADO ' + '⭐'.repeat(state.wantedLevel || 1) + ' — ¡huye de la policía! ' + (state.driving ? '(te persiguen en auto)' : '(corre con Shift)') + ' ' + Math.ceil(state.wanted) + 's';
   setTextIfChanged(ui('objective'), obj);
   renderRoadmap();
