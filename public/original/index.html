@@ -650,6 +650,12 @@
       <button id="shopCloseBtn" style="pointer-events:all; cursor:pointer; background:rgba(255,255,255,.15); color:#fff; border:none; padding:9px 22px; font-size:14px; font-weight:700; border-radius:8px;">Cerrar ✕</button>
     </div>
   </div>
+  <div id="cinebox" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); display:none; pointer-events:all; z-index:8; background:rgba(8,6,12,.96); border:2px solid #f59e0b; padding:14px 14px 12px; border-radius:14px; text-align:center; width:min(94vw,420px); max-height:82vh; flex-direction:column;">
+    <div style="font-size:15px; font-weight:800; color:#fbbf24">🎟️ BOLETERÍA · TOTU CINE</div>
+    <div style="font-size:12px; opacity:.75; margin:4px 0 8px">Elige una película. El boleto abre solo esa sala.</div>
+    <div id="cineFilms" style="overflow-y:auto; display:flex; flex-direction:column; gap:6px; text-align:left;"></div>
+    <button id="cineCloseBtn" type="button" style="pointer-events:all; cursor:pointer; margin-top:10px; background:rgba(255,255,255,.12); color:#fff; border:none; padding:9px 22px; font-size:14px; font-weight:700; border-radius:8px;">Cerrar</button>
+  </div>
   <div id="pause" style="position:absolute; inset:0; display:none; z-index:12; background:rgba(2,6,23,.75); align-items:center; justify-content:center; pointer-events:all;">
     <div style="width:min(92vw,380px); max-height:88vh; overflow-y:auto; background:rgba(6,10,20,.97); border:2px solid #64748b; border-radius:16px; padding:18px 20px; text-align:center;">
       <h2 style="margin:0 0 12px; color:#e2e8f0;">⏸️ PAUSA</h2>
@@ -1237,6 +1243,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { PARK, CAMPAIGNS, newPark, parkDate, startCampaign, maintainPark, settleParkDay, parkReport } from './src/park-business.js?v=1';
 import { CHAPTERS, GAME_RULES, dayDuration, houseRatings, monsterKillReward, nightDuration, roadmapFor } from './src/game-config.js?v=9';
 import { AVENIDAS, CALLE, CERROS, CONDOMINIO, DISTRITOS, LUGARES, MEDIA_CALLE, SEMAFOROS, callesDelMapa, distritoEn, enCalle, enCondominio, loteEn, lotePorId, lotesEnVenta, manzanasLibres, rectCalle, rectDistrito, rectLote, seCruzan } from './src/city-map.js?v=4';
+import { CINE_FILMS, TOTU, asientosDeSala, centroSala, cineAlturaEn, dentroDeTotu, pintarCine, puedeEntrar, tramosSala } from './src/cine-totu.js?v=1';
 import { CHAT_BUBBLE_MS, CHAT_CUSTOM_MAX, CHAT_EMOJIS, CHAT_HISTORY, CHAT_MAX_LEN, CHAT_NAME_MAX, CHAT_STICKERS, accountNameKey, chatSendWait, chatTime, cleanAccountName, cleanChatName, cleanChatText, cleanStickerLabel, customStickerPayload, stickerFromText, stickerPayload } from './src/chat.js?v=4';
 const ui = id => document.getElementById(id);
 // Loader compartido con soporte meshopt. Los .glb están comprimidos (texturas WebP 1024 + geometría meshopt).
@@ -3662,6 +3669,316 @@ function buildArcadeZone() {
   scene.add(g); arcadeZoneGroup = g;
 }
 buildGasStation(); buildArcadeZone();
+
+// ===================================================================
+//  TOTU + CINE — supermercado con todos los materiales y tres salas
+// ===================================================================
+let cineBoleto = null, cineOscuridad = 0;
+const cineSalas = [];
+function muroTotu(x, z, w, d, h, color) {
+  const mesh = new THREE.Mesh(smoothBox(Math.max(0.2, w), h, Math.max(0.2, d)), mat(color));
+  mesh.position.set(x, h / 2, z); mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
+  addObstacle(x, z, Math.max(0.2, w), Math.max(0.2, d), h, 'totu');
+  return mesh;
+}
+function muroConHueco(z, x0, x1, huecoX, huecoW, h, color) {
+  const t = TOTU.muro, g0 = huecoX - huecoW / 2, g1 = huecoX + huecoW / 2;
+  if (g0 - x0 > 0.3) muroTotu((x0 + g0) / 2, z, g0 - x0, t, h, color);
+  if (x1 - g1 > 0.3) muroTotu((g1 + x1) / 2, z, x1 - g1, t, h, color);
+  const dintel = new THREE.Mesh(smoothBox(huecoW, 1.2, t), mat(color));
+  dintel.position.set(huecoX, h - 0.6, z); scene.add(dintel);
+}
+function buildTotuCine() {
+  const { x0, x1, zN, zS, alto } = TOTU;
+  const cx = (x0 + x1) / 2, cz = (zN + zS) / 2;
+  const ancho = x1 - x0, fondo = zN - zS;
+  addNoGrassZone(cx, cz, ancho + 2, fondo + 2);
+  const piso = new THREE.Mesh(new THREE.PlaneGeometry(ancho - .4, fondo - .4), mat(0xe7e5e4));
+  piso.rotation.x = -Math.PI / 2; piso.position.set(cx, 0.05, cz); piso.receiveShadow = true; scene.add(piso);
+  const techo = new THREE.Mesh(smoothBox(ancho + 1.2, .4, fondo + 1.2), mat(0x0f766e));
+  techo.position.set(cx, alto + .2, cz); techo.castShadow = true; scene.add(techo);
+  addLandingSurface(cx, cz, ancho + 1.2, fondo + 1.2, alto + .4, techo);
+  const muro = 0xe7e5e4, h = alto;
+  muroConHueco(zN, x0, x1, TOTU.puertaNorte.x, TOTU.puertaNorte.w, h, muro);
+  muroTotu(x0, cz, TOTU.muro, fondo, h, muro);
+  muroTotu(x1, cz, TOTU.muro, fondo, h, muro);
+  muroTotu(cx, zS, ancho, TOTU.muro, h, 0x1c1917);
+  muroConHueco(TOTU.zTienda, x0, x1, TOTU.puertaLobby.x, TOTU.puertaLobby.w, h, 0xf5f5f4);
+  muroConHueco(TOTU.zLobby, x0, x1, cx, 6.2, h, 0xd6d3d1);
+  for (let i = 0; i < 3; i++) muroConHueco(TOTU.zSalas, TOTU.salasX[i], TOTU.salasX[i + 1], centroSala(i), 1.75, h, 0x292524);
+  for (let i = 1; i <= 2; i++) muroTotu(TOTU.salasX[i], (TOTU.zSalas + zS) / 2, TOTU.muro, Math.abs(zS - TOTU.zSalas), h, 0x292524);
+  const rotulo = makeSign('TOTU  ·  CINE', 0xfacc15);
+  rotulo.position.set(cx, alto + 1.15, zN + .4); scene.add(rotulo);
+  const felpudo = new THREE.Mesh(smoothBox(3.8, .05, 1.3), mat(0x44403c));
+  felpudo.position.set(cx, .08, zN + 1.1); scene.add(felpudo);
+  const alfombra = new THREE.Mesh(smoothBox(5.4, .04, TOTU.zLobby - TOTU.zSalas - .4), mat(0x7f1d1d));
+  alfombra.position.set(cx, .07, (TOTU.zLobby + TOTU.zSalas) / 2); scene.add(alfombra);
+  const omitir = new Set(['auto', 'barco', 'helicoptero', 'moto', 'rocket']);
+  const piezas = SHOP.filter(it => !it.thief && !omitir.has(it.key)).map(it => ({ ...it }));
+  const xs = [13.4, 15.7, 18, 20.3, 22.6, 32.4, 34.7, 37, 39.3, 41.6];
+  const zs = [-13.5, -15.9, -18.3, -20.35];
+  let n = 0;
+  for (const z of zs) for (const x of xs) {
+    if (n >= piezas.length) break;
+    if (Math.hypot(x - TOTU.vendedor.x, z - TOTU.vendedor.z) < 2.2) continue;
+    const item = piezas[n++];
+    item.pos = new THREE.Vector3(x, 0, z);
+    const stand = new THREE.Group(); stand.position.set(x, 0, z);
+    const mesa = new THREE.Mesh(smoothBox(1.35, .9, 1.05), mat(0x0f766e));
+    mesa.position.y = .45; mesa.castShadow = true; stand.add(mesa);
+    const prod = makeProductMesh(item.key, item.color); prod.position.set(0, 1.02, 0); stand.add(prod);
+    const price = makeSign(item.name + ' $' + item.price, 0xfacc15);
+    price.scale.set(.28, .28, .28); price.position.set(0, 1.8, 0); stand.add(price);
+    scene.add(stand);
+    item.obs = addObstacle(x, z, .9, .75, 1.05, 'totu');
+    item.stand = stand;
+    shopStands.push(item);
+  }
+  const vendedor = makePerson(0x0f766e, 0xf1c27d);
+  vendedor.position.set(TOTU.vendedor.x, 0, TOTU.vendedor.z);
+  vendedor.rotation.y = Math.PI / 2;
+  scene.add(vendedor);
+  keepers.push(new THREE.Vector3(TOTU.vendedor.x, 0, TOTU.vendedor.z));
+  const avisoV = makeSign('Y · TODOS LOS MATERIALES', 0x34d399);
+  avisoV.scale.set(.42, .42, .42); avisoV.position.set(TOTU.vendedor.x, 3.1, TOTU.vendedor.z); scene.add(avisoV);
+  const senora = makePerson(0x9f1239, 0xf1c27d);
+  senora.position.set(TOTU.senora.x, 0, TOTU.senora.z);
+  senora.rotation.y = -Math.PI / 2;
+  const pelo = new THREE.Mesh(new THREE.SphereGeometry(.3, 12, 10), mat(0x3f2a1d));
+  pelo.position.set(0, 2.05, -.02); senora.add(pelo);
+  scene.add(senora);
+  const mostrador = new THREE.Mesh(smoothBox(1.3, 1.05, 2.2), mat(0x44403c));
+  mostrador.position.set(TOTU.senora.x - 1.05, .52, TOTU.senora.z); scene.add(mostrador);
+  addObstacle(TOTU.senora.x - 1.05, TOTU.senora.z, 1.3, 2.2, 1.1, 'totu');
+  addObstacle(TOTU.senora.x, TOTU.senora.z, .7, .7, 2, 'totu');
+  const avisoB = makeSign('BOLETOS · E', 0xfbbf24);
+  avisoB.scale.set(.4, .4, .4); avisoB.position.set(TOTU.senora.x - 1.05, 2.15, TOTU.senora.z); scene.add(avisoB);
+  for (let i = 0; i < 3; i++) {
+    const f = CINE_FILMS[i];
+    const poster = makeSign((i + 1) + '  ' + f.titulo.toUpperCase(), 0xfde68a);
+    poster.scale.set(.36, .36, .36);
+    poster.position.set(centroSala(i), 3.3, TOTU.zSalas + .45);
+    scene.add(poster);
+  }
+  if (!preferLowPerf) {
+    const tiendaLuz = new THREE.PointLight(0xfff4cf, .7, 22, 1.8);
+    tiendaLuz.position.set(cx, alto - 1, -16.5); scene.add(tiendaLuz);
+    const lobbyLuz = new THREE.PointLight(0xffedd5, .55, 16, 1.8);
+    lobbyLuz.position.set(cx, alto - 1.1, -25); scene.add(lobbyLuz);
+  }
+  for (let i = 0; i < 3; i++) armarSala(i);
+}
+function armarSala(i) {
+  const scx = centroSala(i);
+  const tramos = tramosSala(i);
+  const sube = tramos[1], baja = tramos[3];
+  const peldaños = (zNorte, zSur, yNorte, ySur, ancho, n) => {
+    for (let s = 0; s < n; s++) {
+      const t = (s + 1) / n;
+      const zA = zNorte + (zSur - zNorte) * (s / n);
+      const zB = zNorte + (zSur - zNorte) * t;
+      const y = yNorte + (ySur - yNorte) * t;
+      const m = new THREE.Mesh(smoothBox(ancho, Math.max(.08, y), Math.abs(zB - zA) + .02), mat(0x1c1917));
+      m.position.set(scx, y / 2, (zA + zB) / 2); m.receiveShadow = true; scene.add(m);
+    }
+  };
+  peldaños(sube.maxZ, sube.minZ, sube.yNorte, sube.ySur, 1.35, 6);
+  peldaños(baja.maxZ, baja.minZ, baja.yNorte, baja.ySur, 1.35, 6);
+  const losa = (z, y, w, d) => {
+    const m = new THREE.Mesh(smoothBox(w, .08, d), mat(0x292524));
+    m.position.set(scx, y + .04, z); m.receiveShadow = true; scene.add(m);
+  };
+  losa(-35.27, 1.2, tramos[2].maxX - tramos[2].minX, 1.5);
+  losa(-40.4, 0.16, tramos[4].maxX - tramos[4].minX, 3.7);
+  for (const x of [scx - 1.2, scx + 1.2]) {
+    for (const [z0, z1, y] of [[-32.2, -34.5, 0], [-36.05, -38.5, 0.16]]) {
+      const largo = Math.abs(z1 - z0);
+      const b = new THREE.Mesh(smoothBox(.1, .85, largo), mat(0x57534e));
+      b.position.set(x, y + .55, (z0 + z1) / 2); scene.add(b);
+      addObstacle(x, (z0 + z1) / 2, .18, largo, 3.2, 'totu');
+    }
+  }
+  const guia = [];
+  for (const z of [-33.2, -37.2]) {
+    const tira = new THREE.Mesh(smoothBox(1.15, .03, .35), new THREE.MeshStandardMaterial({ color: 0xfde68a, emissive: 0xfbbf24, emissiveIntensity: .8 }));
+    tira.position.set(scx, .12, z); scene.add(tira); guia.push(tira);
+  }
+  const asientos = asientosDeSala(i);
+  for (const a of asientos) {
+    a.sala = i;
+    const g = new THREE.Group();
+    const tela = mat(0x7f1d1d);
+    const base = new THREE.Mesh(smoothBox(.62, .1, .56), tela);
+    base.position.y = a.piso + .42; g.add(base);
+    const respaldo = new THREE.Mesh(smoothBox(.62, .7, .1), tela);
+    respaldo.position.set(0, a.piso + .88, .22); g.add(respaldo);
+    for (const sx of [-.28, .28]) {
+      const brazo = new THREE.Mesh(smoothBox(.08, .28, .5), mat(0x44403c));
+      brazo.position.set(sx, a.piso + .58, 0); g.add(brazo);
+    }
+    scene.add(g); g.position.set(a.x, 0, a.z);
+    addObstacle(a.x, a.z, .7, .6, null, 'totu');
+  }
+  const cv = document.createElement('canvas'); cv.width = 640; cv.height = 360;
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearFilter;
+  const pantalla = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 3.05), new THREE.MeshBasicMaterial({ map: tex }));
+  pantalla.position.set(scx, 2.45, TOTU.zS + .7); scene.add(pantalla);
+  addObstacle(scx, TOTU.zS + .55, 7.2, .3, 4.2, 'totu');
+  const puertaX = scx, puertaZ = TOTU.zSalas + .15;
+  const hoja = new THREE.Mesh(smoothBox(1.55, 2.7, .1), mat(0x292524));
+  hoja.position.set(puertaX, 1.35, puertaZ); scene.add(hoja);
+  const obsPuerta = addObstacle(puertaX, TOTU.zSalas, 1.55, TOTU.muro + .2, 2.7, 'totu');
+  const luces = [], paneles = [];
+  if (!preferLowPerf) {
+    for (const z of [-34.2, -39.2]) {
+      const L = new THREE.PointLight(0xfff4d6, 1.05, 14, 1.7);
+      L.position.set(scx, 5.5, z); scene.add(L); luces.push(L);
+    }
+  }
+  for (const z of [-33.4, -37.4, -40.6]) {
+    const p = new THREE.Mesh(smoothBox(6.2, .08, .55), new THREE.MeshStandardMaterial({ color: 0xfff7d6, emissive: 0xfff1c2, emissiveIntensity: .9 }));
+    p.position.set(scx, 6.2, z); scene.add(p); paneles.push(p);
+  }
+  cineSalas.push({ i, luces, paneles, guia, asientos, cv, ctx: cv.getContext('2d'), tex, puertaX, hoja, obsPuerta, abierta: false, t: 0, cartel: false });
+}
+function cerrarPuertaSala(sala) {
+  sala.abierta = false;
+  sala.obsPuerta.top = 2.7;
+  sala.hoja.position.x = sala.puertaX;
+}
+function openCineBox() {
+  typing = true;
+  for (const k in keys) keys[k] = false;
+  const box = ui('cinebox'), list = ui('cineFilms');
+  box.style.display = 'flex';
+  list.innerHTML = '';
+  for (const f of CINE_FILMS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    const tengo = cineBoleto && cineBoleto.id === f.id;
+    b.style.cssText = 'pointer-events:all;cursor:pointer;text-align:left;background:#1c1410;color:#fff;border:1px solid #b45309;border-radius:10px;padding:8px 10px;font:inherit;';
+    b.innerHTML = '<b>' + f.titulo + '</b> · sala ' + (f.sala + 1) + '<br><span style="opacity:.75;font-size:12px">' + f.linea + (tengo ? ' · ya lo tienes' : ' · $' + f.precio) + '</span>';
+    b.addEventListener('click', () => comprarBoleto(f));
+    list.appendChild(b);
+  }
+}
+function closeCineBox() {
+  const box = ui('cinebox');
+  if (box) box.style.display = 'none';
+  typing = algunRecuadroAbierto();
+}
+function comprarBoleto(f) {
+  if (cineBoleto && cineBoleto.id === f.id) {
+    toast('🎟️ Ya tienes «' + f.titulo + '» · sala ' + (f.sala + 1));
+    closeCineBox();
+    return;
+  }
+  const precio = state.creative ? 0 : f.precio;
+  if (state.money < precio) { toast('💸 «' + f.titulo + '» cuesta $' + f.precio); return; }
+  if (precio) addMoney(-precio);
+  cineBoleto = { id: f.id, sala: f.sala, titulo: f.titulo };
+  for (const s of cineSalas) cerrarPuertaSala(s);
+  closeCineBox();
+  toast('🎟️ Boleto de «' + f.titulo + '» · entra por la puerta de la sala ' + (f.sala + 1));
+  beep(640, .08, .04);
+}
+function salaDePuertaCerca() {
+  let best = null, bd = 2.2;
+  for (const s of cineSalas) {
+    const d = Math.hypot(player.position.x - s.puertaX, player.position.z - TOTU.zSalas);
+    if (d < bd) { bd = d; best = s; }
+  }
+  return best;
+}
+function butacaCerca() {
+  if (!cineBoleto) return null;
+  const sala = cineSalas[cineBoleto.sala];
+  if (!sala || !sala.abierta) return null;
+  let best = null, bd = 1.45;
+  for (const a of sala.asientos) {
+    const d = Math.min(Math.hypot(player.position.x - a.standX, player.position.z - a.standZ), Math.hypot(player.position.x - a.x, player.position.z - a.z));
+    if (d < bd) { bd = d; best = a; }
+  }
+  return best;
+}
+function usarPuertaCine(sala) {
+  const f = CINE_FILMS[sala.i];
+  if (!puedeEntrar(cineBoleto, sala.i)) {
+    toast(cineBoleto ? '🎟️ Tu boleto es de otra película. Esta puerta es «' + f.titulo + '».' : '🎟️ La señora vende el boleto. Esta sala pasa «' + f.titulo + '».');
+    return true;
+  }
+  if (!sala.abierta) {
+    sala.abierta = true;
+    sala.obsPuerta.top = -8;
+    sala.hoja.position.x = sala.puertaX + 1.2;
+    toast('🚪 Sala ' + (sala.i + 1) + ' · sube a la fila de atrás o baja hacia la pantalla');
+    beep(500, .06, .04);
+  }
+  return true;
+}
+function sentarseEnCine(a) {
+  if (!puedeEntrar(cineBoleto, a.sala)) { toast('🎟️ Tu boleto no es de esta sala'); return true; }
+  const sala = cineSalas[a.sala];
+  if (!sala || !sala.abierta) { toast('🚪 Primero abre la puerta de tu sala'); return true; }
+  sitOn = {
+    movieSeat: a,
+    key: 'silla',
+    mesh: { position: { x: a.x, y: a.piso + .36, z: a.z }, rotation: { y: Math.PI } },
+  };
+  yaw = 0; pitch = a.fila === 'alta' ? 0.08 : -0.22;
+  sala.t = 0;
+  toast('🎬 Empieza «' + cineBoleto.titulo + '». Se apagan las luces.');
+  beep(340, .12, .05);
+  return true;
+}
+function tryCine() {
+  if (state.planet !== 'tierra' || state.country) return false;
+  if (sitOn && sitOn.movieSeat) return standUp(false);
+  if (sitOn || state.driving || state.buildMode) return false;
+  if (dist2D(player.position, TOTU.senora) < 3.2) { openCineBox(); return true; }
+  const puerta = salaDePuertaCerca();
+  if (puerta) return usarPuertaCine(puerta);
+  const butaca = butacaCerca();
+  if (butaca) return sentarseEnCine(butaca);
+  return false;
+}
+function cinePrompt() {
+  if (state.planet !== 'tierra' || state.country || state.driving || state.buildMode || (sitOn && sitOn.movieSeat)) return null;
+  if (dist2D(player.position, TOTU.senora) < 3.2) return { key: 'E', touch: '🎟️', text: cineBoleto ? 'Tu boleto: ' + cineBoleto.titulo : 'Comprar boleto · hay varias películas' };
+  const puerta = salaDePuertaCerca();
+  if (puerta) {
+    const f = CINE_FILMS[puerta.i];
+    if (!puedeEntrar(cineBoleto, puerta.i)) return { key: 'E', touch: '🎟️', text: 'Sala ' + (puerta.i + 1) + ' · ' + f.titulo };
+    return { key: 'E', touch: '🚪', text: puerta.abierta ? 'Entra y busca la butaca' : 'Entrar a «' + f.titulo + '»' };
+  }
+  const b = butacaCerca();
+  if (b) return { key: 'E', touch: '🪑', text: b.fila === 'alta' ? 'Sentarte en la fila de arriba' : 'Bajar y sentarte adelante' };
+  return null;
+}
+function updateCine(dt) {
+  const sentado = !!(sitOn && sitOn.movieSeat);
+  cineOscuridad += ((sentado ? 1 : 0) - cineOscuridad) * Math.min(1, dt * 1.1);
+  if (!sentado && !dentroDeTotu(player.position.x, player.position.z, 8)) return;
+  for (const sala of cineSalas) {
+    const activa = sentado && sitOn.movieSeat.sala === sala.i;
+    const luz = activa ? (1 - cineOscuridad) : 1;
+    for (const L of sala.luces) L.intensity = 0.05 + luz * 1.05;
+    for (const p of sala.paneles) p.material.emissiveIntensity = 0.03 + luz * 0.9;
+    for (const p of sala.guia) p.material.emissiveIntensity = activa ? 0.28 : 0.8;
+    if (activa) {
+      sala.t += dt; sala.cartel = false;
+      pintarCine(sala.ctx, CINE_FILMS[sala.i], sala.t);
+      sala.tex.needsUpdate = true;
+    } else if (!sala.cartel) {
+      pintarCine(sala.ctx, CINE_FILMS[sala.i], 2);
+      sala.tex.needsUpdate = true;
+      sala.cartel = true;
+    }
+  }
+}
+buildTotuCine();
+ui('cineCloseBtn').addEventListener('click', closeCineBox);
 // Tabla mundial: en la Plaza Central, junto a la fuente.
 const LEADERBOARD_POS = new THREE.Vector3(LUGARES.ranking.x, 0, LUGARES.ranking.z);
 const leaderboardBoard = new THREE.Group();
@@ -9940,6 +10257,14 @@ function trySitGrada() {
 }
 function standUp(silent) {
   if (!sitOn) return false;
+  if (sitOn.movieSeat) {
+    const s = sitOn.movieSeat;
+    sitOn = null;
+    player.position.set(s.standX, s.piso + PLAYER_EYE, s.standZ);
+    vy = 0; grounded = true;
+    if (!silent) { toast('🚶 Te levantaste · las luces de la sala vuelven'); beep(520, .08, .04); }
+    return true;
+  }
   const p = sitOn.mesh.position, era = sitOn.key, plane = sitOn.flightSeat, grada = sitOn.grada, stand = sitOn.stand;
   sitOn = null;
   if (grada && stand) {
@@ -16916,7 +17241,7 @@ const keys = {};
 let lastCreativeZTap = 0, creativeFlying = false;
 let typing = false;   // true mientras hay un recuadro de escribir abierto (bloquea controles del juego)
 // Recuadros que escriben texto: mientras quede UNO abierto, el juego no recibe teclas.
-const TYPING_BOXES = ['shopbox', 'mathbox', 'bankbox', 'rocketbox', 'chatbox', 'chatReply', 'stickerMake', 'accountbox', 'saveKeyBox', 'cloudLoginBox', 'davidLockBox', 'questbox', 'keypadbox', 'blackbox'];
+const TYPING_BOXES = ['shopbox', 'cinebox', 'mathbox', 'bankbox', 'rocketbox', 'chatbox', 'chatReply', 'stickerMake', 'accountbox', 'saveKeyBox', 'cloudLoginBox', 'davidLockBox', 'questbox', 'keypadbox', 'blackbox'];
 function algunRecuadroAbierto() {
   if (typeof wheelOpen === 'function' && wheelOpen()) return true;   // el menú de la rueda también cuenta
   return TYPING_BOXES.some(id => { const el = ui(id); return el && el.style.display === 'flex'; });
@@ -16947,11 +17272,13 @@ function tryInteract() {
   if (tryAlleyInteract()) return;
   if (tryJobInteract()) return;   // recados: calmar al perro / abrir el cajón
   if (tryDoor()) return;          // abrir / cerrar la puerta de tu casa
+  if (tryCine()) return;          // boleto, puerta de la sala o butaca
   if (tryBuyPlot()) return;       // comprar el terreno del condominio
   if (!tryRefuelCar() && !trySkiResort() && !tryWorldSites() && !tryArcadeRewards() && !tryArcadeZone() && !tryHarvestMiner() && !toggleBoat() && !tryIslandTempleChest() && !tryFocusedFurniture() && !tryLeaderboard() && !tryAirport() && !countryHello() && !tryParkFood() && !tryParkRide() && !tryRepairBuilding() && !tryHarvest() && !tryDiscoverSecret() && !tryWorldEvent() && !tryMount() && !toggleCar() && !tryShelter() && !tryRuins() && !tryCastle() && !tryColiseum() && !tryRocket() && !tryBankHeist() && !tryBank() && !trySitGrada() && !trySportInteract() && !tryBusiness() && !tryFamilyOrCitizenInteract() && !tryVendorHere() && !tryHelperHere()) { if (!tryCollectGolden() && !tryRob() && !sellHouse()) tryGardenHere(); }
 }
 addEventListener('keydown', e => {
   if (e.code === 'KeyI' && ui('help').style.display === 'flex') { toggleHelp(false); return; }
+  if (e.code === 'Escape' && ui('cinebox') && ui('cinebox').style.display === 'flex') { closeCineBox(); return; }
   if (e.code === 'Escape' && ui('questbox') && ui('questbox').style.display === 'flex') { closeQuestPanel(); return; }
   if (e.code === 'Escape' && ui('keypadbox') && ui('keypadbox').style.display === 'flex') { closeKeypad(); return; }
   if (e.code === 'Escape' && ui('blackbox') && ui('blackbox').style.display === 'flex') { closeBlackMarket(); return; }
@@ -23973,6 +24300,7 @@ function loop() {
     updateParkBusiness(dt);
     updateWorldEvents(dt);
     if (nearParksNow()) updateParks(dt);  // rueda, carrusel y montaña rusa solo si estás cerca
+    updateCine(dt);
     if (nearSkiNow()) updateSkiVisitors(dt);
     swingLimbs(mom, dt);
     updateArrow();
@@ -24749,6 +25077,15 @@ function updateMovement(dt) {
   }
   const floor2Y = secondFloorSupportY(crouch ? CROUCH_EYE : PLAYER_EYE);
   if (floor2Y != null) { floorY = Math.max(floorY, floor2Y); if (grounded && vy <= 0) player.position.y = floorY; }
+  if (state.planet === 'tierra' && !state.country && !state.underground) {
+    const cinePies = cineAlturaEn(player.position.x, player.position.z);
+    const eye = crouch ? CROUCH_EYE : PLAYER_EYE;
+    if (cinePies != null && Math.abs((player.position.y - eye) - cinePies) < 1.6 && player.position.y - eye < 4.5) {
+      const destino = cinePies + eye;
+      if (destino > floorY) floorY = destino;
+      if (grounded && vy <= 0) player.position.y = destino;
+    }
+  }
   if (!state.underground && !state.inCastle && !state.inRuins && !state.inArena && !inSkiTopHollow()) {   // ¡las montañas se suben!
     const cerro = sueloReal(player.position.x, player.position.z);
     const eyeH = crouch ? CROUCH_EYE : PLAYER_EYE;
@@ -25817,6 +26154,10 @@ function updateSky(dt) {
   const onIsland = state.planet === 'tierra' && inTreasureIsland(player.position.x, player.position.z) && !state.underground;
   ambient.intensity += ((enclosed ? 0.012 : (night ? 0.25 : 1.0 * dim)) - ambient.intensity) * 0.08;
   sun.intensity += ((enclosed ? 0.015 : (night ? 0.15 : 1.0 * dim)) - sun.intensity) * 0.08;
+  if (cineOscuridad > 0.02) {
+    ambient.intensity = Math.min(ambient.intensity, 1.15 * (1 - cineOscuridad) + 0.035);
+    sun.intensity = Math.min(sun.intensity, 2.1 * (1 - cineOscuridad) + 0.02);
+  }
   if (onIsland) { scene.fog.near += (40 - scene.fog.near) * 0.08; scene.fog.far += (800 - scene.fog.far) * 0.08; }
   else if (state.planet === 'tierra' && !state.country && inAlleyArea(player.position.x, player.position.z)) {
     const far = (state.gadgets && state.gadgets.gafas) ? 90 : 46;
@@ -25897,6 +26238,7 @@ function updateContextPrompt() {
       else if (nearSkiGate) action = { key: 'E', touch: '🎫', text: state.skiPass ? (state.skiGear ? 'Empezar / parar esquí · E' : 'Compra equipo en la caseta azul') : 'Comprar tarjeta de esquí · $500' };
       else if (nearSkiGear) action = { key: 'E', touch: '⛷️', text: dist2D(player.position, SKI_RESORT.gear2) < dist2D(player.position, SKI_RESORT.gear) ? 'Comprar snowboard · $200' : 'Comprar esquís · $200' };
       else if (state.skiPass && state.skiGear && inSkiResort() && !state.skiLiftRide) action = { key: 'E', touch: state.skiing ? '🥾' : '⛷️', text: state.skiing ? 'Soltar los esquís' : 'Largar / esquiar ahora' };
+      else if (cinePrompt()) action = cinePrompt();
       else if (gymPrompt()) action = gymPrompt();
       else if (worldSitePrompt()) action = worldSitePrompt();
       else if (nearArcadeRewards) action = { key: 'E', touch: '🎁', text: 'Canjear premios · tickets' };
@@ -25916,7 +26258,7 @@ function updateContextPrompt() {
       else if (sitOn && nearestPlay(3.8)) action = playHasTv(nearestPlay(3.8))
         ? { key: 'I · E', touch: '🎮', text: 'I juega en la Play · E para pararte' }
         : { key: 'E', touch: '📺', text: 'Pon una tele en la mesa para jugar' };
-      else if (sitOn) action = { key: 'E', touch: '🤝', text: sitOn.grada ? 'Levantarte de la grada' : sitOn.key === 'cama' ? 'Levantarte de la cama' : sitOn.key === 'bano' ? 'Levantarte del baño' : 'Pararte' };
+      else if (sitOn) action = { key: 'E', touch: '🤝', text: sitOn.movieSeat ? 'Levantarte · se enciende la sala' : sitOn.grada ? 'Levantarte de la grada' : sitOn.key === 'cama' ? 'Levantarte de la cama' : sitOn.key === 'bano' ? 'Levantarte del baño' : 'Pararte' };
       else if (furniture && furniture.key === 'teclado_gamer') action = { key: 'E', touch: '⌨️', text: 'Usar el teclado gamer' };
       else if (furniture && furniture.key === 'parlante_gamer') action = { key: 'E', touch: '🔊', text: activeGamerSpeaker === furniture ? 'Apagar la música gamer' : 'Encender la música gamer' };
       else if (furniture && furniture.key === 'alexa') action = { key: 'E / Shift+E', touch: '🔵', text: 'Hablar / escribir a Alexa' };
