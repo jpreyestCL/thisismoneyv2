@@ -4898,14 +4898,16 @@ function buildBank() {
   cupula.position.set(cx, h + 6.5, cz - 1); cupula.castShadow = true; scene.add(cupula);
   edifCaja(cx, h + 9.8, cz - 1, .2, 2, .2, 0xd4a017, 'banco', false);
   // ---- ADENTRO ----
-  // Mesón de atención con mampara de vidrio y tres ventanillas
+  // Mesón de atención con mampara de vidrio y tres ventanillas.
+  // El lado oeste queda libre: por ahí se sale derecho de la bóveda, sin topar el mesón.
   const mesonZ = fondo + 2.8;
-  edifCaja(cx, .55, mesonZ, 14, 1.1, 1.2, 0x7a5a36, 'banco', true);
-  edifCaja(cx, 1.16, mesonZ, 14.4, .12, 1.5, 0x3f2d1a, 'banco', false);
-  for (const sx of [-4.6, 4.6]) {   // la ventanilla del centro queda ABIERTA: ahí se ve a la cajera
-    edifCaja(cx + sx, 1.95, mesonZ - .2, 3.6, 1.5, .1, 0xbfe6ff, 'banco', false, { sombra: false });
-    edifCaja(cx + sx, 1.2, mesonZ - .2, 3.6, .12, .3, 0x94a3b8, 'banco', false);
-  }
+  const mesonW = 11.2, mesonX = cx + 1.4;
+  edifCaja(mesonX, .55, mesonZ, mesonW, 1.1, 1.2, 0x7a5a36, 'banco', true);
+  edifCaja(mesonX, 1.16, mesonZ, mesonW + .4, .12, 1.5, 0x3f2d1a, 'banco', false);
+  edifCaja(cx - 3.3, 1.95, mesonZ - .2, 1.55, 1.5, .1, 0xbfe6ff, 'banco', false, { sombra: false });
+  edifCaja(cx - 3.3, 1.2, mesonZ - .2, 1.55, .12, .3, 0x94a3b8, 'banco', false);
+  edifCaja(cx + 4.6, 1.95, mesonZ - .2, 3.6, 1.5, .1, 0xbfe6ff, 'banco', false, { sombra: false });
+  edifCaja(cx + 4.6, 1.2, mesonZ - .2, 3.6, .12, .3, 0x94a3b8, 'banco', false);
   edifCaja(cx, 2.62, mesonZ - .2, 3.6, .16, .3, 0x7a5a36, 'banco', false);   // dintel de la ventanilla abierta
   for (const sx of [-2.4, 2.4]) edifCaja(cx + sx, 1.95, mesonZ - .2, .16, 1.6, .3, 0x7a5a36, 'banco', false);
   // Escritorio de la cajera, detrás del mesón, con su computador y el cartel CAJA
@@ -5466,7 +5468,8 @@ function construirSalaBoveda() {
   const east = BANK.x + 5.2;
   bankHeist.sala = { minX: west, maxX: east, minZ: south, maxZ: north + 0.35 };
   const muro = (x, z, w, d) => edifCaja(x, alto / 2, z, w, alto, d, acero, 'banco', true);
-  muro(west - vt / 2, (north + south) / 2, vt, north - south);
+  const oesteTope = north - 0.55;
+  muro(west - vt / 2, (oesteTope + south) / 2, vt, Math.max(0.4, oesteTope - south));
   muro(east + vt / 2, (north + south) / 2, vt, north - south);
   muro((west + east) / 2, south - vt / 2, east - west + vt * 2, vt);
   edifCaja(puertaX - puertaAncho / 2 - 0.14, 1.7, puertaZ, 0.28, 3.5, 0.72, 0x334155, 'banco', false);
@@ -5593,9 +5596,24 @@ function matarEmpleadoBanco(person) {
   voxelImpact(person.position.clone().setY(1.1), 0xb91c1c, 10);
   iniciarPersecucionBanco();
 }
+function juntoAPuertaParaSalir() {
+  if (!bankHeist.open) return false;
+  const b = BANK.boveda;
+  const x = player.position.x, z = player.position.z;
+  if (Math.abs(x - b.puertaX) > b.puertaAncho / 2 + 0.45) return false;
+  return z >= b.puertaZ - 2.6 && z <= b.puertaZ + 2.5;
+}
+function salirPorLaPuertaBoveda() {
+  const b = BANK.boveda;
+  player.position.x = b.puertaX;
+  player.position.z = b.puertaZ + 3.6;
+  if (!state.creative) { player.position.y = PLAYER_EYE; vy = 0; grounded = true; }
+  toast('🚪 Saliste por la puerta por la que entraste.');
+}
 function tryBankHeist() {
   if (state.planet !== 'tierra' || state.country || !bankHeist.ready) return false;
   if (bankHeist.open) {
+    if (juntoAPuertaParaSalir()) { salirPorLaPuertaBoveda(); return true; }
     const pieza = piezaBoveda();
     if (!pieza) return false;
     if (pieza.tipo === 'diamante') { toast('💎 Esa caja está sellada. Se ven los diamantes, pero no se abre.'); return true; }
@@ -5623,6 +5641,7 @@ function tryBankHeist() {
 function bankHeistPrompt() {
   if (state.planet !== 'tierra' || state.country || !bankHeist.ready || state.mission === 'alley') return null;
   if (bankHeist.open) {
+    if (juntoAPuertaParaSalir()) return { key: 'E', touch: '🚪', force: true, text: 'Salir por la puerta por la que entraste' };
     const pieza = piezaBoveda();
     if (!pieza) return null;
     if (pieza.tipo === 'diamante') return { key: 'E', touch: '💎', force: true, text: 'Caja sellada · se ven diamantes' };
@@ -25041,33 +25060,38 @@ function cajaTeFrena(o, pies) {
   if (o.top != null && pies >= o.top - 0.02) return false;
   return true;
 }
-// Empuja al cuerpo fuera de lo sólido. Si venías de afuera, te devuelve por donde entraste:
-// así una pared fina, un cohete o una caja chica no se atraviesan al segundo o tercer empujón.
+// Empuja al cuerpo fuera de lo sólido. En una jamba se desliza de lado para colarse
+// en la puerta. Si ese deslizamiento te cruzara al otro lado, te devuelve por donde
+// venías: una pared fina, un cohete o una caja chica no se atraviesan.
 function empujarDeSolidos(p, prevX, prevZ, r) {
   const pies = p.y - PLAYER_EYE + 0.05;
   let moved = false;
+  const dirX = p.x - prevX, dirZ = p.z - prevZ;
   for (const o of obstaclesNear(p.x, p.z, r + 0.45)) {
     if (!cajaTeFrena(o, pies) || !solapaCaja(p.x, p.z, o, r)) continue;
-    const prevDentro = solapaCaja(prevX, prevZ, o, r);
-    if (prevDentro) {
-      const left = (o.minX - r) - p.x, right = (o.maxX + r) - p.x, up = (o.minZ - r) - p.z, down = (o.maxZ + r) - p.z;
-      const px = Math.abs(left) < Math.abs(right) ? left : right;
-      const pz = Math.abs(up) < Math.abs(down) ? up : down;
-      if (Math.abs(px) < Math.abs(pz)) p.x += px; else p.z += pz;
-    } else {
-      const candidatos = [
-        { x: o.minX - r - 0.02, z: p.z },
-        { x: o.maxX + r + 0.02, z: p.z },
-        { x: p.x, z: o.minZ - r - 0.02 },
-        { x: p.x, z: o.maxZ + r + 0.02 },
-      ];
-      let best = candidatos[0], bestD = Infinity;
-      for (const c of candidatos) {
-        const d = (c.x - prevX) * (c.x - prevX) + (c.z - prevZ) * (c.z - prevZ);
-        if (d < bestD) { bestD = d; best = c; }
-      }
-      p.x = best.x; p.z = best.z;
-    }
+    const left = (o.minX - r) - p.x, right = (o.maxX + r) - p.x;
+    const south = (o.minZ - r) - p.z, north = (o.maxZ + r) - p.z;
+    const px = Math.abs(left) < Math.abs(right) ? left : right;
+    const pz = Math.abs(south) < Math.abs(north) ? south : north;
+    const veniasOeste = prevX <= o.minX - r + 1e-3;
+    const veniasEste = prevX >= o.maxX + r - 1e-3;
+    const veniasSur = prevZ <= o.minZ - r + 1e-3;
+    const veniasNorte = prevZ >= o.maxZ + r - 1e-3;
+    const cruzaX = (px > 0 && veniasOeste) || (px < 0 && veniasEste);
+    const cruzaZ = (pz > 0 && veniasSur) || (pz < 0 && veniasNorte);
+    const menorX = Math.abs(px) <= Math.abs(pz);
+    const deFrenteZ = Math.abs(dirZ) >= Math.abs(dirX);
+    const deFrenteX = Math.abs(dirX) > Math.abs(dirZ);
+    if (deFrenteZ && !cruzaX && Math.abs(px) < 0.9 && (cruzaZ || (!menorX && Math.abs(pz) < 0.5))) p.x += px;
+    else if (deFrenteX && !cruzaZ && Math.abs(pz) < 0.9 && (cruzaX || (menorX && Math.abs(px) < 0.5))) p.z += pz;
+    else if (menorX && !cruzaX) p.x += px;
+    else if (!menorX && !cruzaZ) p.z += pz;
+    else if (veniasSur) p.z = o.minZ - r - 0.02;
+    else if (veniasNorte) p.z = o.maxZ + r + 0.02;
+    else if (veniasOeste) p.x = o.minX - r - 0.02;
+    else if (veniasEste) p.x = o.maxX + r + 0.02;
+    else if (menorX) p.x += px;
+    else p.z += pz;
     moved = true;
   }
   return moved;
