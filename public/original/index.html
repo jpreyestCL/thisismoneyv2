@@ -5705,24 +5705,26 @@ function matarEmpleadoBanco(person) {
   voxelImpact(person.position.clone().setY(1.1), 0xb91c1c, 10);
   iniciarPersecucionBanco();
 }
-function juntoAPuertaParaSalir() {
-  if (!bankHeist.open) return false;
+function ladoPuertaBanco() {
+  if (!bankHeist.open) return null;
   const b = BANK.boveda;
   const x = player.position.x, z = player.position.z;
-  if (Math.abs(x - b.puertaX) > b.puertaAncho / 2 + 0.45) return false;
-  return z >= b.puertaZ - 2.6 && z <= b.puertaZ + 2.5;
+  if (Math.abs(x - b.puertaX) > b.puertaAncho / 2 + 0.55) return null;
+  if (z < b.puertaZ - 2.8 || z > b.puertaZ + 2.6) return null;
+  return z >= b.puertaZ ? 'fuera' : 'dentro';
 }
-function salirPorLaPuertaBoveda() {
+function cruzarPuertaBanco(entrar) {
   const b = BANK.boveda;
   player.position.x = b.puertaX;
-  player.position.z = b.puertaZ + 3.6;
+  player.position.z = entrar ? b.puertaZ - 2.15 : b.puertaZ + 3.6;
   if (!state.creative) { player.position.y = PLAYER_EYE; vy = 0; grounded = true; }
-  toast('🚪 Saliste por la puerta por la que entraste.');
+  toast(entrar ? '🚪 Entraste al banco.' : '🚪 Saliste del banco.');
 }
 function tryBankHeist() {
   if (state.planet !== 'tierra' || state.country || !bankHeist.ready) return false;
   if (bankHeist.open) {
-    if (juntoAPuertaParaSalir()) { salirPorLaPuertaBoveda(); return true; }
+    const lado = ladoPuertaBanco();
+    if (lado) { cruzarPuertaBanco(lado === 'fuera'); return true; }
     const pieza = piezaBoveda();
     if (!pieza) return false;
     if (pieza.tipo === 'diamante') { toast('💎 Esa caja está sellada. Se ven los diamantes, pero no se abre.'); return true; }
@@ -5750,7 +5752,9 @@ function tryBankHeist() {
 function bankHeistPrompt() {
   if (state.planet !== 'tierra' || state.country || !bankHeist.ready || state.mission === 'alley') return null;
   if (bankHeist.open) {
-    if (juntoAPuertaParaSalir()) return { key: 'E', touch: '🚪', force: true, text: 'Salir por la puerta por la que entraste' };
+    const lado = ladoPuertaBanco();
+    if (lado === 'fuera') return { key: 'E', touch: '🚪', force: true, text: 'Entrar al banco' };
+    if (lado === 'dentro') return { key: 'E', touch: '🚪', force: true, text: 'Salir del banco' };
     const pieza = piezaBoveda();
     if (!pieza) return null;
     if (pieza.tipo === 'diamante') return { key: 'E', touch: '💎', force: true, text: 'Caja sellada · se ven diamantes' };
