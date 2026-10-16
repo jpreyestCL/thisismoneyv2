@@ -3169,6 +3169,7 @@ function makeStore(cx, cz, items, title, roofColor) {
     price.scale.set(.5, .5, .5); price.position.set(0, 2.3, 0); stand.add(price);
     if (item.thief) stand.visible = false;
     item.stand = stand;
+    item.obs = addObstacle(x, z, 1.05, 1.05, item.thief ? -8 : 1.05, 'super');
     scene.add(stand);
     shopStands.push(item);
   });
@@ -4803,12 +4804,12 @@ function sentarPersona(p, x, y, z, haciaY) {
 const BANK_POS = new THREE.Vector3(LUGARES.banco.x, 0, LUGARES.banco.z);
 const BANK = { x: LUGARES.banco.x, z: LUGARES.banco.z, w: 20, d: 11, h: 6.4, t: .6 };
 BANK.frente = BANK.z + BANK.d / 2;   // la puerta mira al norte, hacia la avenida
-BANK.boveda = { puertaX: BANK.x - 7.6, puertaZ: BANK.z - BANK.d / 2, puertaAncho: 1.9, gracia: 45 };
+BANK.boveda = { puertaX: BANK.x - 7.6, puertaZ: BANK.z - BANK.d / 2, puertaAncho: 2.8, gracia: 45 };
 let bankTeller = null;
 const bankAtms = [];
 const bankStaff = [];
 let bankVaultDoor = null;
-const bankHeist = { ready: false, open: false, hack: 0, door: null, doorHome: null, obs: null, spot: null, drawers: [], diamonds: [], sala: null, doorSlide: 2.2 };
+const bankHeist = { ready: false, open: false, hack: 0, door: null, doorHome: null, obs: null, spot: null, drawers: [], diamonds: [], sala: null, doorSlide: 2.6 };
 const busPosters = [];
 let posterMaterial = null;
 function buildBank() {
@@ -4878,7 +4879,7 @@ function buildBank() {
   // Cajeros automáticos en la fachada (por si no quieres entrar) y jardineras
   for (const sx of [-1, 1]) {
     const ax = cx + sx * 7.4, az = frente + .55;
-    edifCaja(ax, 1.15, az, 1.3, 2.3, .55, 0x334155, 'banco', false);
+    edifCaja(ax, 1.15, az, 1.3, 2.3, .55, 0x334155, 'banco', true);
     edifCaja(ax, 1.55, az + .3, .95, .75, .1, 0x22d3ee, 'banco', false, { sombra: false });
     edifCaja(ax, 2.55, az, 1.5, .25, .7, 0xfacc15, 'banco', false);
     bankAtms.push({ x: ax, z: az + 1 });
@@ -5154,7 +5155,40 @@ function updateJailFolk(dt) {
 const police = [];
 // Punto libre por donde entra la patrulla. Si estás junto a la cárcel, salen del portón.
 // Si estás lejos, arrancan a la vista, del lado de la comisaría: si no, se quedan en el portón y nunca llegan.
+function enSalaBoveda(x, z) {
+  const s = bankHeist.sala;
+  return !!(s && x > s.minX + 0.15 && x < s.maxX - 0.15 && z > s.minZ + 0.15 && z < s.maxZ + 0.15);
+}
+function enHallBanco(x, z) {
+  return Math.abs(x - BANK.x) < BANK.w / 2 - 0.55 && z > BANK.z - BANK.d / 2 + 0.45 && z < BANK.frente - 0.35;
+}
+// Si el jugador está en el banco, la patrulla entra por la puerta principal y, con la bóveda abierta, por esa puerta.
+function rutaPoliciaBanco(cop) {
+  if (!state.bankChase || state.driving || !cop) return null;
+  const px = player.position.x, pz = player.position.z;
+  if (!dentroDelBanco(px, pz)) return null;
+  const cx = cop.position.x, cz = cop.position.z;
+  const copHall = enHallBanco(cx, cz), copSala = enSalaBoveda(cx, cz);
+  const puerta = { x: BANK.x, z: BANK.frente + 2.4 };
+  const umbral = { x: BANK.x, z: BANK.z + 0.4 };
+  if (!copHall && !copSala) {
+    if (Math.hypot(cx - puerta.x, cz - puerta.z) > 1.35) return puerta;
+    return umbral;
+  }
+  if (enSalaBoveda(px, pz) && bankHeist.open && !copSala) {
+    const pasillo = { x: BANK.boveda.puertaX - 0.55, z: BANK.z - 1.1 };
+    const boca = { x: BANK.boveda.puertaX, z: BANK.boveda.puertaZ + 1.2 };
+    if (cz > pasillo.z + 0.8 && Math.hypot(cx - pasillo.x, cz - pasillo.z) > 1.15) return pasillo;
+    if (Math.hypot(cx - boca.x, cz - boca.z) > 1.05) return boca;
+    return { x: BANK.boveda.puertaX, z: BANK.boveda.puertaZ - 1.7 };
+  }
+  return null;
+}
 function sitioPolicia() {
+  if (state.bankChase && dentroDelBanco(player.position.x, player.position.z)) {
+    const lado = (police.length % 5) - 2;
+    return { x: BANK.x + lado * 1.15, z: BANK.frente + 4.2 };
+  }
   const px = player.position.x, pz = player.position.z;
   const gx = JAIL_GATE.x, gz = JAIL_GATE.z;
   const dx = gx - px, dz = gz - pz, lejos = Math.hypot(dx, dz) || 1;
@@ -5233,15 +5267,17 @@ function updatePolice(dt) {
         continue;
       }
       p.userData.lostAt = null;
-      if (d <= catchD) {
+      if (d <= catchD && !rutaPoliciaBanco(p)) {
         if (playerAirborne()) { airCombatMiss('police'); continue; }   // volando: te persiguen abajo, no te esposan
         policeCatch(); return;
       }
+      const objetivo = rutaPoliciaBanco(p) || player.position;
       const ax = p.position.x, az = p.position.z;
-      moveToward(p, player.position, speed * dt, true);
+      moveToward(p, objetivo, speed * dt, true);
       // Un muro los dejaba quietos. Si el paso no avanzó, se corren de lado y siguen.
       if (Math.hypot(p.position.x - ax, p.position.z - az) < 0.02) {
-        const ux = (player.position.x - ax) / d, uz = (player.position.z - az) / d;
+        const hacia = Math.hypot(objetivo.x - ax, objetivo.z - az) || 1;
+        const ux = (objetivo.x - ax) / hacia, uz = (objetivo.z - az) / hacia;
         const lado = p.userData.lado || (p.userData.lado = 1);
         moveToward(p, { x: ax - uz * lado * 5, z: az + ux * lado * 5 }, speed * dt, true);
         if (Math.hypot(p.position.x - ax, p.position.z - az) < 0.02) p.userData.lado = -lado;
@@ -5460,8 +5496,8 @@ function prepararRoboBanco() {
   bankHeist.ready = true;
   bankHeist.door = door;
   bankHeist.doorHome = door.position.clone();
-  bankHeist.spot = new THREE.Vector3(BANK.boveda.puertaX, 0, BANK.boveda.puertaZ + 1.55);
-  bankHeist.obs = addObstacle(BANK.boveda.puertaX, BANK.boveda.puertaZ, BANK.boveda.puertaAncho - 0.2, 0.55, 3.3, 'banco');
+  bankHeist.spot = new THREE.Vector3(BANK.boveda.puertaX, 0, BANK.boveda.puertaZ + 1.7);
+  ponerPuertaBovedaSolida();
   const ponerCajon = (i, x, y, z, ox, oz) => {
     const mesh = new THREE.Mesh(smoothBox(Math.abs(oz) > 0.5 ? 0.72 : 0.36, 0.4, Math.abs(ox) > 0.5 ? 0.72 : 0.36), new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.45, metalness: 0.4 }));
     mesh.position.set(x, y, z); mesh.castShadow = true; scene.add(mesh);
@@ -5523,6 +5559,12 @@ function prepararRoboBanco() {
   ponerParadaBus(BANK.x - 16, BANK.z + 8, -0.5);
   ponerParadaBus(LUGARES.super.x + 12, LUGARES.super.z + 10, 1.1);
   ponerParadaBus(JAIL.x, JAIL.z + JAIL.d / 2 + 8, Math.PI);
+}
+function ponerPuertaBovedaSolida() {
+  if (bankHeist.obs) return bankHeist.obs;
+  const b = BANK.boveda;
+  bankHeist.obs = addObstacle(b.puertaX, b.puertaZ, b.puertaAncho + 0.5, 1.05, 3.5, 'banco');
+  return bankHeist.obs;
 }
 function correrCajon(d, abierto) {
   d.open = !!abierto;
@@ -5620,7 +5662,7 @@ function restaurarRoboBanco() {
     bankHeist.open = false;
     bankHeist.hack = 0;
     if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.copy(bankHeist.doorHome);
-    if (!bankHeist.obs && bankHeist.doorHome) bankHeist.obs = addObstacle(bankHeist.doorHome.x, bankHeist.doorHome.z, BANK.boveda.puertaAncho - 0.2, 0.55, 3.3, 'banco');
+    if (!bankHeist.obs && bankHeist.doorHome) ponerPuertaBovedaSolida();
   }
   for (const d of bankHeist.drawers) correrCajon(d, false);
   const looted = new Set(state.bankLooted || []);
@@ -5652,7 +5694,7 @@ function resetRoboBanco() {
   bankHeist.open = false;
   bankHeist.hack = 0;
   if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.copy(bankHeist.doorHome);
-  if (!bankHeist.obs && bankHeist.doorHome) bankHeist.obs = addObstacle(bankHeist.doorHome.x, bankHeist.doorHome.z, BANK.boveda.puertaAncho - 0.2, 0.55, 3.3, 'banco');
+  if (!bankHeist.obs && bankHeist.doorHome) ponerPuertaBovedaSolida();
   for (const d of bankHeist.drawers) correrCajon(d, false);
   for (const p of bankStaff) {
     p.userData.dead = false;
@@ -17016,7 +17058,10 @@ function aplicarModoLadronDelMenu() {
     state.thief = { naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false };
     if (bankHeist && !bankHeist.open) bankHeist.hack = 0;
   }
-  for (const it of shopStands) if (it.thief && it.stand) it.stand.visible = !!state.thiefMode;
+  for (const it of shopStands) if (it.thief && it.stand) {
+    it.stand.visible = !!state.thiefMode;
+    if (it.obs) it.obs.top = state.thiefMode ? 1.05 : -8;
+  }
   if (typeof applyThiefLook === 'function') applyThiefLook();
 }
 pintarBotonLadron();
@@ -21226,6 +21271,27 @@ function meteorImpact() {
   setTimeout(() => { f.style.opacity = '0'; f.style.background = '#000'; }, 700);
   gameOver();
 }
+let coheteSolido = null;
+function actualizarCoheteSolido() {
+  const r = state.rocket;
+  if (!r || !r.parent) {
+    if (coheteSolido) {
+      const i = obstacles.indexOf(coheteSolido);
+      if (i >= 0) obstacles.splice(i, 1);
+      coheteSolido = null;
+    }
+    return;
+  }
+  if (!coheteSolido) {
+    coheteSolido = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, top: 7, bottom: 0, grupo: 'cohete' };
+    obstacles.push(coheteSolido);
+  }
+  const x = r.position.x, z = r.position.z, y = r.position.y || 0;
+  coheteSolido.minX = x - 1.25; coheteSolido.maxX = x + 1.25;
+  coheteSolido.minZ = z - 1.25; coheteSolido.maxZ = z + 1.25;
+  coheteSolido.bottom = y;
+  coheteSolido.top = state.cinematic ? -6 : y + 6.8;
+}
 function spawnRocketMesh() {   // el cohete estacionado en (10,10) con su letrero (reutilizable)
   if (state.rocket) return;
   const r = makeProductMesh('rocket', 0xf97316); r.scale.set(4, 4, 4); r.position.set(LUGARES.cohete.x, 0, LUGARES.cohete.z); scene.add(r);
@@ -21233,10 +21299,12 @@ function spawnRocketMesh() {   // el cohete estacionado en (10,10) con su letrer
   const win = new THREE.Mesh(new THREE.CircleGeometry(0.09, 14), new THREE.MeshStandardMaterial({ color: 0x9fd8ff, emissive: 0x2a4a6a, emissiveIntensity: .5 })); win.position.set(0, 0.72, 0.265); r.add(win);   // ventanilla
   const s = makeSign('COHETE (E)', 0xf97316); s.position.set(LUGARES.cohete.x, 6, LUGARES.cohete.z); scene.add(s); r.userData.sign = s;
   state.rocket = r;
+  actualizarCoheteSolido();
 }
 function removeRocket() {
   if (state.rocket) { if (state.rocket.userData.sign) scene.remove(state.rocket.userData.sign); scene.remove(state.rocket); state.rocket = null; }
   state.hasRocket = false;
+  actualizarCoheteSolido();
 }
 function giveRocket() {
   state.hasRocket = true;
@@ -23271,6 +23339,7 @@ function syncCuerposSolidos() {
   if (typeof boat !== 'undefined' && boat && boat.group) {
     ponerCaja(boat.group, boat.heading || 0, 11, 30, 2.05, boat, -0.2);
   }
+  if (typeof actualizarCoheteSolido === 'function') actualizarCoheteSolido();
 }
 function loop() {
   requestAnimationFrame(loop);
@@ -23662,7 +23731,7 @@ function updateSkiMovement(dt) {
   player.position.x = THREE.MathUtils.clamp(player.position.x, SKI_RESORT.x - 210, SKI_RESORT.x + 210);
   player.position.z = THREE.MathUtils.clamp(player.position.z, SKI_RESORT.z - 520, SKI_RESORT.z + 300);
   resolveSkiPisteWalls();
-  resolveCollisions();
+  resolveCollisions(choqueX, choqueZ);
   const snowY = mountainHeightAt(player.position.x, player.position.z);
   let skiFloor = snowY + PLAYER_EYE;
   const contacto = rampaBajoEsqui(player.position.x, player.position.z);
@@ -23847,7 +23916,7 @@ function updateCreativeFlight(dt) {
     resolveMountainSolid(player.position, px, pz, py, PLAYER_EYE);
     frenarSueloDeVuelo(player.position, px, pz, py, PLAYER_EYE, null);
     apoyarTechosDeVuelo(player.position, py);
-    resolveCollisions();
+    resolveCollisions(px, pz);
   }
   touch.jump = false;
   if (inTreasureIsland(player.position.x, player.position.z)) noteIslandArrival('🏝️ Llegaste volando a la ISLA DEL TESORO');
@@ -24144,7 +24213,7 @@ function updateMovement(dt) {
       toggleSkiing(true);   // al salir de la zona plana hacia la pista, largas solo
     }
   }
-  resolveCollisions();
+  resolveCollisions(moveStartX, moveStartZ);
   meterEnCelda();
   camera.rotation.y = yaw; camera.rotation.x = pitch;
 }
@@ -24962,23 +25031,71 @@ function updateViewmodel(dt) {
     viewmodel.rotation.set(-sw * (kind === 'shovel' ? 2.25 : kind === 'bow' ? 1.1 : kind === 'gun' ? .45 : 1.8), 0, sw * (kind === 'sword' ? -.42 : kind === 'bow' ? -.28 : -.16));
   }
 }
-function resolveCollisions() {
+function solapaCaja(x, z, o, r) {
+  return x > o.minX - r && x < o.maxX + r && z > o.minZ - r && z < o.maxZ + r;
+}
+function cajaTeFrena(o, pies) {
+  if (!o) return false;
+  if (o.country !== undefined && (o.country || null) !== (state.country || null)) return false;
+  if (o.bottom != null && pies + 1.65 < o.bottom) return false;
+  if (o.top != null && pies >= o.top - 0.02) return false;
+  return true;
+}
+// Empuja al cuerpo fuera de lo sólido. Si venías de afuera, te devuelve por donde entraste:
+// así una pared fina, un cohete o una caja chica no se atraviesan al segundo o tercer empujón.
+function empujarDeSolidos(p, prevX, prevZ, r) {
+  const pies = p.y - PLAYER_EYE + 0.05;
+  let moved = false;
+  for (const o of obstaclesNear(p.x, p.z, r + 0.45)) {
+    if (!cajaTeFrena(o, pies) || !solapaCaja(p.x, p.z, o, r)) continue;
+    const prevDentro = solapaCaja(prevX, prevZ, o, r);
+    if (prevDentro) {
+      const left = (o.minX - r) - p.x, right = (o.maxX + r) - p.x, up = (o.minZ - r) - p.z, down = (o.maxZ + r) - p.z;
+      const px = Math.abs(left) < Math.abs(right) ? left : right;
+      const pz = Math.abs(up) < Math.abs(down) ? up : down;
+      if (Math.abs(px) < Math.abs(pz)) p.x += px; else p.z += pz;
+    } else {
+      const candidatos = [
+        { x: o.minX - r - 0.02, z: p.z },
+        { x: o.maxX + r + 0.02, z: p.z },
+        { x: p.x, z: o.minZ - r - 0.02 },
+        { x: p.x, z: o.maxZ + r + 0.02 },
+      ];
+      let best = candidatos[0], bestD = Infinity;
+      for (const c of candidatos) {
+        const d = (c.x - prevX) * (c.x - prevX) + (c.z - prevZ) * (c.z - prevZ);
+        if (d < bestD) { bestD = d; best = c; }
+      }
+      p.x = best.x; p.z = best.z;
+    }
+    moved = true;
+  }
+  return moved;
+}
+function resolveCollisions(fromX, fromZ) {
   if (skiSillas.length) {
     for (const s of skiSillas) revisarParejas(s.gente);
     revisarParejas(arrastreGente);
   }
   const r = 0.45, p = player.position;
-  const pies = p.y - PLAYER_EYE + .05;   // altura de tus pies (para pasar por encima de lo bajo)
-  for (const o of obstaclesNear(p.x, p.z, r + 0.2)) {
-    if (o.country !== undefined && (o.country || null) !== (state.country || null)) continue;
-    if (o.bottom != null && pies + 2.2 < o.bottom) continue;
-    if (o.top != null && pies >= o.top) continue;   // vas caminando más arriba que esa pared
-    if (p.x > o.minX - r && p.x < o.maxX + r && p.z > o.minZ - r && p.z < o.maxZ + r) {
-      const left = (o.minX - r) - p.x, right = (o.maxX + r) - p.x, up = (o.minZ - r) - p.z, down = (o.maxZ + r) - p.z;
-      const px = Math.abs(left) < Math.abs(right) ? left : right;
-      const pz = Math.abs(up) < Math.abs(down) ? up : down;
-      if (Math.abs(px) < Math.abs(pz)) p.x += px; else p.z += pz;
+  const x1 = p.x, z1 = p.z;
+  const x0 = fromX == null ? x1 : fromX;
+  const z0 = fromZ == null ? z1 : fromZ;
+  const dist = Math.hypot(x1 - x0, z1 - z0);
+  const pasos = Math.max(1, Math.ceil(dist / 0.22));
+  let cx = x0, cz = z0;
+  for (let i = 1; i <= pasos; i++) {
+    p.x = x0 + (x1 - x0) * (i / pasos);
+    p.z = z0 + (z1 - z0) * (i / pasos);
+    if (empujarDeSolidos(p, cx, cz, r)) {
+      cx = p.x; cz = p.z;
+      break;
     }
+    cx = p.x; cz = p.z;
+  }
+  for (let k = 0; k < 4; k++) {
+    if (!empujarDeSolidos(p, cx, cz, r)) break;
+    cx = p.x; cz = p.z;
   }
 }
 // Las luces del set gamer cambian de color solas (arcoíris que corre por teclas, fans y tiras)
