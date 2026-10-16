@@ -829,6 +829,7 @@
         <button class="btn" id="startBtn">NUEVA PARTIDA</button>
         <button class="btn secondary" id="creativeBtn">MODO CREATIVO</button>
         <button class="btn secondary" id="thiefModeBtn">MODO LADRÓN: NO</button>
+        <button class="btn secondary" id="skinModeBtn">✏️ PERSONALIZAR SKIN</button>
         <button class="btn secondary" id="startGuideBtn">VER GUÍA</button>
         <button class="btn secondary" id="startRankingBtn">🌎 RANKING MUNDIAL</button>
         <button class="btn secondary" id="friendsBtn">🌐 JUGAR CON AMIGOS</button>
@@ -849,6 +850,28 @@
       <div class="control-row"><kbd>Enter</kbd><span>Chat mundial con todos los jugadores</span></div>
       <div class="control-row"><kbd>F6</kbd><span>Abrir carreras de autos voladores</span></div>
     </aside>
+  </div>
+</div>
+
+<div id="skinbox" style="position:fixed; inset:0; display:none; z-index:40; background:rgba(2,6,23,.92); align-items:center; justify-content:center; pointer-events:all;">
+  <div style="width:min(96vw,760px); max-height:94vh; overflow:auto; background:#07111f; border:3px solid #38bdf8; border-radius:18px; padding:14px; color:#e2e8f0; text-align:left;">
+    <h2 style="margin:0 0 4px; color:#7dd3fc;">✏️ DIBUJA TU SKIN</h2>
+    <p style="margin:0 0 10px; font-size:13px; opacity:.82;">Usa el lápiz. Si sale chueca, igual cuenta: esa forma es tu skin. Puedes volver a pintarla y cambiarle los colores.</p>
+    <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start;">
+      <canvas id="skinCanvas" width="300" height="460" style="width:min(72vw,300px); height:auto; background:repeating-conic-gradient(#0b1220 0% 25%, #1e293b 0% 50%) 50% / 16px 16px; border-radius:12px; border:2px solid #334155; touch-action:none; cursor:crosshair;"></canvas>
+      <div style="flex:1; min-width:200px; display:flex; flex-direction:column; gap:8px;">
+        <div id="skinColors" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+        <label style="font-size:13px;">Grosor del lápiz <b id="skinSizeVal">10</b>
+          <input id="skinSize" type="range" min="2" max="46" value="10" style="width:100%; pointer-events:all;">
+        </label>
+        <button class="btn secondary" id="skinPencilBtn" type="button">✏️ LÁPIZ</button>
+        <button class="btn secondary" id="skinEraseBtn" type="button">🧽 BORRADOR</button>
+        <button class="btn secondary" id="skinClearBtn" type="button">LIMPIAR HOJA</button>
+        <button class="btn" id="skinUseBtn" type="button">USAR ESTA SKIN</button>
+        <button class="btn secondary" id="skinOffBtn" type="button">VOLVER AL CUERPO</button>
+        <button class="btn secondary" id="skinCloseBtn" type="button">CERRAR</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2330,6 +2353,49 @@ function makePerson(colorBody, colorHead) {
 const playerAvatar = makePerson(0x3f6212, 0xe0ac69);
 playerAvatar.visible = false;
 scene.add(playerAvatar);
+playerAvatar.traverse(o => { if (o.isMesh) o.userData.cuerpoBase = true; });
+const SKIN_KEY = 'tim_player_skin';
+let playerSkinOn = false, playerSkinBoard = null, playerSkinMat = null;
+function asegurarSkinBoard() {
+  if (playerSkinBoard) return;
+  playerSkinMat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.06, side: THREE.DoubleSide, depthWrite: true });
+  playerSkinBoard = new THREE.Mesh(new THREE.PlaneGeometry(1.24, 1.9), playerSkinMat);
+  playerSkinBoard.visible = false;
+  scene.add(playerSkinBoard);
+}
+function mostrarCuerpoBase(on) {
+  playerAvatar.traverse(o => { if (o.userData && o.userData.cuerpoBase) o.visible = on; });
+}
+function aplicarSkinDibujada(dataUrl) {
+  asegurarSkinBoard();
+  playerSkinOn = !!dataUrl;
+  if (!dataUrl) {
+    playerSkinBoard.visible = false;
+    if (playerSkinMat.map) { playerSkinMat.map.dispose(); playerSkinMat.map = null; playerSkinMat.needsUpdate = true; }
+    mostrarCuerpoBase(true);
+    return;
+  }
+  const img = new Image();
+  img.onload = () => {
+    const tex = new THREE.Texture(img);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    if (playerSkinMat.map) playerSkinMat.map.dispose();
+    playerSkinMat.map = tex;
+    playerSkinMat.needsUpdate = true;
+    mostrarCuerpoBase(false);
+  };
+  img.src = dataUrl;
+}
+function colocarSkinDibujada() {
+  if (!playerSkinBoard) return;
+  const ver = !!(playerSkinOn && playerAvatar.visible);
+  playerSkinBoard.visible = ver;
+  if (!ver) return;
+  playerSkinBoard.position.set(playerAvatar.position.x, playerAvatar.position.y + 0.96, playerAvatar.position.z);
+  playerSkinBoard.lookAt(camera.position.x, playerSkinBoard.position.y, camera.position.z);
+}
+try { const guardada = localStorage.getItem(SKIN_KEY); if (guardada) aplicarSkinDibujada(guardada); } catch (e) {}
 
 // ===================================================================
 //  ARMADURA ESTILO MINECRAFT (casco, peto, hombreras, grebas y botas)
@@ -2444,7 +2510,7 @@ function updatePlayerCamera(dt) {
     encuadrarCondena(dt);
     return;
   }
-  if (state.cinematic) { playerAvatar.visible = false; viewmodel.visible = false; return; }
+  if (state.cinematic) { playerAvatar.visible = false; viewmodel.visible = false; if (playerSkinBoard) playerSkinBoard.visible = false; return; }
   viewmodel.visible = cameraMode === 0;
   playerAvatar.visible = (cameraMode !== 0 || mirrorNear) && !state.driving && !state.riding;   // frente a un espejo se muestra tu cuerpo para que te veas
   // El cuerpo acompaña al jugador SIEMPRE (en 1ª persona sirve para verte en el espejo).
@@ -2475,6 +2541,7 @@ function updatePlayerCamera(dt) {
       else swingLimbs(playerAvatar, dt || 0.016);
     }
   }
+  colocarSkinDibujada();
   if (cameraMode === 0) {
     camera.position.copy(player.position);
     camera.rotation.set(pitch, yaw, 0);
@@ -17134,6 +17201,101 @@ ui('thiefModeBtn').onclick = () => {
     ? '🟠 Modo ladrón en SÍ. Al continuar o empezar, en el súper puedes comprar el traje, el gorro y el hacker.'
     : 'Modo ladrón en NO. El mundo queda normal: sin traje, sin gorro y sin hacker.');
 };
+(function iniciarEditorSkin() {
+  const canvas = ui('skinCanvas'), box = ui('skinbox');
+  if (!canvas || !box) return;
+  const ctx = canvas.getContext('2d');
+  const colores = ['#1c1917', '#f8fafc', '#ef4444', '#f97316', '#facc15', '#22c55e', '#38bdf8', '#2563eb', '#a855f7', '#ec4899', '#e7b894', '#8b5a2b', '#3f6212', '#94a3b8'];
+  let color = '#ef4444', herramienta = 'lapiz', dibujando = false, previo = null;
+  const botones = [];
+  for (const c of colores) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-label', 'Color ' + c);
+    b.style.cssText = 'width:28px;height:28px;border-radius:8px;border:2px solid #0f172a;background:' + c + ';cursor:pointer;pointer-events:all;padding:0;';
+    b.onclick = () => {
+      color = c; herramienta = 'lapiz'; pintarHerramienta();
+      for (const o of botones) o.style.outline = o === b ? '2px solid #f8fafc' : 'none';
+    };
+    ui('skinColors').appendChild(b);
+    botones.push(b);
+  }
+  if (botones[2]) botones[2].style.outline = '2px solid #f8fafc';
+  function pintarHerramienta() {
+    ui('skinPencilBtn').style.outline = herramienta === 'lapiz' ? '2px solid #facc15' : 'none';
+    ui('skinEraseBtn').style.outline = herramienta === 'borrar' ? '2px solid #facc15' : 'none';
+  }
+  function grosor() { return Number(ui('skinSize').value) || 10; }
+  ui('skinSize').oninput = () => { ui('skinSizeVal').textContent = String(grosor()); };
+  function posDe(e) {
+    const r = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - r.left) * canvas.width / Math.max(1, r.width),
+      y: (e.clientY - r.top) * canvas.height / Math.max(1, r.height),
+    };
+  }
+  function trazo(hasta) {
+    if (!previo) previo = hasta;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = grosor();
+    if (herramienta === 'borrar') { ctx.globalCompositeOperation = 'destination-out'; ctx.strokeStyle = 'rgba(0,0,0,1)'; }
+    else { ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = color; }
+    ctx.beginPath();
+    ctx.moveTo(previo.x, previo.y);
+    ctx.lineTo(hasta.x, hasta.y);
+    ctx.stroke();
+    ctx.restore();
+    previo = hasta;
+  }
+  canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    dibujando = true;
+    previo = posDe(e);
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    trazo(previo);
+  });
+  canvas.addEventListener('pointermove', (e) => { if (!dibujando) return; e.preventDefault(); trazo(posDe(e)); });
+  const soltar = () => { dibujando = false; previo = null; };
+  canvas.addEventListener('pointerup', soltar);
+  canvas.addEventListener('pointercancel', soltar);
+  function cargarGuardada() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let url = '';
+    try { url = localStorage.getItem(SKIN_KEY) || ''; } catch (e) {}
+    if (!url) return;
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    img.src = url;
+  }
+  function hojaVacia() {
+    const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let i = 3; i < px.length; i += 16) if (px[i] > 10) return false;
+    return true;
+  }
+  ui('skinModeBtn').onclick = () => { cargarGuardada(); pintarHerramienta(); box.style.display = 'flex'; };
+  ui('skinPencilBtn').onclick = () => { herramienta = 'lapiz'; pintarHerramienta(); };
+  ui('skinEraseBtn').onclick = () => { herramienta = 'borrar'; pintarHerramienta(); };
+  ui('skinClearBtn').onclick = () => ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ui('skinCloseBtn').onclick = () => { box.style.display = 'none'; };
+  ui('skinUseBtn').onclick = () => {
+    if (hojaVacia()) { toast('Dibuja algo con el lápiz. Si la hoja está vacía, no hay skin.'); return; }
+    const url = canvas.toDataURL('image/png');
+    try { localStorage.setItem(SKIN_KEY, url); }
+    catch (e) { toast('No se pudo guardar el dibujo'); return; }
+    aplicarSkinDibujada(url);
+    toast('✏️ Esa es tu skin. Con F5, en tercera persona, se ve tu dibujo.');
+    box.style.display = 'none';
+  };
+  ui('skinOffBtn').onclick = () => {
+    try { localStorage.removeItem(SKIN_KEY); } catch (e) {}
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    aplicarSkinDibujada(null);
+    toast('Volviste al cuerpo de siempre.');
+  };
+  pintarHerramienta();
+})();
 function openNamebox(mode) {
   pendingMode = mode;
   ui('namebox').style.display = 'flex';
