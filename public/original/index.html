@@ -4804,12 +4804,12 @@ function sentarPersona(p, x, y, z, haciaY) {
 const BANK_POS = new THREE.Vector3(LUGARES.banco.x, 0, LUGARES.banco.z);
 const BANK = { x: LUGARES.banco.x, z: LUGARES.banco.z, w: 20, d: 11, h: 6.4, t: .6 };
 BANK.frente = BANK.z + BANK.d / 2;   // la puerta mira al norte, hacia la avenida
-BANK.boveda = { puertaX: BANK.x - 7.6, puertaZ: BANK.z - BANK.d / 2, puertaAncho: 2.8, gracia: 45 };
+BANK.boveda = { puertaX: BANK.x - 7.6, puertaZ: BANK.z - BANK.d / 2, puertaAncho: 3.2, gracia: 45 };
 let bankTeller = null;
 const bankAtms = [];
 const bankStaff = [];
 let bankVaultDoor = null;
-const bankHeist = { ready: false, open: false, hack: 0, door: null, doorHome: null, obs: null, spot: null, drawers: [], diamonds: [], sala: null, doorSlide: 2.6 };
+const bankHeist = { ready: false, open: false, hack: 0, door: null, doorHome: null, obs: null, spot: null, drawers: [], diamonds: [], sala: null, doorSwing: -1.72 };
 const busPosters = [];
 let posterMaterial = null;
 function buildBank() {
@@ -4943,12 +4943,13 @@ function buildBank() {
     if (i < 2) edifCaja(px + 1.5, .95, frente - 3, 3, .07, .07, 0xdc2626, 'banco', false, { sombra: false });
   }
   mcTree(scene, cx - w / 2 + 2.4, frente - 2.2, 2.6, 0x2f7d32);
-  // Lámparas del cielo: dos luces reales (como en el súper) y el resto emisivo
-  for (const sx of [-5, 5]) {
-    edifCaja(cx + sx, h - .5, cz, .12, 1, .12, 0x9ca3af, 'banco', false);
-    edifCaja(cx + sx, h - 1.1, cz, 1.6, .25, 1.6, 0xfff3c4, 'banco', false,
-      { material: new THREE.MeshStandardMaterial({ color: 0xfff3c4, emissive: 0xfde68a, emissiveIntensity: .8 }), sombra: false });
-    if (!preferLowPerf) { const pl = new THREE.PointLight(0xfff4cf, .6, 18, 2); pl.position.set(cx + sx, h - 1.5, cz); scene.add(pl); }
+  // Lámparas del hall. El banco queda claro de día: entrada, mesón y la puerta de la bóveda.
+  const lamparaBanco = new THREE.MeshStandardMaterial({ color: 0xfff7d6, emissive: 0xfff3c4, emissiveIntensity: 2.5 });
+  for (const [lx, lz] of [[cx - 4.2, cz + 0.4], [cx + 4.2, cz + 0.6], [cx, frente - 2.4], [puertaX + 0.2, fondo + 1.35]]) {
+    edifCaja(lx, h - .5, lz, .12, 1, .12, 0x9ca3af, 'banco', false);
+    edifCaja(lx, h - 1.15, lz, 2.1, .2, 1.5, 0xfff7d6, 'banco', false, { material: lamparaBanco, sombra: false });
+    const pl = new THREE.PointLight(0xfff6df, 2.35, 32, 1.25);
+    pl.position.set(lx, h - 1.55, lz); scene.add(pl);
   }
   prepararRoboBanco();
 }
@@ -5454,42 +5455,83 @@ function abrirBoveda() {
     if (i >= 0) obstacles.splice(i, 1);
     bankHeist.obs = null;
   }
-  if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.x = bankHeist.doorHome.x + bankHeist.doorSlide;
+  ponerHojaBoveda(true);
   beep(520, .1, .05);
   toast('💻 Puerta abierta. Entra a la sala y abre los cajones de las paredes · $1000 · son 20.');
   iniciarPersecucionBanco();
 }
+function hacerPuertaMetalBoveda(puertaX, puertaZ, ancho) {
+  const alto = 4.05, grosor = 0.5, hojaAncho = ancho - 0.06;
+  const g = new THREE.Group();
+  g.position.set(puertaX + ancho / 2 - 0.04, 0, puertaZ);
+  const acero = new THREE.MeshStandardMaterial({ color: 0xd5dde4, roughness: 0.28, metalness: 0.88, emissive: 0x334155, emissiveIntensity: 0.18 });
+  const oscuro = new THREE.MeshStandardMaterial({ color: 0x526072, roughness: 0.38, metalness: 0.74 });
+  const hoja = new THREE.Mesh(smoothBox(hojaAncho, alto, grosor), acero);
+  hoja.position.set(-hojaAncho / 2, alto / 2 + 0.06, 0); hoja.castShadow = true; g.add(hoja);
+  for (const y of [0.7, alto * 0.52, alto - 0.28]) {
+    const banda = new THREE.Mesh(smoothBox(hojaAncho + 0.04, 0.18, grosor + 0.08), oscuro);
+    banda.position.set(-hojaAncho / 2, y, 0); g.add(banda);
+  }
+  for (const y of [1.15, 2.15, 3.25]) for (const lx of [-hojaAncho + 0.38, -0.42]) {
+    const remache = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), oscuro);
+    remache.position.set(lx, y, grosor / 2 + 0.05); g.add(remache);
+  }
+  for (const y of [0.85, 2.15, 3.45]) {
+    const bis = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.62, 8), oscuro);
+    bis.position.set(0.02, y, 0); g.add(bis);
+  }
+  const palanca = new THREE.Group();
+  palanca.position.set(-hojaAncho * 0.46, 1.62, grosor / 2 + 0.1);
+  const eje = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.18, 8), mat(0xfacc15));
+  eje.rotation.x = Math.PI / 2; palanca.add(eje);
+  const barra = new THREE.Mesh(smoothBox(0.14, 1.15, 0.12), mat(0xf59e0b));
+  barra.position.y = 0.5; palanca.add(barra);
+  const pomo = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), mat(0xfacc15));
+  pomo.position.y = 1.12; palanca.add(pomo);
+  g.add(palanca);
+  g.userData.palanca = palanca;
+  palanca.rotation.z = 1.2;
+  return g;
+}
+function ponerHojaBoveda(abierta) {
+  const door = bankHeist.door;
+  if (!door) return;
+  door.rotation.y = abierta ? bankHeist.doorSwing : 0;
+  if (door.userData.palanca) door.userData.palanca.rotation.z = abierta ? -0.2 : 1.2;
+}
 function construirSalaBoveda() {
   const { puertaX, puertaZ, puertaAncho } = BANK.boveda;
-  const vt = 0.42, alto = 5.2, acero = 0x4b5563;
+  const vt = 0.42, alto = 5.2, acero = 0x6b7280;
+  const profundidad = 12.8;
   const north = puertaZ - BANK.t / 2;
-  const south = north - 8.6;
+  const south = north - profundidad;
   const west = BANK.x - BANK.w / 2 + BANK.t + 0.25;
-  const east = BANK.x + 5.2;
+  const east = BANK.x + 8.6;
   bankHeist.sala = { minX: west, maxX: east, minZ: south, maxZ: north + 0.35 };
   const muro = (x, z, w, d) => edifCaja(x, alto / 2, z, w, alto, d, acero, 'banco', true);
   const oesteTope = north - 0.55;
   muro(west - vt / 2, (oesteTope + south) / 2, vt, Math.max(0.4, oesteTope - south));
   muro(east + vt / 2, (north + south) / 2, vt, north - south);
   muro((west + east) / 2, south - vt / 2, east - west + vt * 2, vt);
-  edifCaja(puertaX - puertaAncho / 2 - 0.14, 1.7, puertaZ, 0.28, 3.5, 0.72, 0x334155, 'banco', false);
-  edifCaja(puertaX + puertaAncho / 2 + 0.14, 1.7, puertaZ, 0.28, 3.5, 0.72, 0x334155, 'banco', false);
-  const g = new THREE.Group();
-  g.position.set(puertaX, 0, puertaZ);
-  const hoja = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.38, 24), mat(0x94a3b8));
-  hoja.rotation.x = Math.PI / 2; hoja.position.y = 1.62; hoja.castShadow = true; g.add(hoja);
-  const rueda = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.07, 8, 16), mat(0xfacc15));
-  rueda.position.set(0, 1.62, 0.26); g.add(rueda);
+  edifCaja(puertaX - puertaAncho / 2 - 0.24, 2.2, puertaZ, 0.4, 4.45, 0.78, 0x475569, 'banco', false);
+  edifCaja(puertaX + puertaAncho / 2 + 0.24, 2.2, puertaZ, 0.4, 4.45, 0.78, 0x475569, 'banco', false);
+  edifCaja(puertaX, 4.5, puertaZ, puertaAncho + 0.9, 0.46, 0.8, 0x475569, 'banco', false);
+  const g = hacerPuertaMetalBoveda(puertaX, puertaZ, puertaAncho);
   scene.add(g);
   bankVaultDoor = g;
-  const cartelB = makeSign('BOVEDA', 0xcbd5e1); cartelB.scale.set(.28, .28, .28);
-  cartelB.position.set(puertaX, 3.55, puertaZ + 0.7); scene.add(cartelB);
-  mcFloor(scene, (west + east) / 2, (north + south) / 2, east - west - 0.2, north - south - 0.2, 0x1f2937, 0.04);
-  const techo = new THREE.Mesh(smoothBox(east - west + vt, 0.28, north - south + vt), mat(0x374151));
-  techo.position.set((west + east) / 2, alto - 0.1, (north + south) / 2); scene.add(techo);
-  if (!preferLowPerf) {
-    const pl = new THREE.PointLight(0xdbeafe, 0.7, 16, 2);
-    pl.position.set((west + east) / 2, alto - 0.8, (north + south) / 2); scene.add(pl);
+  const cartelB = makeSign('BOVEDA', 0xe2e8f0); cartelB.scale.set(.34, .34, .34);
+  cartelB.position.set(puertaX, 5.05, puertaZ + 0.85); scene.add(cartelB);
+  const mitadX = (west + east) / 2, mitadZ = (north + south) / 2;
+  addNoGrassZone(mitadX, mitadZ, east - west + 1.4, north - south + 1.4);
+  mcFloor(scene, mitadX, mitadZ, east - west - 0.2, north - south - 0.2, 0x374151, 0.04);
+  const techo = new THREE.Mesh(smoothBox(east - west + vt, 0.28, north - south + vt), mat(0x4b5563));
+  techo.position.set(mitadX, alto - 0.1, mitadZ); scene.add(techo);
+  const panelLuz = new THREE.MeshStandardMaterial({ color: 0xfff7d6, emissive: 0xfff4cf, emissiveIntensity: 2.8 });
+  for (const [lx, lz] of [[puertaX, north - 2.2], [mitadX, mitadZ], [mitadX, south + 2.4]]) {
+    const panel = new THREE.Mesh(smoothBox(2.4, 0.1, 1.15), panelLuz);
+    panel.position.set(lx, alto - 0.38, lz); scene.add(panel);
+    const pl = new THREE.PointLight(0xfff6e8, 2.8, 26, 1.15);
+    pl.position.set(lx, alto - 0.85, lz); scene.add(pl);
   }
 }
 function prepararRoboBanco() {
@@ -5677,11 +5719,11 @@ function restaurarRoboBanco() {
   if (!bankHeist.ready) return;
   if (state.bankVaultOpen) {
     if (!bankHeist.open) abrirBovedaSilencio();
-  } else if (bankHeist.open || (bankHeist.door && bankHeist.doorHome && Math.abs(bankHeist.door.position.x - bankHeist.doorHome.x) > 0.2)) {
+  } else if (bankHeist.open || (bankHeist.door && Math.abs(bankHeist.door.rotation.y) > 0.15)) {
     bankHeist.open = false;
     bankHeist.hack = 0;
-    if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.copy(bankHeist.doorHome);
-    if (!bankHeist.obs && bankHeist.doorHome) ponerPuertaBovedaSolida();
+    ponerHojaBoveda(false);
+    if (!bankHeist.obs) ponerPuertaBovedaSolida();
   }
   for (const d of bankHeist.drawers) correrCajon(d, false);
   const looted = new Set(state.bankLooted || []);
@@ -5697,7 +5739,7 @@ function abrirBovedaSilencio() {
     if (i >= 0) obstacles.splice(i, 1);
     bankHeist.obs = null;
   }
-  if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.x = bankHeist.doorHome.x + bankHeist.doorSlide;
+  ponerHojaBoveda(true);
 }
 function resetRoboBanco() {
   state.thief = { naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false };
@@ -5712,8 +5754,8 @@ function resetRoboBanco() {
   if (!bankHeist.ready) { applyThiefLook(); return; }
   bankHeist.open = false;
   bankHeist.hack = 0;
-  if (bankHeist.door && bankHeist.doorHome) bankHeist.door.position.copy(bankHeist.doorHome);
-  if (!bankHeist.obs && bankHeist.doorHome) ponerPuertaBovedaSolida();
+  ponerHojaBoveda(false);
+  if (!bankHeist.obs) ponerPuertaBovedaSolida();
   for (const d of bankHeist.drawers) correrCajon(d, false);
   for (const p of bankStaff) {
     p.userData.dead = false;
