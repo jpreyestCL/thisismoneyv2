@@ -2607,9 +2607,11 @@ function mostrarAvatarOriginal() {
   if (manga) manga.visible = true;
   if (puno) puno.visible = true;
   if (playerSkinRig) for (const m of playerSkinRig.mallas) m.visible = false;
+  soltarManosPiel();
   if (typeof applyThiefLook === 'function') applyThiefLook();
 }
 function tirarPiel() {
+  soltarManosPiel();
   if (!playerSkinRig) return;
   for (const obj of playerSkinRig.partes) {
     if (obj.parent) obj.parent.remove(obj);
@@ -2631,8 +2633,8 @@ function girarPiezaPiel(grupo, eje, anguloX, anguloZ) {
 function montarPiel(canvas, corte) {
   tirarPiel();
   const mallas = [], partesRig = [], huesos = {}, extremos = {};
-  const material = (fondo) => {
-    const mat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.08, side: THREE.DoubleSide, depthWrite: true });
+  const material = (fondo, lado) => {
+    const mat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.08, side: lado == null ? THREE.DoubleSide : lado, depthWrite: true });
     if (fondo) { mat.polygonOffset = true; mat.polygonOffsetFactor = 2; mat.polygonOffsetUnits = 2; }
     return mat;
   };
@@ -2671,8 +2673,14 @@ function montarPiel(canvas, corte) {
   const torso = recortarPiel(canvas, predTorso);
   if (torso) {
     const centro = corte.aMundo((torso.minX + torso.maxX + 1) / 2, (torso.minY + torso.maxY + 1) / 2);
-    poner(torso, playerAvatar, { x: 0, y: 0 }, 0.12, 1, true).position.set(centro.x, centro.y, 0.12);
-    partesRig.push(mallas[mallas.length - 1]);
+    const frente = poner(torso, playerAvatar, { x: 0, y: 0 }, 0.12, 1, true);
+    frente.position.set(centro.x, centro.y, 0.14);
+    frente.material.side = THREE.FrontSide;
+    const espalda = { canvas: espaldaSinCara(torso.canvas), minX: torso.minX, minY: torso.minY, maxX: torso.maxX, maxY: torso.maxY };
+    const atras = poner(espalda, playerAvatar, { x: 0, y: 0 }, 0.12, 1, true);
+    atras.position.set(centro.x, centro.y, 0.1);
+    atras.material.side = THREE.BackSide;
+    partesRig.push(frente, atras);
   }
   const miembro = (nombre, z) => {
     const p = corte.partes[nombre];
@@ -2688,39 +2696,98 @@ function montarPiel(canvas, corte) {
     playerAvatar.add(g);
     partesRig.push(g);
     huesos[nombre] = g;
-    const esExt = (x, y) => corte.extremo[y * corte.w + x] === id;
     const solapa = (x, y) => {
       if (corte.marca[y * corte.w + x] !== 1) return false;
       if (nombre === 'armL') return y >= p.minY && y <= p.maxY && x > p.maxX && x <= p.maxX + 5;
       if (nombre === 'armR') return y >= p.minY && y <= p.maxY && x < p.minX && x >= p.minX - 5;
       return y < p.minY && y >= p.minY - 5 && x >= p.minX && x <= p.maxX;
     };
-    const hay = !!corte.tieneExtremo[nombre];
-    const resto = recortarPiel(canvas, (x, y) => {
-      const i = y * corte.w + x;
-      if (corte.marca[i] === id) {
-        if (!hay || !esExt(x, y)) return true;
-        return Math.hypot(x + 0.5 - p.sx, y + 0.5 - p.sy) <= p.corteD + 3;
-      }
-      return solapa(x, y);
-    });
-    if (resto) poner(resto, g, piv, z, 3, false);
-    if (!hay || !p.muneca) return;
-    const ext = recortarPiel(canvas, (x, y) => corte.marca[y * corte.w + x] === id && esExt(x, y));
-    if (!ext) return;
-    const wrist = corte.aMundo(p.muneca.x, p.muneca.y);
-    const ex = new THREE.Group();
-    ex.position.set(wrist.x - piv.x, wrist.y - piv.y, 0);
-    ex.userData.eje = g.userData.eje;
-    g.add(ex);
-    extremos[nombre] = ex;
-    poner(ext, ex, wrist, z + 0.02, 4, false);
+    const pieza = recortarPiel(canvas, (x, y) => corte.marca[y * corte.w + x] === id || solapa(x, y));
+    if (pieza) poner(pieza, g, piv, z, 3, false);
   };
   miembro('armL', 0.2);
   miembro('armR', 0.2);
   miembro('legL', 0.18);
   miembro('legR', 0.18);
   playerSkinRig = { mallas, partes: partesRig, huesos, extremos };
+  montarManosPiel(huesos);
+}
+function espaldaSinCara(src) {
+  const w = src.width, h = src.height;
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(src, 0, 0);
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  const y1 = Math.max(1, Math.round(h * 0.24));
+  const x0 = Math.round(w * 0.3), x1 = Math.round(w * 0.7);
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let y = y1; y < Math.min(h, y1 + 5); y++) for (let x = x0; x < x1; x++) {
+    const i = (y * w + x) * 4;
+    if (d[i + 3] < 28) continue;
+    r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+  }
+  if (!n) return out;
+  r = Math.round(r / n); g = Math.round(g / n); b = Math.round(b / n);
+  for (let y = 0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    const i = (y * w + x) * 4;
+    if (d[i + 3] < 28) continue;
+    d[i] = r; d[i + 1] = g; d[i + 2] = b;
+  }
+  ctx.putImageData(img, 0, 0);
+  return out;
+}
+function asegurarManosPiel() {
+  if (viewmodel.userData.manosPiel) return viewmodel.userData.manosPiel;
+  const grupo = new THREE.Group();
+  const plano = (x, z) => {
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.28, 0.72),
+      new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.08, side: THREE.FrontSide, depthWrite: false })
+    );
+    m.position.set(x, -0.02, z);
+    m.visible = false;
+    m.userData.piezaSkin = true;
+    grupo.add(m);
+    return m;
+  };
+  const der = plano(0.02, -0.22);
+  const izq = plano(-0.86, -0.16);
+  viewmodel.add(grupo);
+  viewmodel.userData.manosPiel = { grupo, der, izq };
+  return viewmodel.userData.manosPiel;
+}
+function texturaDelHueso(hueso) {
+  let tex = null;
+  if (!hueso) return null;
+  hueso.traverse(o => { if (o.isMesh && o.material && o.material.map) tex = o.material.map; });
+  return tex;
+}
+function montarManosPiel(huesos) {
+  const manos = asegurarManosPiel();
+  const poner = (mesh, tex) => {
+    mesh.material.map = tex || null;
+    mesh.material.needsUpdate = true;
+    mesh.visible = !!tex;
+  };
+  poner(manos.der, texturaDelHueso(huesos.armR));
+  poner(manos.izq, texturaDelHueso(huesos.armL));
+  manos.grupo.visible = false;
+}
+function soltarManosPiel() {
+  const manos = viewmodel.userData.manosPiel;
+  if (!manos) return;
+  manos.grupo.visible = false;
+  manos.der.material.map = null;
+  manos.izq.material.map = null;
+  manos.der.visible = false;
+  manos.izq.visible = false;
+}
+function pielEnElAire() {
+  if (creativeFlying || state.jetOn) return true;
+  if (state.driving && car && car.helicopter) return true;
+  return !grounded && !state.inWater;
 }
 function aplicarSkinDibujada(dataUrl) {
   if (!dataUrl) {
@@ -2746,20 +2813,34 @@ function aplicarSkinDibujada(dataUrl) {
 }
 function colocarSkinDibujada() {
   if (playerSkinOn) ocultarCuerpoPorSkin();
+  const manos = viewmodel.userData.manosPiel;
+  if (manos) {
+    const verManos = !!(playerSkinOn && cameraMode === 0 && (manos.der.visible || manos.izq.visible));
+    manos.grupo.visible = verManos;
+    if (verManos) {
+      const aire = pielEnElAire();
+      const fase = playerAvatar.userData.walkPhase || 0;
+      const paso = aire ? 0 : Math.sin(fase) * 0.14;
+      const alza = aire ? 0.07 : 0;
+      manos.der.rotation.z = -0.18 + paso;
+      manos.izq.rotation.z = 0.18 - paso;
+      manos.der.position.y = -0.02 + alza;
+      manos.izq.position.y = -0.02 + alza;
+    }
+  }
   if (!playerSkinRig) return;
   const mostrar = !!(playerSkinOn && playerAvatar.visible);
   for (const m of playerSkinRig.mallas) m.visible = mostrar;
   if (!mostrar) return;
   const l = playerAvatar.userData.limbs;
   if (!l) return;
+  const aire = pielEnElAire();
+  const salto = { armL: -0.32, armR: -0.32, legL: -0.4, legR: -0.4 };
   for (const nombre of ['armL', 'armR', 'legL', 'legR']) {
     const h = l[nombre], g = playerSkinRig.huesos[nombre];
     if (!h || !g || !g.userData.eje) continue;
-    girarPiezaPiel(g, g.userData.eje, h.rotation.x, h.rotation.z);
-    const ex = playerSkinRig.extremos[nombre];
-    if (!ex || !ex.userData.eje) continue;
-    const extra = Math.max(-0.9, Math.min(0.9, h.rotation.x * 0.85));
-    girarPiezaPiel(ex, ex.userData.eje, extra, 0);
+    if (aire) girarPiezaPiel(g, g.userData.eje, salto[nombre], 0);
+    else girarPiezaPiel(g, g.userData.eje, h.rotation.x, h.rotation.z);
   }
 }
 try { const guardada = localStorage.getItem(SKIN_KEY); if (guardada) aplicarSkinDibujada(guardada); } catch (e) {}
