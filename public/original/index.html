@@ -856,7 +856,7 @@
 <div id="skinbox" style="position:fixed; inset:0; display:none; z-index:40; background:rgba(2,6,23,.92); align-items:center; justify-content:center; pointer-events:all;">
   <div style="width:min(96vw,760px); max-height:94vh; overflow:auto; background:#07111f; border:3px solid #38bdf8; border-radius:18px; padding:14px; color:#e2e8f0; text-align:left;">
     <h2 style="margin:0 0 4px; color:#7dd3fc;">✏️ DIBUJA TU SKIN</h2>
-    <p style="margin:0 0 10px; font-size:13px; opacity:.82;">Usa el lápiz. Si sale chueca, igual cuenta: esa forma es tu skin. Puedes volver a pintarla y cambiarle los colores.</p>
+    <p style="margin:0 0 10px; font-size:13px; opacity:.82;">Dibuja el cuerpo entero, con brazos y piernas. La cara puede ser dos puntos y una sonrisa, o no tener. Queda de tu misma altura y de la forma que dibujaste. Con F5, al caminar se mueven las manos y los pies.</p>
     <div style="display:flex; gap:14px; flex-wrap:wrap; align-items:flex-start;">
       <canvas id="skinCanvas" width="300" height="460" style="width:min(72vw,300px); height:auto; background:repeating-conic-gradient(#0b1220 0% 25%, #1e293b 0% 50%) 50% / 16px 16px; border-radius:12px; border:2px solid #334155; touch-action:none; cursor:crosshair;"></canvas>
       <div style="flex:1; min-width:200px; display:flex; flex-direction:column; gap:8px;">
@@ -2355,45 +2355,405 @@ playerAvatar.visible = false;
 scene.add(playerAvatar);
 playerAvatar.traverse(o => { if (o.isMesh) o.userData.cuerpoBase = true; });
 const SKIN_KEY = 'tim_player_skin';
-let playerSkinOn = false, playerSkinBoard = null, playerSkinMat = null;
-function asegurarSkinBoard() {
-  if (playerSkinBoard) return;
-  playerSkinMat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.06, side: THREE.DoubleSide, depthWrite: true });
-  playerSkinBoard = new THREE.Mesh(new THREE.PlaneGeometry(1.24, 1.9), playerSkinMat);
-  playerSkinBoard.visible = false;
-  scene.add(playerSkinBoard);
-}
-function mostrarCuerpoBase(on) {
-  playerAvatar.traverse(o => { if (o.userData && o.userData.cuerpoBase) o.visible = on; });
-}
-function aplicarSkinDibujada(dataUrl) {
-  asegurarSkinBoard();
-  playerSkinOn = !!dataUrl;
-  if (!dataUrl) {
-    playerSkinBoard.visible = false;
-    if (playerSkinMat.map) { playerSkinMat.map.dispose(); playerSkinMat.map = null; playerSkinMat.needsUpdate = true; }
-    mostrarCuerpoBase(true);
-    return;
+const SKIN_ALTO = 2.16;
+const EJE_Z_PIEL = new THREE.Vector3(0, 0, 1);
+const pielQ1 = new THREE.Quaternion();
+const pielQ2 = new THREE.Quaternion();
+let playerSkinOn = false, playerSkinRig = null;
+function medirDibujo(data, w, h) {
+  const opaco = (x, y) => data[(y * w + x) * 4 + 3] > 28;
+  let minX = w, minY = h, maxX = -1, maxY = -1, n = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!opaco(x, y)) continue;
+    n++;
+    if (x < minX) minX = x; if (y < minY) minY = y;
+    if (x > maxX) maxX = x; if (y > maxY) maxY = y;
   }
-  const img = new Image();
-  img.onload = () => {
-    const tex = new THREE.Texture(img);
+  if (n < 12 || maxX < minX) return { vacia: true, brazos: false, piernas: false, minX: 0, minY: 0, maxX: 0, maxY: 0, bw: 1, bh: 1 };
+  const bw = maxX - minX + 1, bh = maxY - minY + 1;
+  const torsoL = [], torsoR = [];
+  for (let y = minY; y <= maxY; y++) {
+    const t = (y - minY) / bh;
+    if (t < 0.34 || t > 0.6) continue;
+    let l = -1, r = -1;
+    for (let x = minX; x <= maxX; x++) if (opaco(x, y)) { if (l < 0) l = x; r = x; }
+    if (l >= 0) { torsoL.push(l); torsoR.push(r); }
+  }
+  torsoL.sort((a, b) => a - b); torsoR.sort((a, b) => a - b);
+  const L = torsoL.length ? torsoL[Math.floor(torsoL.length / 2)] : minX;
+  const R = torsoR.length ? torsoR[Math.floor(torsoR.length / 2)] : maxX;
+  let filasBrazo = 0;
+  for (let y = minY; y <= maxY; y++) {
+    const t = (y - minY) / bh;
+    if (t < 0.12 || t > 0.72) continue;
+    let l = -1, r = -1;
+    for (let x = minX; x <= maxX; x++) if (opaco(x, y)) { if (l < 0) l = x; r = x; }
+    if (l >= 0 && l < L - 3 && r > R + 3) filasBrazo++;
+  }
+  const y0 = Math.floor(minY + bh * 0.68);
+  const cols = new Array(bw).fill(0);
+  let altoZona = 0;
+  for (let y = y0; y <= maxY; y++) {
+    altoZona++;
+    for (let x = minX; x <= maxX; x++) if (opaco(x, y)) cols[x - minX]++;
+  }
+  const umbral = Math.max(2, altoZona * 0.45);
+  const tramos = [];
+  let ini = -1;
+  for (let i = 0; i <= cols.length; i++) {
+    const on = i < cols.length && cols[i] >= umbral;
+    if (on && ini < 0) ini = i;
+    else if (!on && ini >= 0) { tramos.push(i - ini); ini = -1; }
+  }
+  return { vacia: false, brazos: filasBrazo >= 2, piernas: tramos.filter(t => t >= 2).length >= 2, minX, minY, maxX, maxY, bw, bh };
+}
+// Parte el dibujo en torso, brazos y piernas. La cara se queda en el torso, de frente.
+// Cada extremidad gira con el mismo esqueleto, alrededor del eje que mueve la mano o el pie
+// hacia adelante: con F5, al caminar, se ven las manos y los pies.
+function clasificarPiel(data, w, h) {
+  const opaco = (x, y) => data[(y * w + x) * 4 + 3] > 28;
+  let minX = w, minY = h, maxX = -1, maxY = -1, n = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!opaco(x, y)) continue;
+    n++;
+    if (x < minX) minX = x; if (y < minY) minY = y;
+    if (x > maxX) maxX = x; if (y > maxY) maxY = y;
+  }
+  if (n < 12 || maxX < minX) return null;
+  const bw = maxX - minX + 1, bh = maxY - minY + 1;
+  const torsoL = [], torsoR = [];
+  for (let y = minY; y <= maxY; y++) {
+    const t = (y - minY) / bh;
+    if (t < 0.34 || t > 0.6) continue;
+    let l = -1, r = -1;
+    for (let x = minX; x <= maxX; x++) if (opaco(x, y)) { if (l < 0) l = x; r = x; }
+    if (l >= 0) { torsoL.push(l); torsoR.push(r); }
+  }
+  torsoL.sort((a, b) => a - b); torsoR.sort((a, b) => a - b);
+  const L = torsoL.length ? torsoL[Math.floor(torsoL.length / 2)] : minX;
+  const R = torsoR.length ? torsoR[Math.floor(torsoR.length / 2)] : maxX;
+  const yCabeza = Math.floor(minY + bh * 0.12);
+  const yPierna = Math.floor(minY + bh * 0.68);
+  const cols = new Array(bw).fill(0);
+  let altoZona = 0;
+  for (let y = yPierna; y <= maxY; y++) {
+    altoZona++;
+    for (let x = minX; x <= maxX; x++) if (opaco(x, y)) cols[x - minX]++;
+  }
+  const umbral = Math.max(2, altoZona * 0.45);
+  const runs = [];
+  let ini = -1;
+  for (let i = 0; i <= bw; i++) {
+    const on = i < bw && cols[i] >= umbral;
+    if (on && ini < 0) ini = i;
+    else if (!on && ini >= 0) { runs.push({ a: minX + ini, b: minX + i - 1 }); ini = -1; }
+  }
+  const hayPiernas = runs.filter(r => r.b - r.a + 1 >= 2).length >= 2;
+  let splitX = (L + R) / 2;
+  if (hayPiernas) splitX = (runs[0].b + runs[runs.length - 1].a) / 2;
+  const marca = new Uint8Array(w * h);
+  const extremo = new Uint8Array(w * h);
+  const box = () => ({ n: 0, minX: 1e9, minY: 1e9, maxX: -1, maxY: -1, pivote: null, muneca: null, punta: null, sx: 0, sy: 0, corteD: 0 });
+  const partes = { torso: box(), armL: box(), armR: box(), legL: box(), legR: box() };
+  const nombre = ['', 'torso', 'armL', 'armR', 'legL', 'legR'];
+  const margen = Math.max(4, Math.round((R - L) * 0.18));
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      if (!opaco(x, y)) continue;
+      let id = 1;
+      if (y >= yCabeza && x < L && y < yPierna) id = 2;
+      else if (y >= yCabeza && x > R && y < yPierna) id = 3;
+      else if (hayPiernas && y >= yPierna && x < L - margen) id = 2;
+      else if (hayPiernas && y >= yPierna && x > R + margen) id = 3;
+      else if (hayPiernas && y >= yPierna && x < splitX) id = 4;
+      else if (hayPiernas && y >= yPierna) id = 5;
+      marca[y * w + x] = id;
+      const p = partes[nombre[id]];
+      p.n++;
+      if (x < p.minX) p.minX = x; if (y < p.minY) p.minY = y;
+      if (x > p.maxX) p.maxX = x; if (y > p.maxY) p.maxY = y;
+    }
+  }
+  // Los muslos siguen el hueco entre las piernas hacia arriba, para que el pie
+  // gire desde la cadera y no solo desde la caña.
+  if (hayPiernas) {
+    const izq = runs[0], der = runs[runs.length - 1];
+    for (let y = yPierna - 1; y > minY; y--) {
+      if ((y - minY) / bh < 0.42) break;
+      let gap = true;
+      for (let x = izq.b + 1; x < der.a; x++) if (opaco(x, y)) { gap = false; break; }
+      if (!gap) break;
+      for (let x = izq.a; x <= izq.b; x++) if (opaco(x, y)) marca[y * w + x] = 4;
+      for (let x = der.a; x <= der.b; x++) if (opaco(x, y)) marca[y * w + x] = 5;
+    }
+    for (const k of Object.keys(partes)) { partes[k].n = 0; partes[k].minX = 1e9; partes[k].minY = 1e9; partes[k].maxX = -1; partes[k].maxY = -1; }
+    for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
+      const id = marca[y * w + x];
+      if (!id) continue;
+      const p = partes[nombre[id]];
+      p.n++;
+      if (x < p.minX) p.minX = x; if (y < p.minY) p.minY = y;
+      if (x > p.maxX) p.maxX = x; if (y > p.maxY) p.maxY = y;
+    }
+  }
+  const mediana = arr => { arr.sort((a, b) => a - b); return arr[Math.floor(arr.length / 2)]; };
+  const hombro = (p, id, lado) => {
+    if (p.n < 6) return null;
+    const franja = Math.max(2, Math.round(Math.max(1, p.maxX - p.minX) * 0.28));
+    const borde = lado < 0 ? p.maxX : p.minX;
+    const ys = [];
+    for (let y = p.minY; y <= p.maxY; y++) for (let x = p.minX; x <= p.maxX; x++) {
+      if (marca[y * w + x] !== id) continue;
+      if (lado < 0 ? x >= borde - franja : x <= borde + franja) ys.push(y);
+    }
+    return { x: borde + 0.5, y: (ys.length ? mediana(ys) : p.minY) + 0.5 };
+  };
+  const cadera = (p, id) => {
+    if (p.n < 6) return null;
+    const franja = Math.max(2, Math.round(Math.max(1, p.maxY - p.minY) * 0.22));
+    const xs = [];
+    for (let y = p.minY; y <= Math.min(p.maxY, p.minY + franja); y++) {
+      for (let x = p.minX; x <= p.maxX; x++) if (marca[y * w + x] === id) xs.push(x);
+    }
+    return { x: (xs.length ? mediana(xs) : (p.minX + p.maxX) / 2) + 0.5, y: p.minY + 0.5 };
+  };
+  partes.armL.pivote = hombro(partes.armL, 2, -1);
+  partes.armR.pivote = hombro(partes.armR, 3, 1);
+  partes.legL.pivote = cadera(partes.legL, 4);
+  partes.legR.pivote = cadera(partes.legR, 5);
+  const tieneExtremo = { armL: false, armR: false, legL: false, legR: false };
+  const marcarExtremo = (p, id, nombreP) => {
+    if (!p.pivote || p.n < 6) return;
+    const sx = p.pivote.x, sy = p.pivote.y;
+    const dist = [];
+    for (let y = p.minY; y <= p.maxY; y++) for (let x = p.minX; x <= p.maxX; x++) {
+      if (marca[y * w + x] !== id) continue;
+      dist.push(Math.hypot(x + 0.5 - sx, y + 0.5 - sy));
+    }
+    if (!dist.length) return;
+    dist.sort((a, b) => a - b);
+    const alcance = dist[Math.min(dist.length - 1, Math.floor(dist.length * 0.9))];
+    p.sx = sx; p.sy = sy; p.corteD = alcance * 0.62;
+    let cx = 0, cy = 0, cn = 0, minD = Infinity, lejos = 0, lx = sx, ly = sy;
+    for (let y = p.minY; y <= p.maxY; y++) for (let x = p.minX; x <= p.maxX; x++) {
+      if (marca[y * w + x] !== id) continue;
+      const d = Math.hypot(x + 0.5 - sx, y + 0.5 - sy);
+      if (d > lejos) { lejos = d; lx = x + 0.5; ly = y + 0.5; }
+      if (d < p.corteD) continue;
+      extremo[y * w + x] = id;
+      cx += x + 0.5; cy += y + 0.5; cn++;
+      if (d < minD) minD = d;
+    }
+    p.punta = cn >= 4 ? { x: cx / cn, y: cy / cn } : { x: lx, y: ly };
+    if (cn < 4 || alcance < 8) return;
+    const cdx = p.punta.x - sx, cdy = p.punta.y - sy;
+    const cd = Math.hypot(cdx, cdy) || 1;
+    const t = Math.min(1, minD / cd);
+    p.muneca = { x: sx + cdx * t, y: sy + cdy * t };
+    tieneExtremo[nombreP] = true;
+  };
+  marcarExtremo(partes.armL, 2, 'armL');
+  marcarExtremo(partes.armR, 3, 'armR');
+  marcarExtremo(partes.legL, 4, 'legL');
+  marcarExtremo(partes.legR, 5, 'legR');
+  const esc = SKIN_ALTO / bh;
+  const medio = (L + R) / 2;
+  return {
+    w, h, minX, minY, maxX, maxY, bw, bh, L, R, medio, esc, marca, extremo, partes, tieneExtremo,
+    aMundo(px, py) { return { x: (px - medio) * esc, y: (maxY + 1 - py) * esc }; }
+  };
+}
+function recortarPiel(canvas, pred) {
+  const w = canvas.width, h = canvas.height;
+  const src = canvas.getContext('2d').getImageData(0, 0, w, h).data;
+  let minX = w, minY = h, maxX = -1, maxY = -1, n = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (src[(y * w + x) * 4 + 3] <= 28 || !pred(x, y)) continue;
+    n++;
+    if (x < minX) minX = x; if (y < minY) minY = y;
+    if (x > maxX) maxX = x; if (y > maxY) maxY = y;
+  }
+  if (n < 4) return null;
+  const cw = maxX - minX + 1, ch = maxY - minY + 1;
+  const out = document.createElement('canvas');
+  out.width = cw; out.height = ch;
+  const dst = out.getContext('2d').createImageData(cw, ch);
+  for (let y = minY; y <= maxY; y++) for (let x = minX; x <= maxX; x++) {
+    if (!pred(x, y) || src[(y * w + x) * 4 + 3] <= 28) continue;
+    const s = (y * w + x) * 4, d = ((y - minY) * cw + (x - minX)) * 4;
+    dst.data[d] = src[s]; dst.data[d + 1] = src[s + 1]; dst.data[d + 2] = src[s + 2]; dst.data[d + 3] = src[s + 3];
+  }
+  out.getContext('2d').putImageData(dst, 0, 0);
+  return { canvas: out, minX, minY, maxX, maxY };
+}
+function ocultarCuerpoPorSkin() {
+  if (!playerSkinOn) return;
+  playerAvatar.traverse(o => { if (o.isMesh && !o.userData.piezaSkin) o.visible = false; });
+  const manga = viewmodel.children[0], puno = viewmodel.children[1];
+  if (manga) manga.visible = false;
+  if (puno) puno.visible = false;
+  if (viewmodel.userData.bracer) viewmodel.userData.bracer.visible = false;
+}
+function mostrarAvatarOriginal() {
+  playerAvatar.traverse(o => { if (o.isMesh && !o.userData.piezaSkin) o.visible = true; });
+  const manga = viewmodel.children[0], puno = viewmodel.children[1];
+  if (manga) manga.visible = true;
+  if (puno) puno.visible = true;
+  if (playerSkinRig) for (const m of playerSkinRig.mallas) m.visible = false;
+  if (typeof applyThiefLook === 'function') applyThiefLook();
+}
+function tirarPiel() {
+  if (!playerSkinRig) return;
+  for (const obj of playerSkinRig.partes) {
+    if (obj.parent) obj.parent.remove(obj);
+    obj.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        if (o.material.map) o.material.map.dispose();
+        o.material.dispose();
+      }
+    });
+  }
+  playerSkinRig = null;
+}
+function girarPiezaPiel(grupo, eje, anguloX, anguloZ) {
+  pielQ1.setFromAxisAngle(eje, anguloX);
+  pielQ2.setFromAxisAngle(EJE_Z_PIEL, anguloZ);
+  grupo.quaternion.copy(pielQ2).multiply(pielQ1);
+}
+function montarPiel(canvas, corte) {
+  tirarPiel();
+  const mallas = [], partesRig = [], huesos = {}, extremos = {};
+  const material = (fondo) => {
+    const mat = new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.08, side: THREE.DoubleSide, depthWrite: true });
+    if (fondo) { mat.polygonOffset = true; mat.polygonOffsetFactor = 2; mat.polygonOffsetUnits = 2; }
+    return mat;
+  };
+  const poner = (recorte, padre, pivote, z, orden, fondo) => {
+    const mat = material(fondo);
+    const tex = new THREE.CanvasTexture(recorte.canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.needsUpdate = true;
-    if (playerSkinMat.map) playerSkinMat.map.dispose();
-    playerSkinMat.map = tex;
-    playerSkinMat.needsUpdate = true;
-    mostrarCuerpoBase(false);
+    mat.map = tex;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(recorte.canvas.width * corte.esc, recorte.canvas.height * corte.esc), mat);
+    mesh.userData.piezaSkin = true;
+    mesh.castShadow = true;
+    mesh.renderOrder = orden;
+    const centro = corte.aMundo((recorte.minX + recorte.maxX + 1) / 2, (recorte.minY + recorte.maxY + 1) / 2);
+    mesh.position.set(centro.x - pivote.x, centro.y - pivote.y, z);
+    padre.add(mesh);
+    mallas.push(mesh);
+    return mesh;
+  };
+  const idDe = { armL: 2, armR: 3, legL: 4, legR: 5 };
+  const largoDe = (p) => {
+    if (!p || !p.pivote || !p.punta) return 0;
+    const a = corte.aMundo(p.pivote.x, p.pivote.y), b = corte.aMundo(p.punta.x, p.punta.y);
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  };
+  const seMonta = (p) => !!(p && p.n >= 6 && p.pivote && p.punta && largoDe(p) >= 0.04);
+  const predTorso = (x, y) => {
+    const id = corte.marca[y * corte.w + x];
+    if (id === 1) return true;
+    if (id === 2 && !seMonta(corte.partes.armL)) return true;
+    if (id === 3 && !seMonta(corte.partes.armR)) return true;
+    if (id === 4 && !seMonta(corte.partes.legL)) return true;
+    if (id === 5 && !seMonta(corte.partes.legR)) return true;
+    return false;
+  };
+  const torso = recortarPiel(canvas, predTorso);
+  if (torso) {
+    const centro = corte.aMundo((torso.minX + torso.maxX + 1) / 2, (torso.minY + torso.maxY + 1) / 2);
+    poner(torso, playerAvatar, { x: 0, y: 0 }, 0.12, 1, true).position.set(centro.x, centro.y, 0.12);
+    partesRig.push(mallas[mallas.length - 1]);
+  }
+  const miembro = (nombre, z) => {
+    const p = corte.partes[nombre];
+    const id = idDe[nombre];
+    if (!seMonta(p)) return;
+    const piv = corte.aMundo(p.pivote.x, p.pivote.y);
+    const punta = corte.aMundo(p.punta.x, p.punta.y);
+    const dx = punta.x - piv.x, dy = punta.y - piv.y;
+    const largo = Math.hypot(dx, dy);
+    const g = new THREE.Group();
+    g.position.set(piv.x, piv.y, 0);
+    g.userData.eje = new THREE.Vector3(-dy / largo, dx / largo, 0);
+    playerAvatar.add(g);
+    partesRig.push(g);
+    huesos[nombre] = g;
+    const esExt = (x, y) => corte.extremo[y * corte.w + x] === id;
+    const solapa = (x, y) => {
+      if (corte.marca[y * corte.w + x] !== 1) return false;
+      if (nombre === 'armL') return y >= p.minY && y <= p.maxY && x > p.maxX && x <= p.maxX + 5;
+      if (nombre === 'armR') return y >= p.minY && y <= p.maxY && x < p.minX && x >= p.minX - 5;
+      return y < p.minY && y >= p.minY - 5 && x >= p.minX && x <= p.maxX;
+    };
+    const hay = !!corte.tieneExtremo[nombre];
+    const resto = recortarPiel(canvas, (x, y) => {
+      const i = y * corte.w + x;
+      if (corte.marca[i] === id) {
+        if (!hay || !esExt(x, y)) return true;
+        return Math.hypot(x + 0.5 - p.sx, y + 0.5 - p.sy) <= p.corteD + 3;
+      }
+      return solapa(x, y);
+    });
+    if (resto) poner(resto, g, piv, z, 3, false);
+    if (!hay || !p.muneca) return;
+    const ext = recortarPiel(canvas, (x, y) => corte.marca[y * corte.w + x] === id && esExt(x, y));
+    if (!ext) return;
+    const wrist = corte.aMundo(p.muneca.x, p.muneca.y);
+    const ex = new THREE.Group();
+    ex.position.set(wrist.x - piv.x, wrist.y - piv.y, 0);
+    ex.userData.eje = g.userData.eje;
+    g.add(ex);
+    extremos[nombre] = ex;
+    poner(ext, ex, wrist, z + 0.02, 4, false);
+  };
+  miembro('armL', 0.2);
+  miembro('armR', 0.2);
+  miembro('legL', 0.18);
+  miembro('legR', 0.18);
+  playerSkinRig = { mallas, partes: partesRig, huesos, extremos };
+}
+function aplicarSkinDibujada(dataUrl) {
+  if (!dataUrl) {
+    playerSkinOn = false;
+    tirarPiel();
+    mostrarAvatarOriginal();
+    return;
+  }
+  playerSkinOn = true;
+  ocultarCuerpoPorSkin();
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const g = c.getContext('2d');
+    g.drawImage(img, 0, 0);
+    const corte = clasificarPiel(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height);
+    if (!corte) { aplicarSkinDibujada(null); return; }
+    montarPiel(c, corte);
+    ocultarCuerpoPorSkin();
   };
   img.src = dataUrl;
 }
 function colocarSkinDibujada() {
-  if (!playerSkinBoard) return;
-  const ver = !!(playerSkinOn && playerAvatar.visible);
-  playerSkinBoard.visible = ver;
-  if (!ver) return;
-  playerSkinBoard.position.set(playerAvatar.position.x, playerAvatar.position.y + 0.96, playerAvatar.position.z);
-  playerSkinBoard.lookAt(camera.position.x, playerSkinBoard.position.y, camera.position.z);
+  if (playerSkinOn) ocultarCuerpoPorSkin();
+  if (!playerSkinRig) return;
+  const mostrar = !!(playerSkinOn && playerAvatar.visible);
+  for (const m of playerSkinRig.mallas) m.visible = mostrar;
+  if (!mostrar) return;
+  const l = playerAvatar.userData.limbs;
+  if (!l) return;
+  for (const nombre of ['armL', 'armR', 'legL', 'legR']) {
+    const h = l[nombre], g = playerSkinRig.huesos[nombre];
+    if (!h || !g || !g.userData.eje) continue;
+    girarPiezaPiel(g, g.userData.eje, h.rotation.x, h.rotation.z);
+    const ex = playerSkinRig.extremos[nombre];
+    if (!ex || !ex.userData.eje) continue;
+    const extra = Math.max(-0.9, Math.min(0.9, h.rotation.x * 0.85));
+    girarPiezaPiel(ex, ex.userData.eje, extra, 0);
+  }
 }
 try { const guardada = localStorage.getItem(SKIN_KEY); if (guardada) aplicarSkinDibujada(guardada); } catch (e) {}
 
@@ -2510,7 +2870,7 @@ function updatePlayerCamera(dt) {
     encuadrarCondena(dt);
     return;
   }
-  if (state.cinematic) { playerAvatar.visible = false; viewmodel.visible = false; if (playerSkinBoard) playerSkinBoard.visible = false; return; }
+  if (state.cinematic) { playerAvatar.visible = false; viewmodel.visible = false; return; }
   viewmodel.visible = cameraMode === 0;
   playerAvatar.visible = (cameraMode !== 0 || mirrorNear) && !state.driving && !state.riding;   // frente a un espejo se muestra tu cuerpo para que te veas
   // El cuerpo acompaña al jugador SIEMPRE (en 1ª persona sirve para verte en el espejo).
@@ -5917,6 +6277,7 @@ function applyThiefLook() {
     manga.material.color.setHex(wearN ? naranjo : (tier ? ARMOR_TIERS[tier].color : verde));
   }
   if (viewmodel.userData.bracer) viewmodel.userData.bracer.visible = !wearN && !!armorTierFor(state.armorFactor);
+  if (playerSkinOn) ocultarCuerpoPorSkin();
 }
 
 // ===================================================================
@@ -17284,12 +17645,16 @@ ui('thiefModeBtn').onclick = () => {
   ui('skinClearBtn').onclick = () => ctx.clearRect(0, 0, canvas.width, canvas.height);
   ui('skinCloseBtn').onclick = () => { box.style.display = 'none'; };
   ui('skinUseBtn').onclick = () => {
-    if (hojaVacia()) { toast('Dibuja algo con el lápiz. Si la hoja está vacía, no hay skin.'); return; }
+    const pix = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const med = medirDibujo(pix.data, canvas.width, canvas.height);
+    if (med.vacia) { toast('Dibuja algo con el lápiz.'); return; }
+    if (!med.brazos) { toast('Tiene que tener brazos.'); return; }
+    if (!med.piernas) { toast('Tiene que tener piernas.'); return; }
     const url = canvas.toDataURL('image/png');
     try { localStorage.setItem(SKIN_KEY, url); }
     catch (e) { toast('No se pudo guardar el dibujo'); return; }
     aplicarSkinDibujada(url);
-    toast('✏️ Esa es tu skin. Con F5, en tercera persona, se ve tu dibujo.');
+    toast('✏️ Esa es tu skin. Con F5, al caminar se mueven las manos y los pies.');
     box.style.display = 'none';
   };
   ui('skinOffBtn').onclick = () => {
