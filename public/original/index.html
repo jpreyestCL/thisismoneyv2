@@ -2386,7 +2386,7 @@ const SKIN_ALTO = 2.16;
 const EJE_Z_PIEL = new THREE.Vector3(0, 0, 1);
 const pielQ1 = new THREE.Quaternion();
 const pielQ2 = new THREE.Quaternion();
-let playerSkinOn = false, playerSkinRig = null;
+let playerSkinOn = false, playerSkinRig = null, playerSkinFuente = null;
 function medirDibujo(data, w, h) {
   const opaco = (x, y) => data[(y * w + x) * 4 + 3] > 28;
   let minX = w, minY = h, maxX = -1, maxY = -1, n = 0;
@@ -2837,9 +2837,11 @@ function pielEnElAire() {
 function aplicarSkinDibujada(dataUrl) {
   if (!dataUrl) {
     playerSkinOn = false;
+    playerSkinFuente = null;
     tirarPiel();
     mostrarAvatarOriginal();
     applyPlayerArmor();
+    refrescarCartelDeCara();
     return;
   }
   playerSkinOn = true;
@@ -2852,8 +2854,10 @@ function aplicarSkinDibujada(dataUrl) {
     g.drawImage(img, 0, 0);
     const corte = clasificarPiel(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height);
     if (!corte) { aplicarSkinDibujada(null); return; }
+    playerSkinFuente = c;
     montarPiel(c, corte);
     ocultarCuerpoPorSkin();
+    refrescarCartelDeCara();
   };
   img.src = dataUrl;
 }
@@ -4749,7 +4753,7 @@ const BLACK_MARKET = [
   { key: 'bm_confeti', name: 'Granada de confeti', price: 240, color: 0xec4899, gadget: 'confeti', icon: '🎉', blurb: 'Una nube de papelitos. Aturde a los monstruos cerca.' },
   { key: 'bm_radio', name: 'Radio chatarra', price: 380, color: 0x334155, gadget: 'radio', icon: '📻', blurb: 'Pitido cuando se acerca un patrullero.' },
   { key: 'bm_naranjo', name: 'Traje naranjo de ladrón', price: 1200, color: 0xf97316, icon: '🟠', thief: 'naranjo', blurb: 'Uniforme naranja de la cárcel. Con el gorro puesto, el cartel del banco es una cámara desde arriba y no muestra tu cara.' },
-  { key: 'bm_gorro', name: 'Gorro con hoyos', price: 700, color: 0x111827, icon: '🎭', thief: 'gorro', blurb: 'Gorro negro con hoyos para los ojos. Si robas el banco sin este gorro, el cartel de buscado lleva tu cara.' },
+  { key: 'bm_gorro', name: 'Gorro con hoyos', price: 700, color: 0x111827, icon: '🎭', thief: 'gorro', blurb: 'Gorro negro con hoyos para los ojos. Si robas el banco sin este gorro, el cartel de buscado lleva el dibujo de tu skin.' },
   { key: 'bm_hacker', name: 'Sistema hacker', price: 2200, color: 0x22d3ee, icon: '💻', thief: 'hacker', blurb: 'Abre la puerta de la bóveda del Banco Central en 10 segundos. Ahí las cajas se ponen doradas: cada una tiene $1000 y se abre con el puntito del centro.' },
 ];
 // Armas de fuego de verdad (las del mercado negro). Cargador de 20 balas, 5 s de recarga.
@@ -7638,6 +7642,43 @@ function policeCatch() { empezarTraslado(); }
 function disfrazDeBanco() {
   return !!(state.thief && state.thief.wearNaranjo && state.thief.wearGorro);
 }
+function cartelLlevaSkin() {
+  return !!(state.thiefMode && playerSkinOn && playerSkinFuente);
+}
+function recorteOpaco(img) {
+  const w = img.width, h = img.height;
+  if (!w || !h || !img.getContext) return null;
+  const src = img.getContext('2d');
+  if (!src) return null;
+  let data;
+  try { data = src.getImageData(0, 0, w, h).data; } catch (e) { return null; }
+  let minX = w, minY = h, maxX = -1, maxY = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (data[(y * w + x) * 4 + 3] <= 28) continue;
+    if (x < minX) minX = x; if (y < minY) minY = y;
+    if (x > maxX) maxX = x; if (y > maxY) maxY = y;
+  }
+  if (maxX < minX) return null;
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+function dibujarSkinEnCartel(g, img, x, y, w, h) {
+  const rec = recorteOpaco(img);
+  if (!rec) return false;
+  g.fillStyle = '#0b1220';
+  g.fillRect(x, y, w, h);
+  const margen = 10;
+  const escala = Math.min((w - margen * 2) / rec.w, (h - margen * 2) / rec.h);
+  const dw = rec.w * escala, dh = rec.h * escala;
+  g.imageSmoothingEnabled = true;
+  g.drawImage(img, rec.x, rec.y, rec.w, rec.h, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  return true;
+}
+function refrescarCartelDeCara() {
+  try {
+    if (!state.bankChase || state.bankPoster !== 'cara') return;
+  } catch (e) { return; }
+  mostrarCartelesBuscado('cara');
+}
 function texturaCartel(kind) {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 384;
@@ -7661,6 +7702,10 @@ function texturaCartel(kind) {
     g.fillStyle = '#334155'; g.font = 'bold 15px sans-serif';
     g.fillText('CÁMARA · TRAJE NARANJA', 128, 308);
     g.font = '13px sans-serif'; g.fillText('Sin rostro', 128, 332);
+  } else if (cartelLlevaSkin() && dibujarSkinEnCartel(g, playerSkinFuente, 28, 70, 200, 220)) {
+    g.strokeStyle = '#7f1d1d'; g.lineWidth = 4; g.strokeRect(28, 70, 200, 220);
+    g.fillStyle = '#7f1d1d'; g.font = 'bold 16px sans-serif';
+    g.fillText('SE BUSCA · TU SKIN', 128, 312);
   } else {
     g.fillStyle = '#e0ac69';
     g.beginPath(); g.arc(128, 178, 72, 0, Math.PI * 2); g.fill();
@@ -7740,7 +7785,9 @@ function iniciarPersecucionBanco() {
   state.bankGrace = BANK.boveda.gracia;
   toast(camara
     ? '🚨 Alarma. La policía sale desde el banco y te persigue 2 minutos. Con el traje y el gorro, el cartel es una cámara, sin tu cara.'
-    : '🚨 Alarma. La policía sale desde el banco y te persigue 2 minutos. Sin el traje y el gorro, el cartel lleva tu cara.');
+    : cartelLlevaSkin()
+      ? '🚨 Alarma. La policía sale desde el banco y te persigue 2 minutos. El cartel lleva el dibujo de tu skin.'
+      : '🚨 Alarma. La policía sale desde el banco y te persigue 2 minutos. Sin el traje y el gorro, el cartel lleva tu cara.');
 }
 function despacharPoliciaBanco(alSalir) {
   if (state.bankDispatched) return;
@@ -27625,6 +27672,7 @@ try { if (new URLSearchParams(location.search).has('debug')) {
     renderer.render(scene, camera);
   };
   timDump.look = (y, p) => { yaw = y; pitch = p; camera.rotation.set(p, y, 0, 'YXZ'); renderer.render(scene, camera); };
+  timDump.mostrarCarteles = (kind) => mostrarCartelesBuscado(kind || 'cara');
   window.__tim = timDump;
 } } catch (e) {}
 function netAddConn(c) {
@@ -28507,7 +28555,7 @@ function renderHUD() {
   if (state.thief && state.thief.wearNaranjo) gear.push('🟠 traje naranjo');
   if (state.thief && state.thief.wearGorro) gear.push('🎭 gorro');
   if (state.bankChase && !state.bankDispatched) gear.push('🚨 alarma · sal del banco');
-  else if (state.bankChase && state.wanted > 0) gear.push(state.bankPoster === 'camara' ? '📷 cartel: cámara desde arriba' : '📰 cartel con tu cara');
+  else if (state.bankChase && state.wanted > 0) gear.push(state.bankPoster === 'camara' ? '📷 cartel: cámara desde arriba' : (cartelLlevaSkin() ? '📰 cartel con tu skin' : '📰 cartel con tu cara'));
   if (state.secretsFound > 0) gear.push('🗺️ secretos ' + state.secretsFound + '/' + SECRET_DEFS.length);
   if (state.business) gear.push(BUSINESS_TYPES[state.business.type].icon + ' negocio nv.' + state.business.level + ' · 📦' + state.business.stock);
   const medalCount = Object.keys(state.medals || {}).length; if (medalCount) gear.push('🏅 ' + medalCount + '/3 deportes');
