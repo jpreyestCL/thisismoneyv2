@@ -2817,7 +2817,8 @@ function colocarSkinDibujada() {
   if (manos) {
     const verManos = !!(playerSkinOn && cameraMode === 0 && (manos.der.visible || manos.izq.visible));
     manos.grupo.visible = verManos;
-    if (verManos) {
+    if (verManos && condena && (condena.pose === 'sopa' || condena.almuerzo === 'plato')) manos.grupo.visible = false;
+    else if (verManos) {
       const aire = pielEnElAire();
       const fase = playerAvatar.userData.walkPhase || 0;
       const paso = aire ? 0 : Math.sin(fase) * 0.14;
@@ -3009,6 +3010,7 @@ function updatePlayerCamera(dt) {
     } else {
       playerAvatar.rotation.set(0, yaw + Math.PI + (state.skiing && skiGearMesh ? skiGearMesh.rotation.y : 0), 0);
       if (condena && condena.atornillando) posarAtornillado();
+      else if (condena && condena.almuerzo === 'plato') posarPlatoEnManos();
       else if (state.skiing) aquietarCuerpoEsqui();
       else swingLimbs(playerAvatar, dt || 0.016);
     }
@@ -6052,6 +6054,7 @@ function updateJailFolk(dt) {
     swingLimbs(p, dt);
   }
   updateAireCarcel(dt);
+  updateComidaCarcel();
 }
 
 // Almuerzo y ducto del modo ladrón. Solo la condena de nueve minutos
@@ -6089,6 +6092,67 @@ function hacerRejaDucto(x, y, z) {
   scene.add(g);
   return g;
 }
+function hacerTenedor(metal) {
+  const g = new THREE.Group();
+  const mango = new THREE.Mesh(new THREE.CylinderGeometry(.01, .012, .2, 5), metal);
+  g.add(mango);
+  for (const sx of [-.02, 0, .02]) {
+    const diente = new THREE.Mesh(new THREE.CylinderGeometry(.004, .004, .07, 4), metal);
+    diente.position.set(sx, .12, 0);
+    g.add(diente);
+  }
+  return g;
+}
+function hacerPlatoVerde() {
+  const g = new THREE.Group();
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(.16, .13, .035, 10), mat(0xf8fafc));
+  g.add(base);
+  const comida = new THREE.Mesh(new THREE.CylinderGeometry(.11, .11, .04, 8), new THREE.MeshStandardMaterial({ color: 0x84cc16, emissive: 0x3f6212, emissiveIntensity: .45 }));
+  comida.position.y = .035;
+  g.add(comida);
+  const bocado = new THREE.Mesh(new THREE.SphereGeometry(.035, 6, 5), new THREE.MeshStandardMaterial({ color: 0x65a30d, emissive: 0x3f6212, emissiveIntensity: .4 }));
+  bocado.visible = false;
+  g.userData.bocado = bocado;
+  return g;
+}
+function ponerTenedorEnMano(persona, metal) {
+  const extremo = persona.userData.limbs && persona.userData.limbs.armR && persona.userData.limbs.armR.userData.extremo;
+  const tenedor = hacerTenedor(metal);
+  (extremo || persona).add(tenedor);
+  tenedor.position.set(.02, -.04, .08);
+  tenedor.rotation.x = .9;
+  persona.userData.tenedor = tenedor;
+  persona.userData.come = true;
+  persona.userData.faseBocado = Math.random() * 6;
+  return tenedor;
+}
+function posteDeFila(x, z) {
+  const poste = new THREE.Mesh(new THREE.CylinderGeometry(.045, .045, 1.05, 6), mat(0xf8fafc));
+  poste.position.set(x, .52, z);
+  scene.add(poste);
+  const bola = new THREE.Mesh(new THREE.SphereGeometry(.07, 6, 5), mat(0xfacc15));
+  bola.position.set(x, 1.08, z);
+  scene.add(bola);
+}
+function cintaDeFila(a, b) {
+  const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz) || .1;
+  const cinta = new THREE.Mesh(smoothBox(.035, .07, len), mat(0xfacc15));
+  cinta.position.set((a.x + b.x) / 2, .82, (a.z + b.z) / 2);
+  cinta.rotation.y = Math.atan2(dx, dz);
+  scene.add(cinta);
+}
+function kBocado(fase) {
+  const u = (Math.sin(performance.now() * .0032 + fase) + 1) / 2;
+  return u * u * (3 - 2 * u);
+}
+function animarBocado(p, fase) {
+  const l = p.userData.limbs;
+  if (!l || !l.armR) return;
+  const k = kBocado(fase || 0);
+  l.armR.rotation.set(-.5 - k * 1.75, -.22, -.4);
+  if (l.armR.userData.junta) l.armR.userData.junta.rotation.x = -k * .85;
+  if (p.userData.tenedor) p.userData.tenedor.rotation.x = .55 + k * .5;
+}
 function armarAlmuerzoCarcel(cfg) {
   const { cx, cz, pFondo, celdaZ, celdaD, anchoCelda, pw, pt } = cfg;
   const barsZ = celdaZ + celdaD / 2;
@@ -6118,24 +6182,65 @@ function armarAlmuerzoCarcel(cfg) {
   cucharaMesa.rotation.z = Math.PI / 2.4;
   cucharaMesa.position.set(mesa.x + .28, .58, mesa.z + .12);
   scene.add(cucharaMesa);
+  const tenedorMesa = hacerTenedor(metal);
+  tenedorMesa.rotation.z = Math.PI / 2.2;
+  tenedorMesa.position.set(mesa.x - .22, .58, mesa.z + .14);
+  scene.add(tenedorMesa);
+  rutinaCarcel.tenedorMesa = tenedorMesa;
+  const postesOeste = [];
+  const postesEste = [];
+  for (let i = 0; i < 5; i++) {
+    const z = fila.minZ + i * ((fila.maxZ - fila.minZ) / 4);
+    const izq = { x: fila.minX - .42, z };
+    const der = { x: fila.maxX + .42, z };
+    posteDeFila(izq.x, izq.z);
+    posteDeFila(der.x, der.z);
+    postesOeste.push(izq);
+    postesEste.push(der);
+  }
+  for (let i = 0; i < postesOeste.length - 1; i++) {
+    cintaDeFila(postesOeste[i], postesOeste[i + 1]);
+    cintaDeFila(postesEste[i], postesEste[i + 1]);
+  }
+  const senora = makePerson(0xfbcfe8, 0xe7c4a8);
+  const falda = new THREE.Mesh(new THREE.CylinderGeometry(.26, .4, .72, 10), mat(0x9d174d));
+  falda.position.y = .62; senora.add(falda);
+  const delantal = new THREE.Mesh(smoothBox(.4, .46, .08), mat(0xf8fafc));
+  delantal.position.set(0, 1.18, .22); senora.add(delantal);
+  const coleta = new THREE.Mesh(smoothBox(.16, .42, .16), mat(0x3b2b1f));
+  coleta.position.set(0, 1.62, -.22); senora.add(coleta);
+  senora.position.set(mostrador.x - .72, 0, mostrador.z);
+  senora.rotation.y = Math.PI / 2;
+  senora.userData.senora = true;
+  senora.userData.jailQuieto = true;
+  const cucharon = hacerCucharaMesh(metal);
+  const manoSenora = senora.userData.limbs && senora.userData.limbs.armR && senora.userData.limbs.armR.userData.extremo;
+  (manoSenora || senora).add(cucharon);
+  cucharon.position.set(0, -.02, .12);
+  cucharon.rotation.x = 1.2;
+  senora.userData.cucharon = cucharon;
+  scene.add(senora);
+  rutinaCarcel.senora = senora;
   const mesas = [{ x: cx + 3.1, z: barsZ + 3.15 }, { x: cx + 8.1, z: barsZ + 3.35 }];
   mesas.forEach((m, mi) => {
     edifCaja(m.x, .46, m.z, 1.8, .1, .9, 0x8a6b4a, 'carcel', false);
     for (const lado of [-.55, .55]) {
       const p = makePrisoner(8 + mi * 2 + (lado > 0 ? 1 : 0));
       sentarPersona(p, m.x + lado, .95, m.z, lado > 0 ? Math.PI : 0);
+      ponerTenedorEnMano(p, metal);
       scene.add(p);
       rutinaCarcel.comensales.push(p);
-      const plato = new THREE.Mesh(new THREE.CylinderGeometry(.1, .1, .035, 8), new THREE.MeshStandardMaterial({ color: 0x84cc16, emissive: 0x3f6212, emissiveIntensity: .3 }));
+      const plato = hacerPlatoVerde();
       plato.position.set(m.x + lado * .35, .56, m.z);
       scene.add(plato);
     }
   });
   for (let i = 0; i < 2; i++) {
     const p = makePrisoner(12 + i);
-    p.position.set(mostrador.x + .95, 0, mostrador.z + (i ? 1.15 : -1.15));
-    p.rotation.y = -Math.PI / 2;
+    p.position.set((fila.minX + fila.maxX) / 2, 0, fila.minZ + .5 + i * .9);
+    p.rotation.y = 0;
     p.userData.jailQuieto = true;
+    p.userData.enFila = true;
     scene.add(p);
     rutinaCarcel.comensales.push(p);
   }
@@ -6197,6 +6302,103 @@ function updateAireCarcel(dt) {
     a.position.set(a.userData.x, a.userData.y + sube, a.userData.z + (a.userData.sale ? avanza : -avanza));
     a.material.opacity = .12 + (1 - u) * .4;
     a.scale.setScalar(.55 + u * .9);
+  }
+}
+function comidaEnCurso() {
+  return !!(condena && condena.banco && condena.almuerzo && condena.almuerzo !== 'listo');
+}
+function updateComidaCarcel() {
+  if (!rutinaCarcel.listo || !comidaEnCurso()) return;
+  for (const p of rutinaCarcel.comensales) {
+    if (!p.userData.come) continue;
+    const l = p.userData.limbs;
+    if (l) {
+      l.legL.rotation.x = -Math.PI / 2;
+      l.legR.rotation.x = -Math.PI / 2;
+    }
+    animarBocado(p, p.userData.faseBocado || 0);
+  }
+  const senora = rutinaCarcel.senora;
+  if (senora && senora.userData.limbs) {
+    const k = kBocado(1.4);
+    senora.userData.limbs.armR.rotation.set(-.35 - k * .9, -.2, -.25);
+    if (senora.userData.cucharon) senora.userData.cucharon.rotation.x = .8 + k * .7;
+  }
+}
+function asegurarPlatoVista() {
+  if (viewmodel.userData.platoVista) return viewmodel.userData.platoVista;
+  const metal = new THREE.MeshStandardMaterial({ color: 0xe7e5e4, metalness: .85, roughness: .22 });
+  const plato = hacerPlatoVerde();
+  viewmodel.add(plato);
+  plato.position.set(-.28, -.12, -.2);
+  plato.rotation.x = .4;
+  plato.visible = false;
+  viewmodel.userData.platoVista = plato;
+  const tenedor = hacerTenedor(metal);
+  viewmodel.add(tenedor);
+  tenedor.position.set(.06, .04, -.38);
+  tenedor.rotation.x = 1.1;
+  tenedor.visible = false;
+  viewmodel.userData.tenedorVista = tenedor;
+  const bocado = new THREE.Mesh(new THREE.SphereGeometry(.04, 6, 5), new THREE.MeshStandardMaterial({ color: 0x65a30d, emissive: 0x3f6212, emissiveIntensity: .5 }));
+  tenedor.add(bocado);
+  bocado.position.y = .14;
+  bocado.visible = false;
+  viewmodel.userData.bocadoVista = bocado;
+  const extremo = playerAvatar.userData.limbs && playerAvatar.userData.limbs.armR && playerAvatar.userData.limbs.armR.userData.extremo;
+  const platoMano = hacerPlatoVerde();
+  (extremo || playerAvatar).add(platoMano);
+  platoMano.position.set(0, -.08, .12);
+  platoMano.scale.setScalar(.85);
+  platoMano.visible = false;
+  playerAvatar.userData.platoMano = platoMano;
+  const tenedorMano = hacerTenedor(metal);
+  (extremo || playerAvatar).add(tenedorMano);
+  tenedorMano.position.set(.04, -.02, .1);
+  tenedorMano.rotation.x = .8;
+  tenedorMano.visible = false;
+  playerAvatar.userData.tenedorMano = tenedorMano;
+  return plato;
+}
+function ocultarComidaJugador() {
+  asegurarPlatoVista();
+  if (viewmodel.userData.platoVista) viewmodel.userData.platoVista.visible = false;
+  if (viewmodel.userData.tenedorVista) viewmodel.userData.tenedorVista.visible = false;
+  if (viewmodel.userData.bocadoVista) viewmodel.userData.bocadoVista.visible = false;
+  if (playerAvatar.userData.platoMano) playerAvatar.userData.platoMano.visible = false;
+  if (playerAvatar.userData.tenedorMano) playerAvatar.userData.tenedorMano.visible = false;
+  if (rutinaCarcel.tenedorMesa) rutinaCarcel.tenedorMesa.visible = true;
+}
+function posarPlatoEnManos() {
+  asegurarPlatoVista();
+  mostrarArmaEnMano(false);
+  const l = playerAvatar.userData.limbs;
+  if (l) {
+    l.armL.rotation.set(-1.15, .35, .55);
+    l.armR.rotation.set(-1.15, -.25, -.55);
+  }
+  if (playerAvatar.userData.platoMano) playerAvatar.userData.platoMano.visible = cameraMode !== 0;
+  if (playerAvatar.userData.tenedorMano) playerAvatar.userData.tenedorMano.visible = false;
+}
+function posarComiendo() {
+  asegurarPlatoVista();
+  mostrarArmaEnMano(false);
+  const k = kBocado(0);
+  animarBocado(playerAvatar, 0);
+  if (playerAvatar.userData.platoMano) playerAvatar.userData.platoMano.visible = false;
+  if (playerAvatar.userData.tenedorMano) {
+    playerAvatar.userData.tenedorMano.visible = cameraMode !== 0;
+    playerAvatar.userData.tenedorMano.rotation.x = .5 + k * .45;
+  }
+  if (rutinaCarcel.tenedorMesa) rutinaCarcel.tenedorMesa.visible = false;
+  const primera = cameraMode === 0;
+  if (viewmodel.userData.platoVista) viewmodel.userData.platoVista.visible = primera;
+  if (viewmodel.userData.tenedorVista) viewmodel.userData.tenedorVista.visible = primera;
+  if (viewmodel.userData.bocadoVista) viewmodel.userData.bocadoVista.visible = primera && k > .28 && k < .9;
+  if (primera) {
+    viewmodel.visible = true;
+    viewmodel.position.set(.16, -.48 + k * .62, -.62 + k * .28);
+    viewmodel.rotation.set(1.05 - k * 1.25, .18, .22);
   }
 }
 function rutinaDeLadron() {
@@ -6317,15 +6519,34 @@ function abrirFilaAlmuerzo() {
   mostrarCamaCelda(false);
   if (playerAvatar) { playerAvatar.rotation.order = 'XYZ'; posarDePie(playerAvatar); }
   if (condena.celda.reja) condena.celda.reja.top = -8;
-  toast('🍲 Almuerzo. Sopa verde: haz la fila y siéntate. No recorras todo el pasillo.');
+  toast('🍲 Almuerzo. Hay fila, una señora detrás de las barreras y mesas. No recorras todo el pasillo.');
+}
+function rectsConPlato() {
+  const f = rutinaCarcel.fila, m = rutinaCarcel.mesa;
+  return [
+    f,
+    { minX: f.minX - .15, maxX: m.x + .9, minZ: Math.min(f.minZ, m.z) - .75, maxZ: Math.max(f.maxZ, m.z) + .75 },
+  ];
+}
+function juntoALaMesa() {
+  const m = rutinaCarcel.mesa;
+  return !!(m && Math.hypot(player.position.x - m.x, player.position.z - m.z) < 1.25);
+}
+function recibirPlato() {
+  condena.almuerzo = 'plato';
+  condena.pose = null;
+  asegurarPlatoVista();
+  toast('🍽️ La señora te sirvió comida verde en el plato. Llévalo a tu mesa.');
+  beep(480, .06, .04);
 }
 function enLaFila() {
   const f = rutinaCarcel.fila, x = player.position.x, z = player.position.z;
   return x > f.minX - .35 && x < f.maxX + .35 && z > f.minZ - .35 && z < f.maxZ + .35;
 }
 function frenteDeLaFila() {
-  const f = rutinaCarcel.fila;
-  return player.position.z > f.maxZ - .8;
+  const f = rutinaCarcel.fila, s = rutinaCarcel.mostrador;
+  if (!f || !s) return false;
+  return Math.abs(player.position.z - s.z) < 1.05 && player.position.x <= (f.minX + f.maxX) / 2 + .15;
 }
 function empezarFila() {
   const f = rutinaCarcel.fila;
@@ -6334,7 +6555,7 @@ function empezarFila() {
   player.position.x = THREE.MathUtils.clamp(player.position.x, f.minX, f.maxX);
   player.position.z = THREE.MathUtils.clamp(player.position.z, f.minZ, f.maxZ);
   player.position.y = PLAYER_EYE;
-  toast('🚶 Fila del almuerzo. Camina hasta el frente y siéntate.');
+  toast('🚶 Fila del almuerzo. Camina hasta la señora, detrás de las barreras.');
 }
 function sentarEnElAlmuerzo() {
   const m = rutinaCarcel.mesa;
@@ -6350,20 +6571,25 @@ function sentarEnElAlmuerzo() {
   vy = 0;
   grounded = true;
   posarSentado(playerAvatar);
-  toast('🥣 Te sentaste. Sirven sopa verde.');
+  condena.bocados = 0;
+  if (playerAvatar.userData.platoMano) playerAvatar.userData.platoMano.visible = false;
+  toast('🍴 Te sentaste. Comes con el tenedor. En primera persona te lo llevas a la boca. F5 te muestra en la mesa.');
 }
 function comerSopa() {
   condena.comio = true;
   condena.esperaGuardia = 0;
   state.hunger = Math.min(100, (state.hunger || 0) + 55);
   if (condena.hambreMuerte && state.hunger > 0) condena.hambreMuerte = false;
-  toast('🍲 Comiste la sopa verde.');
+  toast('🍴 Comiste. El tenedor fue del plato a la boca.');
   beep(520, .08, .04);
 }
 function robarCuchara() {
   condena.cuchara = true;
   if (rutinaCarcel.cucharaMesa) rutinaCarcel.cucharaMesa.visible = false;
-  toast('🥄 Robaste una cuchara. Nadie te vio.');
+  const cuch = asegurarCuchara();
+  cuch.visible = true;
+  if (viewmodel.userData.cuchara) viewmodel.userData.cuchara.visible = cameraMode === 0;
+  toast('🥄 Agarraste la cuchara de la mesa. Nadie te vio.');
   beep(640, .05, .03);
 }
 function empezarEscolta() {
@@ -6372,6 +6598,7 @@ function empezarEscolta() {
   condena.pose = null;
   condena.lavando = false;
   if (playerAvatar) posarDePie(playerAvatar);
+  ocultarComidaJugador();
   condena.ruta = [
     { x: player.position.x, z: player.position.z },
     { x: (f.minX + f.maxX) / 2, z: f.minZ + .3 },
@@ -24360,6 +24587,7 @@ function colocarCuerpoCondena() {
 }
 function meterEnCelda() {
   if (!condena || condena.pose || condena.lavando || condena.enDucto || condena.almuerzo === 'escolta' || condena.almuerzo === 'sentado') return;
+  if (condena.almuerzo === 'plato' && rutinaCarcel.fila) { clampARects(rectsConPlato()); return; }
   if (condena.almuerzo === 'fila' && rutinaCarcel.fila) { clampARects([rutinaCarcel.fila]); return; }
   if (condena.almuerzo === 'aviso' && rutinaCarcel.fila) { clampARects(rectsDelAlmuerzo()); return; }
   const c = condena.celda;
@@ -24380,6 +24608,7 @@ function salirDeLaCelda() {
   });
   condena = null;
   soltarCuchara();
+  ocultarComidaJugador();
   soltarManosLavado();
   mostrarCamaCelda(false);
   cerrarDuctoVisual();
@@ -24532,6 +24761,10 @@ function frenarCondena(dt) {
     entrarAlDucto();
     return true;
   }
+  if (condena.pose === 'sopa' && !condena.comio && condena.almuerzo === 'sentado') {
+    condena.bocados = (condena.bocados || 0) + dt;
+    if (condena.bocados > 3.4) comerSopa();
+  }
   if (condena.pose === 'sopa' && condena.comio && condena.almuerzo === 'sentado') {
     condena.esperaGuardia = (condena.esperaGuardia || 0) + dt;
     if (condena.esperaGuardia > 14) empezarEscolta();
@@ -24607,11 +24840,13 @@ function encuadrarCondena(dt) {
   if (condena.camLavado) { encuadrarLavado(); return; }
   if (condena.pose === 'sopa') {
     const m = rutinaCarcel.mesa;
-    playerAvatar.visible = true;
-    viewmodel.visible = false;
+    playerAvatar.visible = cameraMode !== 0;
+    viewmodel.visible = cameraMode === 0;
     playerAvatar.position.set(player.position.x, 0, player.position.z);
     playerAvatar.rotation.set(0, yaw + Math.PI, 0);
     posarSentado(playerAvatar);
+    posarComiendo();
+    colocarSkinDibujada();
     mostrarCamaCelda(false);
     if (cameraMode === 0) {
       camera.position.set(player.position.x, player.position.y, player.position.z);
@@ -24669,16 +24904,19 @@ function promptCondena() {
   const c = condena.celda;
   const seg = Math.max(0, Math.ceil(condena.left));
   const reloj = condena.banco ? (Math.floor(seg / 60) + ':' + String(seg % 60).padStart(2, '0')) : (seg + ' s');
-  if (condena.hambreMuerte && !(condena.almuerzo === 'sentado' || condena.almuerzo === 'aviso' || condena.almuerzo === 'fila')) return { key: 'Q', touch: '🍖', text: 'Te moriste de hambre · come para salir de la celda ' + c.n };
+  if (condena.hambreMuerte && !(condena.almuerzo === 'sentado' || condena.almuerzo === 'aviso' || condena.almuerzo === 'fila' || condena.almuerzo === 'plato')) return { key: 'Q', touch: '🍖', text: 'Te moriste de hambre · come para salir de la celda ' + c.n };
   if (condena.enDucto) return { key: 'WASD', touch: '🌬️', text: 'Ducto · recto y dos recodos · ' + reloj };
   if (condena.atornillando || (rutinaDeLadron() && condena.almuerzo === 'listo' && condena.cuchara && !condena.rejaAbierta && cercaDeLaRejaDucto())) return { key: 'E', touch: '🥄', force: true, text: 'Desatornillar' };
   if (rutinaDeLadron() && condena.rejaAbierta && cercaDeLaRejaDucto()) return { key: 'E', touch: '🧎', force: true, text: 'Agacharse' };
   if (rutinaDeLadron() && condena.almuerzo === 'listo' && !condena.cuchara && cercaDeLaRejaDucto()) return { key: '🔒', touch: '🥄', text: 'Te falta la cuchara del almuerzo' };
-  if (condena.almuerzo === 'aviso') return { key: 'E', touch: '🍲', force: true, text: enLaFila() ? 'Hacer fila para la sopa verde' : 'Ve a la fila del almuerzo · no recorras el pasillo' };
-  if (condena.almuerzo === 'fila') return { key: 'E', touch: '🪑', force: true, text: frenteDeLaFila() ? 'Sentarte a la mesa' : 'Sigue la fila hasta la mesa' };
+  if (condena.almuerzo === 'aviso') return { key: 'E', touch: '🍲', force: true, text: enLaFila() ? 'Hacer la fila hacia la señora' : 'Ve a la fila del almuerzo · no recorras el pasillo' };
+  if (condena.almuerzo === 'fila') return { key: 'E', touch: '🍽️', force: true, text: frenteDeLaFila() ? 'Que te sirva el plato verde' : 'Sigue la fila hasta la señora' };
+  if (condena.almuerzo === 'plato') return { key: 'E', touch: '🪑', force: true, text: juntoALaMesa() ? 'Sentarte a comer' : 'Lleva el plato a tu mesa' };
   if (condena.almuerzo === 'sentado' || condena.pose === 'sopa') {
-    if (!condena.comio) return { key: 'E', touch: '🍲', force: true, text: 'Comer la sopa verde' };
-    if (!condena.cuchara) return { key: 'E', touch: '🥄', force: true, text: 'Robar la cuchara' };
+    if (!condena.comio) return (condena.bocados || 0) > 1.1
+      ? { key: 'E', touch: '🍴', force: true, text: 'Terminar de comer' }
+      : { key: '🍴', touch: '🍴', text: 'Te llevas la comida a la boca con el tenedor · F5 te ves comiendo' };
+    if (!condena.cuchara) return { key: 'E', touch: '🥄', force: true, text: 'Agarrar la cuchara de la mesa' };
     return { key: 'E', touch: '👮', force: true, text: 'Que los guardias te lleven' };
   }
   if (condena.almuerzo === 'escolta') return { key: '👮', touch: '👮', text: 'Los guardias te llevan a la celda · ' + reloj };
@@ -24708,12 +24946,21 @@ function tryCelda() {
     return true;
   }
   if (condena.almuerzo === 'fila') {
-    if (!frenteDeLaFila()) { toast('🚶 Sigue hasta el frente de la fila.'); return true; }
+    if (!frenteDeLaFila()) { toast('🚶 Sigue la fila hasta la señora, detrás de las barreras.'); return true; }
+    recibirPlato();
+    return true;
+  }
+  if (condena.almuerzo === 'plato') {
+    if (!juntoALaMesa()) { toast('🍽️ Lleva el plato verde hasta tu mesa.'); return true; }
     sentarEnElAlmuerzo();
     return true;
   }
   if (condena.pose === 'sopa' || condena.almuerzo === 'sentado') {
-    if (!condena.comio) { comerSopa(); return true; }
+    if (!condena.comio) {
+      if ((condena.bocados || 0) < 1.1) { toast('🍴 Sigue: el tenedor va del plato a la boca.'); return true; }
+      comerSopa();
+      return true;
+    }
     if (!condena.cuchara) { robarCuchara(); return true; }
     empezarEscolta();
     return true;
@@ -26778,6 +27025,26 @@ function posarManosGym() {
 }
 function updateViewmodel(dt) {
   if (gymSesion && state.inGym) { posarManosGym(); return; }
+  if (condena && condena.pose === 'sopa') {
+    viewmodel.visible = cameraMode === 0;
+    posarComiendo();
+    if (condena.cuchara && viewmodel.userData.cuchara) {
+      viewmodel.userData.cuchara.visible = cameraMode === 0;
+      viewmodel.userData.cuchara.position.set(-.22, -.05, -.3);
+    }
+    return;
+  }
+  if (condena && condena.almuerzo === 'plato') {
+    viewmodel.visible = cameraMode === 0;
+    asegurarPlatoVista();
+    mostrarArmaEnMano(false);
+    if (viewmodel.userData.platoVista) viewmodel.userData.platoVista.visible = cameraMode === 0;
+    if (viewmodel.userData.tenedorVista) viewmodel.userData.tenedorVista.visible = false;
+    if (viewmodel.userData.bocadoVista) viewmodel.userData.bocadoVista.visible = false;
+    viewmodel.position.set(.22, -.38, -.58);
+    viewmodel.rotation.set(.55, .1, .15);
+    return;
+  }
   if (condena && condena.atornillando) {
     viewmodel.visible = cameraMode === 0;
     viewmodel.position.set(.16, -.02, -.46);
