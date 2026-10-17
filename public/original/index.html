@@ -483,9 +483,9 @@
   #scopeMask::before, #scopeMask::after { content:''; position:absolute; background:rgba(15,23,42,.85); }
   #scopeMask::before { left:50%; top:calc(50% - 22vh); width:2px; height:44vh; margin-left:-1px; }
   #scopeMask::after { top:50%; left:calc(50% - 22vh); height:2px; width:44vh; margin-top:-1px; }
-  #jobBtn { position:fixed; bottom:124px; left:50%; transform:translateX(-50%); z-index:7; pointer-events:all; cursor:pointer;
+  #jobBtn { position:fixed; bottom:124px; left:50%; transform:translateX(-50%); z-index:7; pointer-events:none; cursor:pointer;
     background:rgba(4,14,8,.85); color:#bbf7d0; border:2px solid rgba(74,222,128,.6); border-radius:12px; font-size:14px; font-weight:800;
-    min-height:42px; padding:6px 16px; display:none; max-width:min(92vw,540px); text-align:center; letter-spacing:.2px; }
+    min-height:42px; padding:6px 16px; display:none !important; max-width:min(92vw,540px); text-align:center; letter-spacing:.2px; }
   #jobBtn.active { color:#fde68a; border-color:rgba(245,158,11,.7); background:rgba(16,11,3,.85); }
   body.touch #jobBtn { bottom:78px; font-size:12px; min-height:34px; padding:4px 12px; }
   #questBtn { position:fixed; top:254px; right:12px; z-index:6; pointer-events:all; cursor:pointer; background:rgba(8,6,4,.78); color:#fde68a; border:2px solid rgba(245,158,11,.55); border-radius:10px; font-size:13px; font-weight:800; height:40px; padding:0 12px; display:none; letter-spacing:.3px; }
@@ -1243,7 +1243,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { PARK, CAMPAIGNS, newPark, parkDate, startCampaign, maintainPark, settleParkDay, parkReport } from './src/park-business.js?v=1';
 import { CHAPTERS, GAME_RULES, dayDuration, houseRatings, monsterKillReward, nightDuration, roadmapFor } from './src/game-config.js?v=9';
 import { AVENIDAS, CALLE, CERROS, CONDOMINIO, DISTRITOS, LUGARES, MEDIA_CALLE, SEMAFOROS, callesDelMapa, distritoEn, enCalle, enCondominio, loteEn, lotePorId, lotesEnVenta, manzanasLibres, rectCalle, rectDistrito, rectLote, seCruzan } from './src/city-map.js?v=4';
-import { CINE_FILMS, TOTU, asientosDeSala, centroSala, cineAlturaEn, dentroDeTotu, pintarCine, puedeEntrar, tramosSala } from './src/cine-totu.js?v=1';
+import { CINE_FILMS, TOTU, asientosDeSala, centroSala, cineAlturaEn, dentroDeTotu, pintarCine, puedeEntrar, tramosSala } from './src/cine-totu.js?v=2';
 import { CHAT_BUBBLE_MS, CHAT_CUSTOM_MAX, CHAT_EMOJIS, CHAT_HISTORY, CHAT_MAX_LEN, CHAT_NAME_MAX, CHAT_STICKERS, accountNameKey, chatSendWait, chatTime, cleanAccountName, cleanChatName, cleanChatText, cleanStickerLabel, customStickerPayload, stickerFromText, stickerPayload } from './src/chat.js?v=4';
 const ui = id => document.getElementById(id);
 // Loader compartido con soporte meshopt. Los .glb están comprimidos (texturas WebP 1024 + geometría meshopt).
@@ -3774,8 +3774,9 @@ function buildTotuCine() {
   const cx = (x0 + x1) / 2, cz = (zN + zS) / 2;
   const ancho = x1 - x0, fondo = zN - zS;
   addNoGrassZone(cx, cz, ancho + 2, fondo + 2);
-  const piso = new THREE.Mesh(new THREE.PlaneGeometry(ancho - .4, fondo - .4), mat(0xe7e5e4));
-  piso.rotation.x = -Math.PI / 2; piso.position.set(cx, 0.05, cz); piso.receiveShadow = true; scene.add(piso);
+  const zPisoN = TOTU.zN - 0.15, zPisoS = -24.25;
+  const piso = new THREE.Mesh(new THREE.PlaneGeometry(ancho - .4, zPisoN - zPisoS), mat(0xe7e5e4));
+  piso.rotation.x = -Math.PI / 2; piso.position.set(cx, 0.05, (zPisoN + zPisoS) / 2); piso.receiveShadow = true; scene.add(piso);
   const techo = new THREE.Mesh(smoothBox(ancho + 1.2, .4, fondo + 1.2), mat(0x0f766e));
   techo.position.set(cx, alto + .2, cz); techo.castShadow = true; scene.add(techo);
   addLandingSurface(cx, cz, ancho + 1.2, fondo + 1.2, alto + .4, techo);
@@ -3796,8 +3797,8 @@ function buildTotuCine() {
   alfombra.position.set(cx, .07, (TOTU.zLobby + TOTU.zSalas) / 2); scene.add(alfombra);
   const omitir = new Set(['auto', 'barco', 'helicoptero', 'moto', 'rocket']);
   const piezas = SHOP.filter(it => !it.thief && !omitir.has(it.key)).map(it => ({ ...it }));
-  const xs = [13.4, 15.7, 18, 20.3, 22.6, 32.4, 34.7, 37, 39.3, 41.6];
-  const zs = [-13.5, -15.9, -18.3, -20.35];
+  const xs = [10.4, 12.5, 14.6, 18.8, 20.9, 23.0, 32.0, 34.1, 36.2, 38.3, 40.4, 42.6, 44.6];
+  const zs = [-10.0, -12.2, -14.4, -16.4];
   let n = 0;
   for (const z of zs) for (const x of xs) {
     if (n >= piezas.length) break;
@@ -3852,43 +3853,67 @@ function buildTotuCine() {
 function armarSala(i) {
   const scx = centroSala(i);
   const tramos = tramosSala(i);
-  const sube = tramos[1], baja = tramos[3];
-  const peldaños = (zNorte, zSur, yNorte, ySur, ancho, n) => {
+  const losa = (cx, z, y, w, d, color) => {
+    const h = 0.12;
+    const m = new THREE.Mesh(smoothBox(Math.max(0.2, w), h, Math.max(0.2, d)), mat(color));
+    m.position.set(cx, y + 0.03 - h / 2, z); m.receiveShadow = true; scene.add(m);
+  };
+  const peldaños = (tramo, n) => {
+    const ancho = tramo.maxX - tramo.minX;
+    const cx = (tramo.minX + tramo.maxX) / 2;
     for (let s = 0; s < n; s++) {
-      const t = (s + 1) / n;
-      const zA = zNorte + (zSur - zNorte) * (s / n);
-      const zB = zNorte + (zSur - zNorte) * t;
-      const y = yNorte + (ySur - yNorte) * t;
-      const m = new THREE.Mesh(smoothBox(ancho, Math.max(.08, y), Math.abs(zB - zA) + .02), mat(0x1c1917));
-      m.position.set(scx, y / 2, (zA + zB) / 2); m.receiveShadow = true; scene.add(m);
+      const t0 = s / n, t1 = (s + 1) / n;
+      const zA = tramo.maxZ + (tramo.minZ - tramo.maxZ) * t0;
+      const zB = tramo.maxZ + (tramo.minZ - tramo.maxZ) * t1;
+      const y = tramo.yNorte + (tramo.ySur - tramo.yNorte) * t1;
+      losa(cx, (zA + zB) / 2, y, ancho, Math.abs(zB - zA) + 0.04, y >= 0 ? 0x1c1917 : 0x292524);
     }
   };
-  peldaños(sube.maxZ, sube.minZ, sube.yNorte, sube.ySur, 1.35, 6);
-  peldaños(baja.maxZ, baja.minZ, baja.yNorte, baja.ySur, 1.35, 6);
-  const losa = (z, y, w, d) => {
-    const m = new THREE.Mesh(smoothBox(w, .08, d), mat(0x292524));
-    m.position.set(scx, y + .04, z); m.receiveShadow = true; scene.add(m);
-  };
-  losa(-35.27, 1.2, tramos[2].maxX - tramos[2].minX, 1.5);
-  losa(-40.4, 0.16, tramos[4].maxX - tramos[4].minX, 3.7);
-  for (const x of [scx - 1.2, scx + 1.2]) {
-    for (const [z0, z1, y] of [[-32.2, -34.5, 0], [-36.05, -38.5, 0.16]]) {
-      const largo = Math.abs(z1 - z0);
-      const b = new THREE.Mesh(smoothBox(.1, .85, largo), mat(0x57534e));
-      b.position.set(x, y + .55, (z0 + z1) / 2); scene.add(b);
-      addObstacle(x, (z0 + z1) / 2, .18, largo, 3.2, 'totu');
+  for (const tramo of tramos) {
+    if (tramo.kind === 'sube' || tramo.kind === 'baja') peldaños(tramo, 8);
+    else {
+      const color = tramo.kind === 'pasillo' ? 0x44403c : (tramo.kind === 'alta' ? 0x1c1917 : 0x292524);
+      losa((tramo.minX + tramo.maxX) / 2, (tramo.minZ + tramo.maxZ) / 2, tramo.ySur, tramo.maxX - tramo.minX, tramo.maxZ - tramo.minZ, color);
     }
+  }
+  const pasillo = tramos.find(t => t.kind === 'pasillo');
+  const muroCostado = (x0, x1) => {
+    if (x1 - x0 < 0.4) return;
+    const x = (x0 + x1) / 2, z = (pasillo.minZ + pasillo.maxZ) / 2, d = pasillo.maxZ - pasillo.minZ, h = 1.25;
+    const m = new THREE.Mesh(smoothBox(x1 - x0, h, d), mat(0x1c1917));
+    m.position.set(x, h / 2, z); m.castShadow = true; scene.add(m);
+    addObstacle(x, z, x1 - x0, d, h, 'totu');
+  };
+  muroCostado(TOTU.salasX[i] + 0.72, pasillo.minX - 0.08);
+  muroCostado(pasillo.maxX + 0.08, TOTU.salasX[i + 1] - 0.72);
+  const alta = tramos.find(t => t.kind === 'alta');
+  const sube = tramos.find(t => t.kind === 'sube');
+  const baranda = (x, z0, z1) => {
+    const largo = Math.abs(z1 - z0);
+    const b = new THREE.Mesh(smoothBox(.1, .9, largo), mat(0x57534e));
+    b.position.set(x, 1.05, (z0 + z1) / 2); scene.add(b);
+    addObstacle(x, (z0 + z1) / 2, .18, largo, 3.2, 'totu');
+  };
+  baranda(scx - 1.26, alta.minZ, sube.maxZ);
+  baranda(scx + 1.26, alta.minZ, sube.maxZ);
+  for (const t of tramos.filter(t => t.kind === 'alta')) {
+    const x = (t.minX + t.maxX) / 2, w = t.maxX - t.minX;
+    const labio = new THREE.Mesh(smoothBox(w, .85, .16), mat(0x44403c));
+    labio.position.set(x, t.ySur + .55, t.minZ); scene.add(labio);
+    addObstacle(x, t.minZ, w, .2, t.ySur + 1.35, 'totu');
   }
   const guia = [];
-  for (const z of [-33.2, -37.2]) {
-    const tira = new THREE.Mesh(smoothBox(1.15, .03, .35), new THREE.MeshStandardMaterial({ color: 0xfde68a, emissive: 0xfbbf24, emissiveIntensity: .8 }));
-    tira.position.set(scx, .12, z); scene.add(tira); guia.push(tira);
+  for (const z of [-27.6, -32.4]) {
+    const tira = new THREE.Mesh(smoothBox(1.15, .03, .4), new THREE.MeshStandardMaterial({ color: 0xfde68a, emissive: 0xfbbf24, emissiveIntensity: .8 }));
+    tira.position.set(scx, .08, z); scene.add(tira); guia.push(tira);
   }
+  const colores = [0x1d4ed8, 0xb91c1c, 0x15803d, 0x7c3aed, 0xc2410c, 0x0f766e, 0x854d0e];
   const asientos = asientosDeSala(i);
+  let publico = 0;
   for (const a of asientos) {
     a.sala = i;
     const g = new THREE.Group();
-    const tela = mat(0x7f1d1d);
+    const tela = mat(a.libre ? 0x7f1d1d : 0x991b1b);
     const base = new THREE.Mesh(smoothBox(.62, .1, .56), tela);
     base.position.y = a.piso + .42; g.add(base);
     const respaldo = new THREE.Mesh(smoothBox(.62, .7, .1), tela);
@@ -3899,27 +3924,38 @@ function armarSala(i) {
     }
     scene.add(g); g.position.set(a.x, 0, a.z);
     addObstacle(a.x, a.z, .7, .6, null, 'totu');
+    if (!a.libre && (!preferLowPerf || publico % 2 === 0)) {
+      const persona = new THREE.Group();
+      const cuerpo = new THREE.Mesh(smoothBox(.4, .46, .26), mat(colores[publico % colores.length]));
+      cuerpo.position.y = .58; persona.add(cuerpo);
+      const cabeza = new THREE.Mesh(new THREE.SphereGeometry(.15, 10, 8), mat(0xf1c27d));
+      cabeza.position.set(0, .96, -.04); persona.add(cabeza);
+      persona.position.set(a.x, a.piso + .46, a.z - .02);
+      persona.rotation.y = Math.PI;
+      scene.add(persona);
+    }
+    publico++;
   }
   const cv = document.createElement('canvas'); cv.width = 640; cv.height = 360;
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace; tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearFilter;
-  const pantalla = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 3.05), new THREE.MeshBasicMaterial({ map: tex }));
-  pantalla.position.set(scx, 2.45, TOTU.zS + .7); scene.add(pantalla);
-  addObstacle(scx, TOTU.zS + .55, 7.2, .3, 4.2, 'totu');
+  const pantalla = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 3.5), new THREE.MeshBasicMaterial({ map: tex }));
+  pantalla.position.set(scx, 2.55, TOTU.zS + .7); scene.add(pantalla);
+  addObstacle(scx, TOTU.zS + .55, 8.4, .3, 4.6, 'totu');
   const puertaX = scx, puertaZ = TOTU.zSalas + .15;
   const hoja = new THREE.Mesh(smoothBox(1.55, 2.7, .1), mat(0x292524));
   hoja.position.set(puertaX, 1.35, puertaZ); scene.add(hoja);
   const obsPuerta = addObstacle(puertaX, TOTU.zSalas, 1.55, TOTU.muro + .2, 2.7, 'totu');
   const luces = [], paneles = [];
   if (!preferLowPerf) {
-    for (const z of [-34.2, -39.2]) {
-      const L = new THREE.PointLight(0xfff4d6, 1.05, 14, 1.7);
-      L.position.set(scx, 5.5, z); scene.add(L); luces.push(L);
+    for (const z of [-28.2, -34.6, -40.4]) {
+      const L = new THREE.PointLight(0xfff4d6, 1.05, 16, 1.7);
+      L.position.set(scx, 6.2, z); scene.add(L); luces.push(L);
     }
   }
-  for (const z of [-33.4, -37.4, -40.6]) {
-    const p = new THREE.Mesh(smoothBox(6.2, .08, .55), new THREE.MeshStandardMaterial({ color: 0xfff7d6, emissive: 0xfff1c2, emissiveIntensity: .9 }));
-    p.position.set(scx, 6.2, z); scene.add(p); paneles.push(p);
+  for (const z of [-27.2, -33.2, -39.2, -43.6]) {
+    const p = new THREE.Mesh(smoothBox(7.4, .08, .5), new THREE.MeshStandardMaterial({ color: 0xfff7d6, emissive: 0xfff1c2, emissiveIntensity: .9 }));
+    p.position.set(scx, 6.9, z); scene.add(p); paneles.push(p);
   }
   cineSalas.push({ i, luces, paneles, guia, asientos, cv, ctx: cv.getContext('2d'), tex, puertaX, hoja, obsPuerta, abierta: false, t: 0, cartel: false });
 }
@@ -3978,6 +4014,7 @@ function butacaCerca() {
   if (!sala || !sala.abierta) return null;
   let best = null, bd = 1.45;
   for (const a of sala.asientos) {
+    if (!a.libre) continue;
     const d = Math.min(Math.hypot(player.position.x - a.standX, player.position.z - a.standZ), Math.hypot(player.position.x - a.x, player.position.z - a.z));
     if (d < bd) { bd = d; best = a; }
   }
@@ -3993,7 +4030,7 @@ function usarPuertaCine(sala) {
     sala.abierta = true;
     sala.obsPuerta.top = -8;
     sala.hoja.position.x = sala.puertaX + 1.2;
-    toast('🚪 Sala ' + (sala.i + 1) + ' · sube a la fila de atrás o baja hacia la pantalla');
+    toast('🚪 Sala ' + (sala.i + 1) + ' · pasillo recto, y en la zona plana sube a los lados o baja al centro');
     beep(500, .06, .04);
   }
   return true;
@@ -4007,7 +4044,7 @@ function sentarseEnCine(a) {
     key: 'silla',
     mesh: { position: { x: a.x, y: a.piso + .36, z: a.z }, rotation: { y: Math.PI } },
   };
-  yaw = 0; pitch = a.fila === 'alta' ? 0.08 : -0.22;
+  yaw = 0; pitch = a.fila === 'alta' ? 0.16 : -0.28;
   sala.t = 0;
   toast('🎬 Empieza «' + cineBoleto.titulo + '». Se apagan las luces.');
   beep(340, .12, .05);
@@ -4683,6 +4720,15 @@ function renderQuestPanel() {
       if (!alleyUnlocked()) extra = '<br><span style="color:#fbbf24">🔒 Se desbloquea a los $20.000 ganados (' + Math.floor(state.totalEarned || 0) + '/20000)</span>';
       else if (state.mission === 'alley') extra = '<br><button type="button" data-alley-act="leave" class="bankBtn" style="margin-top:6px">Salir del callejón</button>';
       else extra = '<br><button type="button" data-alley-act="go" class="bankBtn" style="margin-top:6px;border-color:#f59e0b">🕶️ ' + (done ? 'Volver al callejón' : 'Ir con Tito') + '</button>';
+    } else if (q.id === 'dog' || q.id === 'delivery' || q.id === 'crates') {
+      const nombre = q.id === 'dog' ? 'del perro' : (q.id === 'delivery' ? 'del reparto' : 'del cargamento');
+      if (done) extra = '';
+      else if (job && job.id === q.id) extra = '<br><span style="color:#fde68a">En curso · el objetivo va arriba</span>';
+      else if (!job && nextJobId() === q.id) extra = '<br><button type="button" data-job-act="' + q.id + '" class="bankBtn" style="margin-top:6px;border-color:#f59e0b">▶️ Hacer la misión ' + nombre + '</button>';
+      else if (q.id === 'dog') extra = '';
+      else if (!questDone('dog')) extra = '<br><span style="color:#fbbf24">🔒 Primero, la misión del perro</span>';
+      else if (q.id === 'delivery') extra = '<br><span style="color:#fbbf24">🔒 Cuando tu casa esté lista</span>';
+      else extra = '<br><span style="color:#fbbf24">🔒 Se desbloquea con el callejón</span>';
     }
     rows.push('<div class="quest-row' + (done ? ' done' : (q.id === 'alley' && s > 0 ? ' active' : '')) + '"><div style="font-size:20px">' + q.icon + '</div><div><b>' + q.title + (done ? ' · hecha' : '') + '</b>' + q.hint + '<br><span style="opacity:.8">' + (done ? 'Listo.' : line) + ((q.need || 1) > 1 ? ' · ' + s + '/' + q.need : '') + '</span>' + extra + '</div></div>');
   }
@@ -16375,18 +16421,7 @@ function updateJobSound(dt, d) {
 }
 function renderJobBtn() {
   const b = ui('jobBtn'); if (!b) return;
-  if (!state.running || state.paused || !jobCanRun()) { b.style.display = 'none'; return; }
-  if (job) {
-    b.style.display = 'block'; b.classList.add('active');
-    const q = STORY_QUESTS.find(x => x.id === job.id) || {};
-    setTextIfChanged(b, job.icon + ' ' + (q.title || '') + ' · ' + job.label + (job.timer > 0 ? ' (' + Math.ceil(job.timer) + 's)' : ''));
-    return;
-  }
-  const id = nextJobId();
-  if (!id) { b.style.display = 'none'; return; }
-  const q = STORY_QUESTS.find(x => x.id === id) || {};
-  b.style.display = 'block'; b.classList.remove('active');
-  setTextIfChanged(b, '▶️ HACER MISIÓN · ' + (q.icon || '') + ' ' + (q.title || ''));
+  b.style.display = 'none';
 }
 function jobBtnClick() {
   if (!jobCanRun()) { toast('🕒 Las misiones son de día y en la Tierra'); return; }
@@ -16518,7 +16553,7 @@ function updateJobs(dt) {
       if (id && !jobOffered[id]) {
         jobOffered[id] = true;
         const q = STORY_QUESTS.find(x => x.id === id) || {};
-        toast('📋 Misión nueva: ' + (q.icon || '') + ' ' + (q.title || '') + ' · pulsa HACER MISIÓN abajo');
+        toast('📋 Misión nueva: ' + (q.icon || '') + ' ' + (q.title || '') + ' · ábrela en Misiones');
         beep(660, .09, .04);
       }
     }
@@ -18245,6 +18280,14 @@ if (ui('questList')) ui('questList').onclick = e => {
   const act = e.target.closest('[data-alley-act]') && e.target.closest('[data-alley-act]').dataset.alleyAct;
   if (act === 'go') { closeQuestPanel(); enterAlleyMission(); }
   else if (act === 'leave') { closeQuestPanel(); leaveAlleyMission(); }
+  const jobAct = e.target.closest('[data-job-act]');
+  if (!jobAct) return;
+  const id = jobAct.dataset.jobAct;
+  if (!jobCanRun()) { toast('🕒 Las misiones son de día y en la Tierra'); return; }
+  if (job) { toast(job.icon + ' ' + job.label); return; }
+  if (nextJobId() !== id) return;
+  closeQuestPanel();
+  startJob(id);
 };
 if (ui('keypadClear')) ui('keypadClear').onclick = () => { alley.codeBuf = ''; keypadScreen(); };
 if (ui('keypadClose')) ui('keypadClose').onclick = closeKeypad;
@@ -25158,16 +25201,18 @@ function updateMovement(dt) {
   }
   const floor2Y = secondFloorSupportY(crouch ? CROUCH_EYE : PLAYER_EYE);
   if (floor2Y != null) { floorY = Math.max(floorY, floor2Y); if (grounded && vy <= 0) player.position.y = floorY; }
+  let enPisoDeCine = false;
   if (state.planet === 'tierra' && !state.country && !state.underground) {
     const cinePies = cineAlturaEn(player.position.x, player.position.z);
     const eye = crouch ? CROUCH_EYE : PLAYER_EYE;
     if (cinePies != null && Math.abs((player.position.y - eye) - cinePies) < 1.6 && player.position.y - eye < 4.5) {
       const destino = cinePies + eye;
-      if (destino > floorY) floorY = destino;
+      floorY = destino;
+      enPisoDeCine = true;
       if (grounded && vy <= 0) player.position.y = destino;
     }
   }
-  if (!state.underground && !state.inCastle && !state.inRuins && !state.inArena && !inSkiTopHollow()) {   // ¡las montañas se suben!
+  if (!enPisoDeCine && !state.underground && !state.inCastle && !state.inRuins && !state.inArena && !inSkiTopHollow()) {   // ¡las montañas se suben!
     const cerro = sueloReal(player.position.x, player.position.z);
     const eyeH = crouch ? CROUCH_EYE : PLAYER_EYE;
     if (cerro > 0.02) { floorY = Math.max(floorY, cerro + eyeH); if (grounded && vy <= 0) player.position.y = floorY; }

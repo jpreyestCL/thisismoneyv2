@@ -1,28 +1,31 @@
-// Totu + cine. El piso de cada sala es una rampa por tramos:
-// entras al nivel de la calle, subes a la fila de atrás y bajas a la de adelante.
+// Totu + cine. Cada sala: un pasillo plano (sin escaleras), una zona plana
+// para elegir, y desde ahí se sube por los lados o se baja por el centro.
 
 export const CINE_FILMS = Object.freeze([
-  Object.freeze({ id: 'marea', titulo: 'Marea baja', precio: 80, sala: 0, dur: 46, linea: 'Un muelle al anochecer.' }),
-  Object.freeze({ id: 'luz', titulo: 'La última luz', precio: 90, sala: 1, dur: 46, linea: 'La ciudad cuando se apaga el día.' }),
-  Object.freeze({ id: 'sal', titulo: 'Camino de sal', precio: 100, sala: 2, dur: 46, linea: 'Una carretera con el sol bajo.' }),
+  Object.freeze({ id: 'caza', titulo: 'Caza en el muelle', precio: 80, sala: 0, dur: 48, linea: 'Dos lanchas y un salto cuando la marea cierra el paso.' }),
+  Object.freeze({ id: 'azotea', titulo: 'Azotea 9', precio: 90, sala: 1, dur: 48, linea: 'Una carrera por los techos antes de que se apaguen las luces.' }),
+  Object.freeze({ id: 'fuga', titulo: 'Fuga de sal', precio: 100, sala: 2, dur: 48, linea: 'Dos autos, una duna y un sol que no espera.' }),
 ]);
 
 export const TOTU = Object.freeze({
-  x0: 11.2,
-  x1: 43.8,
-  zN: -11.2,
-  zS: -43.6,
+  x0: 8.4,
+  x1: 46.6,
+  zN: -8.4,
+  zS: -46.6,
   muro: 0.42,
-  alto: 6.6,
+  alto: 7.4,
   puertaNorte: Object.freeze({ x: 27.5, w: 3.4 }),
   puertaLobby: Object.freeze({ x: 27.5, w: 2.8 }),
-  zTienda: -21.6,
-  zLobby: -28.4,
-  zSalas: -31.6,
-  salasX: Object.freeze([11.2, 22.07, 32.93, 43.8]),
-  senora: Object.freeze({ x: 39.4, z: -24.9 }),
-  vendedor: Object.freeze({ x: 23.15, z: -19.15 }),
+  zTienda: -17.6,
+  zLobby: -21.4,
+  zSalas: -24.0,
+  salasX: Object.freeze([8.4, 21.1333, 33.8667, 46.6]),
+  senora: Object.freeze({ x: 41.2, z: -19.5 }),
+  vendedor: Object.freeze({ x: 16.4, z: -13.0 }),
 });
+
+const PASILLO = 1.12;
+const SEP = 1.42;
 
 export function centroSala(i) {
   return (TOTU.salasX[i] + TOTU.salasX[i + 1]) / 2;
@@ -30,15 +33,18 @@ export function centroSala(i) {
 
 export function tramosSala(i) {
   const cx = centroSala(i);
-  const x0 = TOTU.salasX[i] + 0.72;
-  const x1 = TOTU.salasX[i + 1] - 0.72;
-  const a = 1.05;
+  const x0 = TOTU.salasX[i] + 0.78;
+  const x1 = TOTU.salasX[i + 1] - 0.78;
   return [
-    { minX: x0, maxX: x1, minZ: -32.2, maxZ: -31.78, ySur: 0, yNorte: 0 },
-    { minX: cx - a, maxX: cx + a, minZ: -34.5, maxZ: -32.2, ySur: 1.2, yNorte: 0 },
-    { minX: x0, maxX: x1, minZ: -36.05, maxZ: -34.5, ySur: 1.2, yNorte: 1.2 },
-    { minX: cx - a, maxX: cx + a, minZ: -38.5, maxZ: -36.05, ySur: 0.16, yNorte: 1.2 },
-    { minX: x0, maxX: x1, minZ: -42.35, maxZ: -38.5, ySur: 0.16, yNorte: 0.16 },
+    { kind: 'pasillo', minX: cx - PASILLO, maxX: cx + PASILLO, minZ: -31.15, maxZ: -24.15, ySur: 0, yNorte: 0 },
+    { kind: 'plano', minX: x0, maxX: x1, minZ: -33.85, maxZ: -31.15, ySur: 0, yNorte: 0 },
+    { kind: 'baja', minX: cx - PASILLO, maxX: cx + PASILLO, minZ: -37.55, maxZ: -33.85, ySur: -0.92, yNorte: 0 },
+    { kind: 'bajaPlato', minX: cx - PASILLO, maxX: cx + PASILLO, minZ: -41.35, maxZ: -37.55, ySur: -0.92, yNorte: -0.92 },
+    { kind: 'bajaPlato', minX: x0, maxX: x1, minZ: -45.55, maxZ: -41.35, ySur: -0.92, yNorte: -0.92 },
+    { kind: 'sube', minX: x0, maxX: cx - SEP, minZ: -37.7, maxZ: -33.85, ySur: 1.32, yNorte: 0 },
+    { kind: 'sube', minX: cx + SEP, maxX: x1, minZ: -37.7, maxZ: -33.85, ySur: 1.32, yNorte: 0 },
+    { kind: 'alta', minX: x0, maxX: cx - SEP, minZ: -41.15, maxZ: -37.7, ySur: 1.32, yNorte: 1.32 },
+    { kind: 'alta', minX: cx + SEP, maxX: x1, minZ: -41.15, maxZ: -37.7, ySur: 1.32, yNorte: 1.32 },
   ];
 }
 
@@ -74,6 +80,55 @@ export function dentroDeTotu(x, z, margen = 0) {
   return x > TOTU.x0 - margen && x < TOTU.x1 + margen && z > TOTU.zS - margen && z < TOTU.zN + margen;
 }
 
+function pasos(desde, hasta, paso) {
+  if (hasta < desde - 1e-6) return [];
+  const n = Math.max(1, Math.floor((hasta - desde) / paso + 1e-6) + 1);
+  if (n === 1) return [desde];
+  const real = (hasta - desde) / (n - 1);
+  const lista = [];
+  for (let i = 0; i < n; i++) lista.push(desde + real * i);
+  return lista;
+}
+
+export function asientosDeSala(i) {
+  const cx = centroSala(i);
+  const x0 = TOTU.salasX[i] + 1.2;
+  const x1 = TOTU.salasX[i + 1] - 1.2;
+  const asientos = [];
+  const poner = (x, z, piso, fila) => {
+    asientos.push({ x, z, piso, fila, libre: false, standX: x, standZ: z });
+  };
+  for (const z of [-38.35, -39.9]) {
+    for (const x of pasos(x0 + 0.35, cx - 2.55, 0.9)) poner(x, z, 1.32, 'alta');
+    for (const x of pasos(cx + 2.55, x1 - 0.35, 0.9)) poner(x, z, 1.32, 'alta');
+  }
+  for (const z of [-42.55, -43.9]) {
+    for (const x of pasos(x0 + 0.2, x1 - 0.2, 0.95)) {
+      if (Math.abs(x - cx) < 1.65) continue;
+      poner(x, z, -0.92, 'baja');
+    }
+  }
+  const liberar = (fila, z, haciaCentro) => {
+    const grupo = asientos.filter(a => a.fila === fila && Math.abs(a.z - z) < 0.02);
+    const izq = grupo.filter(a => a.x < cx).sort((a, b) => b.x - a.x)[0];
+    const der = grupo.filter(a => a.x > cx).sort((a, b) => a.x - b.x)[0];
+    for (const a of [izq, der]) {
+      if (!a) continue;
+      a.libre = true;
+      if (haciaCentro) {
+        a.standX = a.x + Math.sign(cx - a.x) * 0.7;
+        a.standZ = a.z;
+      } else {
+        a.standX = a.x;
+        a.standZ = a.z + 0.95;
+      }
+    }
+  };
+  liberar('alta', -38.35, true);
+  liberar('baja', -42.55, false);
+  return asientos;
+}
+
 function barra(ctx, w, h) {
   ctx.fillStyle = '#050505';
   ctx.fillRect(0, 0, w, 26);
@@ -82,7 +137,7 @@ function barra(ctx, w, h) {
 function vineta(ctx, w, h) {
   const v = ctx.createRadialGradient(w / 2, h / 2, h * 0.18, w / 2, h / 2, h * 0.78);
   v.addColorStop(0, 'rgba(0,0,0,0)');
-  v.addColorStop(1, 'rgba(0,0,0,.5)');
+  v.addColorStop(1, 'rgba(0,0,0,.55)');
   ctx.fillStyle = v;
   ctx.fillRect(0, 0, w, h);
 }
@@ -95,196 +150,221 @@ function grano(ctx, w, h, t) {
   }
 }
 function titulo(ctx, w, texto, sub) {
-  ctx.fillStyle = 'rgba(0,0,0,.28)';
-  ctx.fillRect(0, 78, w, 86);
+  ctx.fillStyle = 'rgba(0,0,0,.45)';
+  ctx.fillRect(0, 78, w, 92);
   ctx.fillStyle = '#f8fafc';
   ctx.font = '600 34px Georgia, serif';
   ctx.fillText(texto, 36, 118);
   ctx.fillStyle = '#e7e5e4';
   ctx.font = '16px Georgia, serif';
-  ctx.fillText(sub, 36, 146);
+  ctx.fillText(sub, 36, 148);
 }
-function silueta(ctx, x, y, s, caminando, t) {
-  const paso = caminando ? Math.sin(t * 3.2) * 5 * s : 0;
+function corredor(ctx, x, y, s, t, mira) {
+  const paso = Math.sin(t * 9) * 7 * s;
+  const lean = mira * 0.35;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(lean);
   ctx.fillStyle = '#0c0a09';
   ctx.beginPath();
-  ctx.ellipse(x, y - 46 * s, 8 * s, 10 * s, 0, 0, 7);
+  ctx.ellipse(0, -48 * s, 7 * s, 9 * s, 0, 0, 7);
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(x - 11 * s, y - 34 * s);
-  ctx.quadraticCurveTo(x, y - 8 * s, x + 12 * s, y - 32 * s);
-  ctx.lineTo(x + 7 * s, y);
-  ctx.lineTo(x + 4 * s + paso, y + 28 * s);
-  ctx.lineTo(x - 2 * s, y + 2 * s);
-  ctx.lineTo(x - 6 * s - paso, y + 28 * s);
-  ctx.lineTo(x - 9 * s, y);
+  ctx.moveTo(-8 * s, -36 * s);
+  ctx.lineTo(10 * s, -34 * s);
+  ctx.lineTo(6 * s, -4 * s);
+  ctx.lineTo(-7 * s, -2 * s);
   ctx.fill();
+  ctx.fillRect(-16 * s, -30 * s + paso, 5 * s, 22 * s);
+  ctx.fillRect(12 * s, -30 * s - paso, 5 * s, 22 * s);
+  ctx.fillRect(-8 * s, -2 * s, 4 * s, 18 * s + paso * 0.3);
+  ctx.fillRect(3 * s, -2 * s, 4 * s, 18 * s - paso * 0.3);
+  ctx.restore();
+}
+function lancha(ctx, x, y, w, color, proa) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x - w * 0.5, y);
+  ctx.lineTo(x + w * 0.35, y - 10);
+  ctx.lineTo(x + w * 0.5 * proa, y + 4);
+  ctx.lineTo(x + w * 0.2, y + 16);
+  ctx.lineTo(x - w * 0.45, y + 14);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(226,232,240,.8)';
+  ctx.fillRect(x - 6, y - 4, 16, 7);
 }
 
-function cuadroMarea(ctx, w, h, u, t) {
-  const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, '#1e1b4b');
-  g.addColorStop(.42, '#9a3412');
-  g.addColorStop(.62, '#fdba74');
-  g.addColorStop(1, '#1e3a4c');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = '#ffedd5';
-  ctx.beginPath();
-  ctx.arc(520, 118, 28, 0, 7);
-  ctx.fill();
-  ctx.fillStyle = '#0f172a';
-  ctx.beginPath();
-  ctx.moveTo(0, 214);
-  ctx.lineTo(180, 188);
-  ctx.lineTo(260, 206);
-  ctx.lineTo(0, 250);
-  ctx.fill();
-  const mar = ctx.createLinearGradient(0, 200, 0, h);
-  mar.addColorStop(0, '#0e4a5c');
-  mar.addColorStop(1, '#082f3a');
-  ctx.fillStyle = mar;
-  ctx.fillRect(0, 206, w, h);
-  ctx.strokeStyle = 'rgba(255,237,213,.35)';
-  ctx.lineWidth = 1.4;
-  for (let i = 0; i < 9; i++) {
-    const y = 230 + i * 12;
-    ctx.beginPath();
-    for (let x = 0; x <= w; x += 16) {
-      const yy = y + Math.sin(x * 0.04 + t * 1.4 + i) * 2.2;
-      if (x === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
-    }
-    ctx.stroke();
-  }
-  const avance = Math.min(1, Math.max(0, (u - 8) / 28));
-  const x0 = 250 - avance * 40;
-  ctx.fillStyle = '#44403c';
-  ctx.beginPath();
-  ctx.moveTo(x0 - 70, h);
-  ctx.lineTo(300, 214);
-  ctx.lineTo(338, 214);
-  ctx.lineTo(x0 + 120, h);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(214,211,209,.35)';
-  for (let i = 0; i < 7; i++) {
-    ctx.beginPath();
-    ctx.moveTo(x0 - 60 + i * 22, h);
-    ctx.lineTo(304 + i * 4, 220);
-    ctx.stroke();
-  }
-  if (u > 16) silueta(ctx, 292 - avance * 18, 232, 0.85, u > 20 && u < 40, t);
-  if (u < 8) titulo(ctx, w, 'MAREA BAJA', 'Un corto de Totu Cine');
-  else if (u > 40) titulo(ctx, w, 'MAREA BAJA', 'Se queda en el muelle hasta que baja el agua');
-}
-function cuadroCiudad(ctx, w, h, u, t) {
+function cuadroCaza(ctx, w, h, u, t) {
   const g = ctx.createLinearGradient(0, 0, 0, h);
   g.addColorStop(0, '#020617');
-  g.addColorStop(.45, '#1e293b');
-  g.addColorStop(.72, '#334155');
+  g.addColorStop(.35, '#1e1b4b');
+  g.addColorStop(.62, '#0f2942');
+  g.addColorStop(1, '#082f49');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(40, 48, 2, 2);
+  ctx.fillRect(180, 70, 2, 2);
+  ctx.fillRect(420, 36, 2, 2);
+  ctx.fillStyle = '#1c1917';
+  ctx.fillRect(0, 168, 90, 14);
+  ctx.fillRect(520, 150, 120, 16);
+  for (const x of [18, 48, 78]) {
+    ctx.fillRect(x, 150, 6, 40);
+  }
+  const agua = ctx.createLinearGradient(0, 180, 0, h);
+  agua.addColorStop(0, '#0e7490');
+  agua.addColorStop(1, '#082f49');
+  ctx.fillStyle = agua;
+  ctx.fillRect(0, 182, w, h);
+  const avance = Math.min(1, Math.max(0, (u - 6) / 36));
+  const x1 = 80 + avance * 280;
+  const x2 = 20 + avance * 250;
+  const salto = u > 16 && u < 27;
+  lancha(ctx, x1, 214, 78, '#0f172a', 1);
+  lancha(ctx, x2, 248, 90, '#7f1d1d', 1);
+  ctx.strokeStyle = 'rgba(226,232,240,.35)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x2 - 20, 262);
+  ctx.lineTo(x2 - 90 - avance * 40, 270);
+  ctx.stroke();
+  if (salto) {
+    const k = (u - 16) / 11;
+    const sx = x1 - 10 + k * 70;
+    const sy = 200 - Math.sin(k * Math.PI) * 48;
+    corredor(ctx, sx, sy, 0.7, t, 1);
+  } else if (u >= 27 && u < 44) {
+    corredor(ctx, x1 + 18, 206, 0.62, t * 1.4, 1);
+  }
+  if (u > 30 && u < 42) {
+    ctx.fillStyle = 'rgba(251,191,36,.85)';
+    ctx.beginPath();
+    ctx.arc(x2 + 30, 230, 10 + (u - 30), 0, 7);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(248,250,252,.35)';
+    ctx.beginPath();
+    ctx.arc(x2 + 10, 268, 16 + (u - 30) * 1.4, 0, 7);
+    ctx.fill();
+  }
+  if (u < 6) titulo(ctx, w, 'CAZA EN EL MUELLE', 'Un corto de Totu Cine');
+  else if (u > 43) titulo(ctx, w, 'CAZA EN EL MUELLE', 'Se metió por donde la marea ya no deja pasar');
+}
+function cuadroAzotea(ctx, w, h, u, t) {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#020617');
+  g.addColorStop(.5, '#172554');
   g.addColorStop(1, '#0f172a');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
-  for (let i = 0; i < 16; i++) {
-    const bw = 28 + (i % 4) * 14;
-    const bh = 70 + ((i * 37) % 120);
-    const x = 12 + i * 40;
-    ctx.fillStyle = i % 2 ? '#0f172a' : '#111827';
-    ctx.fillRect(x, 250 - bh, bw, bh);
-    for (let wy = 0; wy < 8; wy++) for (let wx = 0; wx < 2; wx++) {
-      const on = ((i + wy + Math.floor(t * 0.7)) % 4) !== 0;
-      ctx.fillStyle = on ? 'rgba(253,224,71,.85)' : 'rgba(30,41,59,.4)';
-      ctx.fillRect(x + 6 + wx * 12, 258 - bh + wy * 14, 6, 7);
+  const apagadas = Math.min(5, Math.max(0, Math.floor((u - 28) / 2)));
+  for (let i = 0; i < 8; i++) {
+    const bh = 90 + (i % 3) * 28;
+    const x = 20 + i * 78;
+    ctx.fillStyle = '#0b1220';
+    ctx.fillRect(x, 250 - bh, 64, bh);
+    for (let wy = 0; wy < 4; wy++) {
+      const muerta = i < apagadas;
+      ctx.fillStyle = muerta ? 'rgba(30,41,59,.35)' : 'rgba(253,224,71,.8)';
+      ctx.fillRect(x + 10, 258 - bh + wy * 16, 8, 8);
+      ctx.fillRect(x + 28, 258 - bh + wy * 16, 8, 8);
     }
   }
   ctx.fillStyle = '#1c1917';
-  ctx.fillRect(0, 250, w, h - 250);
-  ctx.fillStyle = 'rgba(148,163,184,.25)';
-  ctx.fillRect(70, 268, w - 140, 8);
-  for (let i = 0; i < 6; i++) {
-    const x = ((t * 48 + i * 110) % (w + 80)) - 40;
-    ctx.fillStyle = 'rgba(251,191,36,.8)';
-    ctx.fillRect(x, 292, 26, 3);
-    ctx.fillStyle = 'rgba(248,113,113,.75)';
-    ctx.fillRect(w - x, 304, 18, 3);
+  ctx.fillRect(0, 232, 210, 18);
+  ctx.fillRect(250, 214, 160, 18);
+  ctx.fillRect(450, 228, 190, 18);
+  const carrera = Math.min(1, Math.max(0, (u - 6) / 34));
+  const salto = u > 18 && u < 28;
+  let x = 70 + carrera * 360;
+  let y = 228;
+  if (salto) {
+    const k = (u - 18) / 10;
+    x = 210 + k * 90;
+    y = 220 - Math.sin(k * Math.PI) * 54;
+  } else if (u >= 28) {
+    x = 340 + (u - 28) * 8;
+    y = 214;
   }
-  ctx.fillStyle = 'rgba(226,232,240,.08)';
-  ctx.fillRect(0, 250, w, 70);
-  if (u < 8) titulo(ctx, w, 'LA ÚLTIMA LUZ', 'Un corto de Totu Cine');
-  else if (u > 38) titulo(ctx, w, 'LA ÚLTIMA LUZ', 'La calle sigue mojada cuando ya no hay nadie');
+  corredor(ctx, x, y, 0.85, t * 1.3, 1);
+  if (u > 10) corredor(ctx, x - 78, salto ? 236 : y + 6, 0.78, t * 1.3 + 1, 1);
+  const haz = 180 + Math.sin(t * 0.7) * 80;
+  ctx.fillStyle = 'rgba(254,249,195,.13)';
+  ctx.beginPath();
+  ctx.moveTo(haz, 0);
+  ctx.lineTo(x - 30, y);
+  ctx.lineTo(x + 30, y);
+  ctx.fill();
+  if (u < 6) titulo(ctx, w, 'AZOTEA 9', 'Un corto de Totu Cine');
+  else if (u > 43) titulo(ctx, w, 'AZOTEA 9', 'La última luz fue la del helicóptero');
 }
-function cuadroRuta(ctx, w, h, u, t) {
+function cuadroFuga(ctx, w, h, u, t) {
   const g = ctx.createLinearGradient(0, 0, 0, h);
   g.addColorStop(0, '#7c2d12');
-  g.addColorStop(.38, '#ea580c');
-  g.addColorStop(.58, '#fdba74');
+  g.addColorStop(.4, '#c2410c');
+  g.addColorStop(.62, '#fdba74');
   g.addColorStop(1, '#a16207');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
   ctx.fillStyle = '#fff7ed';
   ctx.beginPath();
-  ctx.arc(110, 92, 26, 0, 7);
+  ctx.arc(520, 78, 22, 0, 7);
   ctx.fill();
   ctx.fillStyle = '#9a3412';
   ctx.beginPath();
-  ctx.moveTo(0, 210);
-  ctx.lineTo(120, 168);
-  ctx.lineTo(230, 196);
-  ctx.lineTo(360, 150);
-  ctx.lineTo(520, 188);
-  ctx.lineTo(w, 160);
+  ctx.moveTo(0, 200);
+  ctx.lineTo(140, 160);
+  ctx.lineTo(280, 188);
+  ctx.lineTo(430, 150);
+  ctx.lineTo(w, 176);
   ctx.lineTo(w, 230);
   ctx.lineTo(0, 236);
   ctx.fill();
   ctx.fillStyle = '#44403c';
   ctx.beginPath();
-  ctx.moveTo(w / 2 - 8, 188);
-  ctx.lineTo(80, h);
-  ctx.lineTo(w - 80, h);
-  ctx.lineTo(w / 2 + 8, 188);
+  ctx.moveTo(300, 196);
+  ctx.lineTo(40, h);
+  ctx.lineTo(w - 30, h);
+  ctx.lineTo(360, 196);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(254,243,199,.7)';
-  ctx.setLineDash([10, 16]);
+  const spin = u > 22 && u < 34;
+  const salto = u > 34 && u < 43;
+  const leadX = 250 + Math.min(u, 40) * 4;
+  const chaseX = leadX - 130;
+  const auto = (x, y, color, giro) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(giro);
+    ctx.fillStyle = color;
+    ctx.fillRect(-36, -12, 74, 26);
+    ctx.fillStyle = '#e7e5e4';
+    ctx.fillRect(-8, -24, 34, 14);
+    ctx.fillStyle = '#facc15';
+    ctx.fillRect(30, -4, 8, 6);
+    ctx.restore();
+  };
+  let leadY = 236;
+  if (salto) leadY = 236 - Math.sin(((u - 34) / 9) * Math.PI) * 36;
+  auto(Math.min(leadX, 470), leadY, '#0f172a', Math.sin(t * 2) * 0.04);
+  const giro = spin ? (u - 22) * 0.35 : 0;
+  auto(spin ? chaseX - 10 : Math.min(chaseX, 360), 250, '#7f1d1d', giro);
+  ctx.fillStyle = 'rgba(254,243,199,.35)';
   ctx.beginPath();
-  ctx.moveTo(w / 2, 190);
-  ctx.lineTo(w / 2 + Math.sin(t) * 6, h);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  const coche = 250 + Math.sin(t * 0.8) * 10;
-  ctx.fillStyle = '#1c1917';
-  ctx.fillRect(coche, 236, 78, 28);
-  ctx.fillStyle = '#292524';
-  ctx.fillRect(coche + 16, 222, 46, 18);
-  ctx.fillStyle = '#fb7185';
-  ctx.fillRect(coche + 4, 244, 8, 6);
-  ctx.fillRect(coche + 66, 244, 8, 6);
-  ctx.fillStyle = 'rgba(120,53,15,.25)';
-  ctx.fillRect(0, 200, w, 40);
-  if (u < 8) titulo(ctx, w, 'CAMINO DE SAL', 'Un corto de Totu Cine');
-  else if (u > 38) titulo(ctx, w, 'CAMINO DE SAL', 'Sigue derecho. El sol no apura.');
+  ctx.ellipse(chaseX - 20, 286, 50 + (u % 8) * 3, 10, 0, 0, 7);
+  ctx.fill();
+  if (u < 6) titulo(ctx, w, 'FUGA DE SAL', 'Un corto de Totu Cine');
+  else if (u > 43) titulo(ctx, w, 'FUGA DE SAL', 'El sol se quedó atrás');
 }
 
 export function pintarCine(ctx, film, t) {
   const w = 640, h = 360;
-  const dur = film.dur || 46;
+  const dur = film.dur || 48;
   const u = ((t % dur) + dur) % dur;
   ctx.clearRect(0, 0, w, h);
-  if (film.id === 'luz') cuadroCiudad(ctx, w, h, u, t);
-  else if (film.id === 'sal') cuadroRuta(ctx, w, h, u, t);
-  else cuadroMarea(ctx, w, h, u, t);
+  if (film.id === 'azotea') cuadroAzotea(ctx, w, h, u, t);
+  else if (film.id === 'fuga') cuadroFuga(ctx, w, h, u, t);
+  else cuadroCaza(ctx, w, h, u, t);
   grano(ctx, w, h, t);
   vineta(ctx, w, h);
   barra(ctx, w, h);
-}
-
-export function asientosDeSala(i) {
-  const cx = centroSala(i);
-  const altos = [-2.15, 2.15].map(dx => ({
-    x: cx + dx, z: -35.25, piso: 1.2, fila: 'alta',
-    standX: cx + Math.sign(dx) * 1.15, standZ: -35.25,
-  }));
-  const bajos = [-2.15, 2.15].map(dx => ({
-    x: cx + dx, z: -40.15, piso: 0.16, fila: 'baja',
-    standX: cx + Math.sign(dx) * 1.15, standZ: -40.15,
-  }));
-  return [...altos, ...bajos];
 }
