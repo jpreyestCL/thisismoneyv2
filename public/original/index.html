@@ -2954,6 +2954,29 @@ function updatePlayerCamera(dt) {
     encuadrarCaida();
     return;
   }
+  if (condena && condena.enDucto) {
+    playerAvatar.visible = cameraMode !== 0;
+    viewmodel.visible = false;
+    playerAvatar.position.set(player.position.x, player.position.y - 1.05, player.position.z);
+    playerAvatar.rotation.set(1.15, yaw + Math.PI, 0);
+    const l = playerAvatar.userData.limbs;
+    if (l) {
+      l.armL.rotation.set(-.7, .15, .2);
+      l.armR.rotation.set(-.7, -.15, -.2);
+      l.legL.rotation.set(1.05, 0, .05);
+      l.legR.rotation.set(1.05, 0, -.05);
+    }
+    if (cameraMode === 0) {
+      camera.position.copy(player.position);
+      camera.rotation.set(pitch, yaw, 0);
+    } else {
+      const side = cameraMode === 1 ? 1 : -1;
+      camera.position.set(player.position.x + Math.sin(yaw) * 2.4 * side, player.position.y + .35, player.position.z + Math.cos(yaw) * 2.4 * side);
+      camera.lookAt(player.position.x, player.position.y - .05, player.position.z);
+    }
+    applyCameraFeedback(dt);
+    return;
+  }
   if (condena && (condena.camLavado || condena.pose || condena.lavando)) {
     encuadrarCondena(dt);
     return;
@@ -2985,7 +3008,8 @@ function updatePlayerCamera(dt) {
       playerAvatar.visible = false;
     } else {
       playerAvatar.rotation.set(0, yaw + Math.PI + (state.skiing && skiGearMesh ? skiGearMesh.rotation.y : 0), 0);
-      if (state.skiing) aquietarCuerpoEsqui();
+      if (condena && condena.atornillando) posarAtornillado();
+      else if (state.skiing) aquietarCuerpoEsqui();
       else swingLimbs(playerAvatar, dt || 0.016);
     }
   }
@@ -5950,7 +5974,7 @@ function buildJail() {
     if (i) edifCaja(ex - anchoCelda / 2, 2.4, celdaZ, .35, 4.8, celdaD, 0xa7aeb8, 'carcel', true);   // tabique entre celdas
     edifRejas(ex, 2.1, celdaZ + celdaD / 2, anchoCelda - .5, 4.2, 9, 0x3f4854, true);
     edifCaja(ex - anchoCelda / 2 + .6, 2.1, celdaZ + celdaD / 2, .7, 4.2, .3, 0x3f4854, 'carcel', false);   // puerta de la celda
-    addObstacle(ex, celdaZ + celdaD / 2, anchoCelda, .4, 4.2, 'carcel');   // la reja no se atraviesa
+    const reja = addObstacle(ex, celdaZ + celdaD / 2, anchoCelda, .4, 4.2, 'carcel');   // la reja no se atraviesa
     const letrero = makeSign(String(numero), 0xf8fafc);
     letrero.scale.set(.32, .32, .32);
     letrero.position.set(ex, 3.55, celdaZ + celdaD / 2 + .15);
@@ -5980,8 +6004,10 @@ function buildJail() {
       cama: { x: ex - 1, y: .9, z: celdaZ - 1.4 },
       lavabo: { x: lavabo.position.x, z: lavabo.position.z },
       preso,
+      reja,
     });
   }
+  armarAlmuerzoCarcel({ cx, cz, pFondo, celdaZ, celdaD, anchoCelda, pw, pt });
   // Tubos fluorescentes del pasillo (dos luces reales, como en el súper) y focos en las celdas
   for (const sx of [-8, 8]) {
     edifCaja(cx + sx, ph - .45, pz + 3.2, 3.4, .2, .5, 0xfff8e1, 'carcel', false,
@@ -5996,6 +6022,7 @@ function buildJail() {
   // Un guardia recorriendo el pasillo y dos vigilando el patio
   [[cx - 6, pz + 4.4, 'pasillo', 9], [cx + 8, cz + 5, 'patio', 6], [cx - 4, cz + 12, 'patio', 7]].forEach(([gx, gz, tipo, r]) => {
     const g = makeGuard(); g.position.set(gx, 0, gz);
+    g.userData.guardia = true;
     g.userData.jail = { tipo, ox: gx, oz: gz, r, heading: Math.random() * 6.28, wait: Math.random() * 2 };
     scene.add(g); jailFolk.push(g);
   });
@@ -6005,6 +6032,7 @@ function buildJail() {
     p.userData.jail = { tipo: 'patio', ox: px, oz: pz2, r: 5.5, heading: Math.random() * 6.28, wait: Math.random() * 2 };
     scene.add(p); jailFolk.push(p);
   });
+  rutinaCarcel.guardias = jailFolk.filter(p => p.userData.guardia).slice(0, 2);
 }
 // buildBank() y buildJail() se llaman más abajo, junto al condominio: los dos usan
 // los helpers de parques (mcFloor, mcBench…), que todavía no existen en esta línea.
@@ -6013,7 +6041,7 @@ function updateJailFolk(dt) {
   if (state.planet !== 'tierra' || state.country) return;
   if (dist2D(player.position, JAIL_POS) > 90) return;
   for (const p of jailFolk) {
-    if (!p.visible || p.userData.jailQuieto) continue;
+    if (!p.visible || p.userData.jailQuieto || p.userData.escolta) continue;
     const ud = p.userData.jail;
     ud.wait -= dt;
     if (ud.wait <= 0) { ud.heading += Math.random() * 2.2 - 1.1; ud.wait = 1.5 + Math.random() * 3; }
@@ -6023,6 +6051,507 @@ function updateJailFolk(dt) {
     p.rotation.y = ud.heading;
     swingLimbs(p, dt);
   }
+  updateAireCarcel(dt);
+}
+
+// Almuerzo y ducto del modo ladrón. Solo la condena de nueve minutos
+// (la del banco) los usa; el minuto normal sigue siendo la celda de siempre.
+const rutinaCarcel = { listo: false, aire: [], rejas: [], guardias: [], comensales: [] };
+function hacerCucharaMesh(metal) {
+  const g = new THREE.Group();
+  const mango = new THREE.Mesh(new THREE.CylinderGeometry(.012, .012, .22, 6), metal);
+  g.add(mango);
+  const pala = new THREE.Mesh(new THREE.SphereGeometry(.045, 8, 6), metal);
+  pala.scale.set(1, .35, 1.25);
+  pala.position.y = .12;
+  g.add(pala);
+  return g;
+}
+function hacerRejaDucto(x, y, z) {
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  const marco = new THREE.Mesh(smoothBox(.92, .72, .08), mat(0x475569));
+  g.add(marco);
+  for (let i = 0; i < 4; i++) {
+    const b = new THREE.Mesh(smoothBox(.72, .045, .1), mat(0xcbd5e1));
+    b.position.y = -.24 + i * .16;
+    g.add(b);
+  }
+  const tornillos = [];
+  for (const sx of [-.38, .38]) for (const sy of [-.28, .28]) {
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(.035, .035, .06, 6), mat(0xe7e5e4));
+    t.rotation.x = Math.PI / 2;
+    t.position.set(sx, sy, .05);
+    g.add(t);
+    tornillos.push(t);
+  }
+  g.userData.tornillos = tornillos;
+  scene.add(g);
+  return g;
+}
+function armarAlmuerzoCarcel(cfg) {
+  const { cx, cz, pFondo, celdaZ, celdaD, anchoCelda, pw, pt } = cfg;
+  const barsZ = celdaZ + celdaD / 2;
+  const fondoZ = celdaZ - celdaD / 2;
+  const oeste = cx - (pw - pt * 2) / 2;
+  const este = oeste + anchoCelda * 5;
+  const fila = { minX: cx - 9.15, maxX: cx - 7.55, minZ: barsZ + .85, maxZ: barsZ + 5.6 };
+  const mostrador = { x: cx - 11.15, z: (fila.minZ + fila.maxZ) / 2 };
+  const mesa = { x: fila.maxX + 1.05, z: fila.maxZ - 1.15 };
+  mesa.yaw = Math.atan2(-(mostrador.x - mesa.x), -(mostrador.z - mesa.z));
+  edifCaja(mostrador.x, .55, mostrador.z, 1.35, 1.1, 3.4, 0x78716c, 'carcel', true);
+  const olla = new THREE.Mesh(new THREE.CylinderGeometry(.28, .32, .28, 10), mat(0x44403c));
+  olla.position.set(mostrador.x + .15, 1.2, mostrador.z);
+  scene.add(olla);
+  const sopa = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, .06, 10), new THREE.MeshStandardMaterial({ color: 0x65a30d, emissive: 0x3f6212, emissiveIntensity: .35 }));
+  sopa.position.set(mostrador.x + .15, 1.34, mostrador.z);
+  scene.add(sopa);
+  edifCaja(mesa.x, .46, mesa.z, 1.25, .1, .8, 0x8a6b4a, 'carcel', false);
+  const bol = new THREE.Mesh(new THREE.CylinderGeometry(.16, .12, .1, 10), mat(0xf8fafc));
+  bol.position.set(mesa.x, .58, mesa.z);
+  scene.add(bol);
+  const verde = new THREE.Mesh(new THREE.CylinderGeometry(.13, .13, .04, 10), new THREE.MeshStandardMaterial({ color: 0x84cc16, emissive: 0x4d7c0f, emissiveIntensity: .4 }));
+  verde.position.set(mesa.x, .64, mesa.z);
+  scene.add(verde);
+  const metal = new THREE.MeshStandardMaterial({ color: 0xe7e5e4, metalness: .85, roughness: .22 });
+  const cucharaMesa = hacerCucharaMesh(metal);
+  cucharaMesa.rotation.z = Math.PI / 2.4;
+  cucharaMesa.position.set(mesa.x + .28, .58, mesa.z + .12);
+  scene.add(cucharaMesa);
+  const mesas = [{ x: cx + 3.1, z: barsZ + 3.15 }, { x: cx + 8.1, z: barsZ + 3.35 }];
+  mesas.forEach((m, mi) => {
+    edifCaja(m.x, .46, m.z, 1.8, .1, .9, 0x8a6b4a, 'carcel', false);
+    for (const lado of [-.55, .55]) {
+      const p = makePrisoner(8 + mi * 2 + (lado > 0 ? 1 : 0));
+      sentarPersona(p, m.x + lado, .95, m.z, lado > 0 ? Math.PI : 0);
+      scene.add(p);
+      rutinaCarcel.comensales.push(p);
+      const plato = new THREE.Mesh(new THREE.CylinderGeometry(.1, .1, .035, 8), new THREE.MeshStandardMaterial({ color: 0x84cc16, emissive: 0x3f6212, emissiveIntensity: .3 }));
+      plato.position.set(m.x + lado * .35, .56, m.z);
+      scene.add(plato);
+    }
+  });
+  for (let i = 0; i < 2; i++) {
+    const p = makePrisoner(12 + i);
+    p.position.set(mostrador.x + .95, 0, mostrador.z + (i ? 1.15 : -1.15));
+    p.rotation.y = -Math.PI / 2;
+    p.userData.jailQuieto = true;
+    scene.add(p);
+    rutinaCarcel.comensales.push(p);
+  }
+  [[cx - 2, cz + 6], [cx + 6, cz + 9]].forEach(([px, pz2], i) => {
+    const p = makePrisoner(14 + i);
+    p.position.set(px, 0, pz2);
+    p.userData.jail = { tipo: 'patio', ox: px, oz: pz2, r: 4.5, heading: Math.random() * 6.28, wait: Math.random() * 2 };
+    scene.add(p);
+    jailFolk.push(p);
+  });
+  const zDucto = pFondo - pt / 2 - .55;
+  const zSalida = cz - JAIL.d / 2 - 3;
+  const ducto = { z: zDucto, oeste: oeste + .45, este: este - .45, zSalida, y: 2.15 };
+  edifCaja((ducto.oeste + ducto.este) / 2, ducto.y, zDucto, ducto.este - ducto.oeste, .82, .68, 0x64748b, 'carcel', false);
+  edifCaja(ducto.oeste, ducto.y, (zDucto + zSalida) / 2, .68, .82, Math.abs(zSalida - zDucto), 0x64748b, 'carcel', false);
+  for (const c of CELDAS_PRESO) {
+    const rejaDucto = hacerRejaDucto(c.ex, 2.2, fondoZ + .1);
+    c.grate = { x: c.ex, y: 2.2, z: fondoZ + .1, mesh: rejaDucto };
+    rutinaCarcel.rejas.push(rejaDucto);
+    for (let i = 0; i < 3; i++) {
+      const a = new THREE.Mesh(new THREE.SphereGeometry(.07, 6, 5), new THREE.MeshBasicMaterial({ color: 0xe2e8f0, transparent: true, opacity: .4, depthWrite: false }));
+      a.userData = { x: c.ex + (i - 1) * .14, y: 2.05, z: fondoZ + .28, fase: i * .33 + c.n * .1, sale: true };
+      scene.add(a);
+      rutinaCarcel.aire.push(a);
+    }
+  }
+  const mala = CELDAS_PRESO.find(c => c.n === 404);
+  if (mala) {
+    const bx = mala.ex, bz = (mala.minZ + mala.maxZ) / 2;
+    const len = Math.hypot(bx - ducto.oeste, bz - zDucto);
+    const tubo = new THREE.Mesh(smoothBox(.58, .7, Math.max(.4, len)), mat(0x64748b));
+    tubo.position.set((ducto.oeste + bx) / 2, ducto.y, (zDucto + bz) / 2);
+    tubo.rotation.y = Math.atan2(bx - ducto.oeste, bz - zDucto);
+    scene.add(tubo);
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = new THREE.Mesh(new THREE.SphereGeometry(.09, 6, 5), new THREE.MeshBasicMaterial({ color: 0xf8fafc, transparent: true, opacity: .45, depthWrite: false }));
+    a.userData = { x: ducto.oeste, y: .35, z: zSalida + .4, fase: i * .25, sale: false };
+    scene.add(a);
+    rutinaCarcel.aire.push(a);
+  }
+  rutinaCarcel.fila = fila;
+  rutinaCarcel.mesa = mesa;
+  rutinaCarcel.mostrador = mostrador;
+  rutinaCarcel.ducto = ducto;
+  rutinaCarcel.cucharaMesa = cucharaMesa;
+  rutinaCarcel.celda404 = CELDAS_PRESO.find(c => c.n === 404);
+  rutinaCarcel.celda405 = CELDAS_PRESO.find(c => c.n === 405);
+  rutinaCarcel.listo = true;
+}
+function updateAireCarcel(dt) {
+  if (!rutinaCarcel.aire.length || state.planet !== 'tierra' || state.country) return;
+  if (dist2D(player.position, JAIL_POS) > 90) return;
+  const t = performance.now() * .001;
+  for (const a of rutinaCarcel.aire) {
+    const u = (t * .45 + a.userData.fase) % 1;
+    const sube = a.userData.sale ? u * .75 : u * 1.1;
+    const avanza = a.userData.sale ? u * .35 : u * .6;
+    a.position.set(a.userData.x, a.userData.y + sube, a.userData.z + (a.userData.sale ? avanza : -avanza));
+    a.material.opacity = .12 + (1 - u) * .4;
+    a.scale.setScalar(.55 + u * .9);
+  }
+}
+function rutinaDeLadron() {
+  return !!(condena && condena.banco && state.thiefMode && rutinaCarcel.listo);
+}
+function nuevaCondena(celda, left, banco, extra) {
+  return Object.assign({
+    celda, left, pose: null, lavando: false, camLavado: false, hambreMuerte: false, banco: !!banco,
+    cuchara: false, almuerzo: null, rejaAbierta: false, enDucto: false, atornillando: false, tornillo: 0, comio: false,
+  }, extra || {});
+}
+function mostrarArmaEnMano(on) {
+  const mounts = [];
+  if (viewmodel.userData.toolMount) mounts.push(viewmodel.userData.toolMount);
+  const arm = playerAvatar.userData.limbs && playerAvatar.userData.limbs.armR;
+  if (arm && arm.userData.toolMount) mounts.push(arm.userData.toolMount);
+  for (const m of mounts) m.visible = !!on;
+}
+function asegurarCuchara() {
+  if (playerAvatar.userData.cucharaMano) return playerAvatar.userData.cucharaMano;
+  const metal = new THREE.MeshStandardMaterial({ color: 0xe7e5e4, metalness: .85, roughness: .22 });
+  const mano = hacerCucharaMesh(metal);
+  const extremo = playerAvatar.userData.limbs && playerAvatar.userData.limbs.armR && playerAvatar.userData.limbs.armR.userData.extremo;
+  (extremo || playerAvatar).add(mano);
+  mano.position.set(.02, -.02, .1);
+  mano.rotation.x = .7;
+  mano.visible = false;
+  playerAvatar.userData.cucharaMano = mano;
+  const vista = hacerCucharaMesh(metal);
+  viewmodel.add(vista);
+  vista.position.set(.02, .06, -.24);
+  vista.rotation.x = 1.15;
+  vista.visible = false;
+  viewmodel.userData.cuchara = vista;
+  return mano;
+}
+function soltarCuchara() {
+  if (playerAvatar.userData.cucharaMano) playerAvatar.userData.cucharaMano.visible = false;
+  if (viewmodel.userData.cuchara) viewmodel.userData.cuchara.visible = false;
+  mostrarArmaEnMano(true);
+  const l = playerAvatar.userData.limbs;
+  if (l && l.armR && l.armR.userData.junta) l.armR.userData.junta.rotation.x = 0;
+}
+function posarAtornillado() {
+  const cuch = asegurarCuchara();
+  cuch.visible = true;
+  const giro = performance.now() * .012;
+  cuch.rotation.y = giro;
+  if (viewmodel.userData.cuchara) {
+    viewmodel.userData.cuchara.visible = true;
+    viewmodel.userData.cuchara.rotation.y = giro;
+  }
+  mostrarArmaEnMano(false);
+  const l = playerAvatar.userData.limbs;
+  if (!l) return;
+  l.armR.rotation.set(-1.55, -.35, -.85);
+  l.armL.rotation.set(-.35, .2, .35);
+  if (l.armR.userData.junta) l.armR.userData.junta.rotation.x = Math.sin(giro) * .4;
+}
+function abrirDuctoVisual() {
+  for (const g of rutinaCarcel.rejas) {
+    g.rotation.x = -1.15;
+    if (g.userData.tornillos) g.userData.tornillos.forEach(t => { t.visible = false; });
+  }
+}
+function cerrarDuctoVisual() {
+  for (const g of rutinaCarcel.rejas) {
+    g.rotation.x = 0;
+    if (g.userData.tornillos) g.userData.tornillos.forEach(t => { t.visible = true; });
+  }
+}
+function distRejaDucto() {
+  const g = condena && condena.celda && condena.celda.grate;
+  if (!g) return 99;
+  return Math.hypot(player.position.x - g.x, player.position.z - g.z);
+}
+function cercaDeLaRejaDucto() {
+  return distRejaDucto() < 1.4;
+}
+function mirarConFlechas(dt) {
+  const lookSpeed = 1.8 * dt;
+  if (keys['ArrowLeft']) yaw += lookSpeed;
+  if (keys['ArrowRight']) yaw -= lookSpeed;
+  if (keys['ArrowUp']) pitch += lookSpeed;
+  if (keys['ArrowDown']) pitch -= lookSpeed;
+  pitch = THREE.MathUtils.clamp(pitch, -1.3, 1.3);
+}
+function puntoEnRect(x, z, r) {
+  return x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ;
+}
+function clampARects(rects) {
+  const x = player.position.x, z = player.position.z;
+  if (rects.some(r => puntoEnRect(x, z, r))) return;
+  let best = null, bd = 1e9;
+  for (const r of rects) {
+    const cx = THREE.MathUtils.clamp(x, r.minX, r.maxX);
+    const cz = THREE.MathUtils.clamp(z, r.minZ, r.maxZ);
+    const d = (cx - x) * (cx - x) + (cz - z) * (cz - z);
+    if (d < bd) { bd = d; best = { x: cx, z: cz }; }
+  }
+  if (best) { player.position.x = best.x; player.position.z = best.z; }
+}
+function rectsDelAlmuerzo() {
+  const c = condena.celda, f = rutinaCarcel.fila;
+  return [
+    { minX: c.minX, maxX: c.maxX, minZ: c.minZ, maxZ: c.maxZ },
+    { minX: c.minX, maxX: c.maxX, minZ: c.maxZ - .05, maxZ: f.minZ + .45 },
+    { minX: Math.min(c.minX, f.minX), maxX: Math.max(c.maxX, f.maxX), minZ: f.minZ - .15, maxZ: f.minZ + .7 },
+    f,
+  ];
+}
+function abrirFilaAlmuerzo() {
+  condena.almuerzo = 'aviso';
+  condena.pose = null;
+  condena.lavando = false;
+  condena.camLavado = false;
+  soltarManosLavado();
+  mostrarCamaCelda(false);
+  if (playerAvatar) { playerAvatar.rotation.order = 'XYZ'; posarDePie(playerAvatar); }
+  if (condena.celda.reja) condena.celda.reja.top = -8;
+  toast('🍲 Almuerzo. Sopa verde: haz la fila y siéntate. No recorras todo el pasillo.');
+}
+function enLaFila() {
+  const f = rutinaCarcel.fila, x = player.position.x, z = player.position.z;
+  return x > f.minX - .35 && x < f.maxX + .35 && z > f.minZ - .35 && z < f.maxZ + .35;
+}
+function frenteDeLaFila() {
+  const f = rutinaCarcel.fila;
+  return player.position.z > f.maxZ - .8;
+}
+function empezarFila() {
+  const f = rutinaCarcel.fila;
+  condena.almuerzo = 'fila';
+  condena.pose = null;
+  player.position.x = THREE.MathUtils.clamp(player.position.x, f.minX, f.maxX);
+  player.position.z = THREE.MathUtils.clamp(player.position.z, f.minZ, f.maxZ);
+  player.position.y = PLAYER_EYE;
+  toast('🚶 Fila del almuerzo. Camina hasta el frente y siéntate.');
+}
+function sentarEnElAlmuerzo() {
+  const m = rutinaCarcel.mesa;
+  condena.almuerzo = 'sentado';
+  condena.pose = 'sopa';
+  condena.lavando = false;
+  condena.camLavado = false;
+  condena.comio = false;
+  condena.esperaGuardia = 0;
+  player.position.set(m.x, PLAYER_EYE, m.z);
+  yaw = m.yaw;
+  pitch = .25;
+  vy = 0;
+  grounded = true;
+  posarSentado(playerAvatar);
+  toast('🥣 Te sentaste. Sirven sopa verde.');
+}
+function comerSopa() {
+  condena.comio = true;
+  condena.esperaGuardia = 0;
+  state.hunger = Math.min(100, (state.hunger || 0) + 55);
+  if (condena.hambreMuerte && state.hunger > 0) condena.hambreMuerte = false;
+  toast('🍲 Comiste la sopa verde.');
+  beep(520, .08, .04);
+}
+function robarCuchara() {
+  condena.cuchara = true;
+  if (rutinaCarcel.cucharaMesa) rutinaCarcel.cucharaMesa.visible = false;
+  toast('🥄 Robaste una cuchara. Nadie te vio.');
+  beep(640, .05, .03);
+}
+function empezarEscolta() {
+  const c = condena.celda, f = rutinaCarcel.fila;
+  condena.almuerzo = 'escolta';
+  condena.pose = null;
+  condena.lavando = false;
+  if (playerAvatar) posarDePie(playerAvatar);
+  condena.ruta = [
+    { x: player.position.x, z: player.position.z },
+    { x: (f.minX + f.maxX) / 2, z: f.minZ + .3 },
+    { x: c.ex, z: c.maxZ + .15 },
+    { x: c.ex, z: (c.minZ + c.maxZ) / 2 },
+  ];
+  condena.escoltaT = 0;
+  rutinaCarcel.guardias.forEach(g => { g.userData.escolta = true; g.userData.jailQuieto = true; g.visible = true; });
+  toast('👮 Los guardias te llevan a la celda. Los minutos siguen pasando.');
+}
+function terminarEscolta() {
+  const c = condena.celda;
+  condena.almuerzo = 'listo';
+  condena.pose = null;
+  condena.ruta = null;
+  if (c.reja) c.reja.top = 4.2;
+  player.position.set(c.ex, PLAYER_EYE, (c.minZ + c.maxZ) / 2);
+  yaw = 0;
+  vy = 0;
+  grounded = true;
+  rutinaCarcel.guardias.forEach(g => {
+    g.userData.escolta = false;
+    g.userData.jailQuieto = false;
+    const ud = g.userData.jail;
+    if (ud) g.position.set(ud.ox, 0, ud.oz);
+  });
+  toast(condena.cuchara ? '🔒 Celda cerrada. El tiempo sigue. Ya puedes desatornillar el ducto.' : '🔒 Celda cerrada. El tiempo sigue. Sin la cuchara el ducto no se abre.');
+}
+function avanzarEscolta(dt) {
+  const ruta = condena.ruta;
+  if (!ruta || ruta.length < 2) { terminarEscolta(); return; }
+  condena.escoltaT += dt;
+  let restante = condena.escoltaT * 2.35;
+  let px = ruta[0].x, pz = ruta[0].z, llego = true;
+  for (let i = 0; i < ruta.length - 1; i++) {
+    const a = ruta[i], b = ruta[i + 1];
+    const largo = Math.hypot(b.x - a.x, b.z - a.z) || .001;
+    if (restante <= largo) {
+      const t = restante / largo;
+      px = a.x + (b.x - a.x) * t;
+      pz = a.z + (b.z - a.z) * t;
+      yaw = Math.atan2(-(b.x - a.x), -(b.z - a.z));
+      llego = false;
+      break;
+    }
+    restante -= largo;
+  }
+  if (llego) { terminarEscolta(); return; }
+  player.position.set(px, PLAYER_EYE, pz);
+  vy = 0;
+  grounded = true;
+  const lx = -Math.sin(yaw), lz = -Math.cos(yaw);
+  const rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  rutinaCarcel.guardias.forEach((g, i) => {
+    const lado = i ? .65 : -.65;
+    g.position.set(px - lx * .75 + rx * lado, 0, pz - lz * .75 + rz * lado);
+    g.rotation.y = yaw + Math.PI;
+    swingLimbs(g, dt);
+  });
+}
+function proyectarEnTramo(p, a, b) {
+  const abx = b.x - a.x, abz = b.z - a.z;
+  const len2 = abx * abx + abz * abz || 1;
+  const t = THREE.MathUtils.clamp(((p.x - a.x) * abx + (p.z - a.z) * abz) / len2, 0, 1);
+  const x = a.x + abx * t, z = a.z + abz * t;
+  return { x, z, t, d: Math.hypot(x - p.x, z - p.z) };
+}
+function entrarAlDucto() {
+  if (!condena || condena.enDucto || !condena.rejaAbierta) return;
+  const d = rutinaCarcel.ducto;
+  const mala = condena.celda.n === 404 ? rutinaCarcel.celda405 : rutinaCarcel.celda404;
+  condena.enDucto = true;
+  condena.pose = null;
+  condena.lavando = false;
+  condena.camLavado = false;
+  condena.atornillando = false;
+  soltarCuchara();
+  condena.tramos = [
+    { id: 'recto', a: { x: d.este, z: d.z }, b: { x: d.oeste, z: d.z } },
+    { id: 'libre', a: { x: d.oeste, z: d.z }, b: { x: d.oeste, z: d.zSalida } },
+    { id: 'mala', a: { x: d.oeste, z: d.z }, b: { x: mala.ex, z: (mala.minZ + mala.maxZ) / 2 }, celda: mala },
+  ];
+  player.position.set(THREE.MathUtils.clamp(condena.celda.ex, d.oeste, d.este), d.y, d.z);
+  yaw = Math.PI / 2;
+  pitch = 0;
+  vy = 0;
+  grounded = true;
+  toast('🧎 Agachado en el ducto. Sigue recto: un recodo sale del penal y el otro cae en otra celda.');
+}
+function moverEnDucto(dt) {
+  mirarConFlechas(dt);
+  const d = rutinaCarcel.ducto;
+  let ax = 0, az = 0;
+  if (keys['KeyW']) az += 1;
+  if (keys['KeyS']) az -= 1;
+  if (keys['KeyD']) ax += 1;
+  if (keys['KeyA']) ax -= 1;
+  az += touch.moveY || 0;
+  ax += touch.moveX || 0;
+  const mag = Math.hypot(ax, az);
+  if (mag > 1) { ax /= mag; az /= mag; }
+  const deseo = { x: player.position.x, z: player.position.z };
+  deseo.x += (-Math.sin(yaw) * az + Math.cos(yaw) * ax) * 3.2 * dt;
+  deseo.z += (-Math.cos(yaw) * az - Math.sin(yaw) * ax) * 3.2 * dt;
+  let best = null;
+  for (const seg of condena.tramos) {
+    const q = proyectarEnTramo(deseo, seg.a, seg.b);
+    if (!best || q.d < best.d) best = Object.assign({ seg }, q);
+  }
+  if (best && best.d <= .72) {
+    player.position.x = best.x;
+    player.position.z = best.z;
+    if (best.seg.id === 'libre' && best.t > .97) { fugarDeLaCarcel(); return; }
+    if (best.seg.id === 'mala' && best.t > .9) { caerEnOtraCelda(best.seg.celda); return; }
+  }
+  player.position.y = d.y;
+  vy = 0;
+  grounded = true;
+}
+function caerEnOtraCelda(otra) {
+  if (!otra) otra = rutinaCarcel.celda404;
+  condena.enDucto = false;
+  condena.tramos = null;
+  condena.celda = otra;
+  condena.pose = null;
+  if (otra.reja) otra.reja.top = 4.2;
+  if (otra.preso) {
+    posarDePie(otra.preso);
+    otra.preso.position.set(otra.maxX - .05, 0, otra.maxZ - .15);
+    otra.preso.userData.jailQuieto = true;
+  }
+  player.position.set(otra.ex, PLAYER_EYE, (otra.minZ + otra.maxZ) / 2);
+  yaw = 0;
+  pitch = 0;
+  vy = 0;
+  grounded = true;
+  if (playerAvatar) posarDePie(playerAvatar);
+  toast('⛓️ El recodo malo termina en la celda ' + otra.n + '. La reja está cerrada.');
+}
+function fugarDeLaCarcel() {
+  const d = rutinaCarcel.ducto;
+  const x = d.oeste, z = d.zSalida;
+  if (condena.celda && condena.celda.preso) condena.celda.preso.userData.jailQuieto = false;
+  if (condena.celda && condena.celda.reja) condena.celda.reja.top = 4.2;
+  rutinaCarcel.guardias.forEach(g => {
+    g.userData.escolta = false;
+    g.userData.jailQuieto = false;
+    const ud = g.userData.jail;
+    if (ud) g.position.set(ud.ox, 0, ud.oz);
+  });
+  soltarCuchara();
+  soltarManosLavado();
+  mostrarCamaCelda(false);
+  cerrarDuctoVisual();
+  if (playerAvatar) { playerAvatar.rotation.order = 'XYZ'; posarDePie(playerAvatar); }
+  condena = null;
+  player.position.set(x, PLAYER_EYE, z);
+  vy = 0;
+  grounded = true;
+  state.fugaCarcel = true;
+  state.wanted = 300;
+  state.wantedLevel = 4;
+  state.policeDelay = 0;
+  state.bankChase = false;
+  state.jailPorBanco = false;
+  quitarCarteles();
+  toast('🏃 Saliste por el ducto. La policía te persigue cinco minutos. Si aguantas, quedas libre.');
+}
+function avanzarTornillo(dt) {
+  const tiene = !!(keys['KeyE'] || touch.useHeld);
+  if (tiene) condena.tornillo += dt;
+  else condena.tornillo = Math.max(0, condena.tornillo - dt * .35);
+  if (condena.tornillo < 3) return;
+  condena.tornillo = 3;
+  condena.atornillando = false;
+  condena.rejaAbierta = true;
+  soltarCuchara();
+  abrirDuctoVisual();
+  toast('🔧 El ducto quedó abierto.');
+  beep(180, .08, .04);
 }
 
 // Policías: aparecen cuando estás "buscado" y te persiguen
@@ -6115,7 +6644,7 @@ function becomeWanted(sec, stars) {
 function updatePolice(dt) {
   if (state.planet === 'platus') { if (police.length) clearPolice(); state.wanted = 0; state.wantedLevel = 0; return; }   // en Platus NO hay policía
   if (state.wanted > 0) {
-    state.wanted -= dt * (state.gadgets && state.gadgets.capa ? 1.8 : 1);
+    state.wanted -= dt * (state.gadgets && state.gadgets.capa && !state.fugaCarcel ? 1.8 : 1);
     if (state.policeDelay > 0) { state.policeDelay -= dt; return; }   // aún no llegan: aprovecha para huir
     const driving = state.driving;              // si conduces, la policía te persigue EN AUTO
     const lvl = Math.max(1, state.wantedLevel || 1);
@@ -6123,7 +6652,7 @@ function updatePolice(dt) {
     while (police.length < desired) spawnPolice(1);
     while (police.length > desired) { const p = police.pop(); if (p.userData.car) scene.remove(p.userData.car); scene.remove(p); }
     const escondido = playerInSmoke();   // metido en el humo: te pierden de vista
-    if (escondido) {
+    if (escondido && !state.fugaCarcel) {
       state.wanted = Math.max(0, state.wanted - dt * 2.5);   // además se les pasa más rápido
       if (!state.smokeHintShown) { state.smokeHintShown = true; toast('💨 Dentro del humo la policía NO te ve · quédate quieto'); }
     } else state.smokeHintShown = false;
@@ -6163,10 +6692,15 @@ function updatePolice(dt) {
         if (p.userData.light) p.userData.light.material.color.setHex((Math.floor(performance.now() / 250) % 2) ? 0xef4444 : 0x3b82f6);   // sirena
       } else { p.rotation.y = face; swingLimbs(p, dt); }
     }
-  } else if (police.length || state.wantedLevel) { clearPolice(); state.wantedLevel = 0; }   // se acabó la búsqueda
+  } else if (police.length || state.wantedLevel) {
+    const libre = !!state.fugaCarcel;
+    clearPolice(); state.wantedLevel = 0;
+    if (libre) { state.fugaCarcel = false; toast('🕊️ Aguantaste los cinco minutos. Sigues libre.'); }
+  }
 }
 function policeCatch() {
-  const banco = !!state.bankChase;
+  const banco = !!state.bankChase || !!state.fugaCarcel;
+  state.fugaCarcel = false;
   state.jailPorBanco = banco;
   state.bankChase = false;
   quitarCarteles();
@@ -16865,7 +17399,7 @@ const state = {
   story: {}, storyRewarded: {}, gadgets: {}, mission: null,
   thiefMode: false,
   thief: { naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false },
-  bankVaultOpen: false, bankLooted: [], bankChase: false, bankDispatched: false, bankGrace: 0, jailPorBanco: false,
+  bankVaultOpen: false, bankLooted: [], bankChase: false, bankDispatched: false, bankGrace: 0, jailPorBanco: false, fugaCarcel: false,
 };
 let lastHp = 100;   // para detectar cuándo te hacen daño
 
@@ -18595,7 +19129,7 @@ function startGame() {
   clearEggPets(); state.incubTime = 0; state.eggQueue = 0; state.eggKind = null; state.eggLine = []; clearPetPoint();   // sin huevos/mascotas/banderita al empezar
   endEclipse(); state.coreClaimed = false; state.relics = 0; state.trophies = 0; removeMount(); state.inCastle = false; setCastleVisible(false); clearTitan(); state.inArena = false; setColiVisible(false); clearArenaFoes(); state.inHotel = false; if (hotelLobby) hotelLobby.visible = false;
   state.inv = freshInv(); selectedCrop = 'apple'; state.poison = 0; state.dadPoison = 0;
-  state.wanted = 0; state.wantedLevel = 0; clearPolice(); victims.forEach(v => v.userData.robbed = false);
+  state.wanted = 0; state.wantedLevel = 0; state.fugaCarcel = false; clearPolice(); victims.forEach(v => v.userData.robbed = false);
   state.streak = 0; state.bestiary = {}; state.recordShown = false; state.unlocked = {}; state.album = {}; state.albumDone = false;
   state.tutorial = { step: 0, complete: false }; state.chapter = 0; state.chapterFlags = {}; state.reputation = 0; state.medals = {}; state.blueprints = {}; state.citizenFavors = {}; state.sportGame = null; state.business = null; state.businessOrders = 0; state.parkBusiness = null; state.worldEvent = null; state.nextWorldEvent = 45; state.foundSecrets = {}; state.secretsFound = 0; state.stamina = 100; state.blocking = false; state.dodgeCd = 0; state.invulnerable = 0; syncWorldSecrets();
   state.mathLeft = 5; state.mathStreak = 0;
@@ -19597,7 +20131,7 @@ function saveGame() {
       missions: state.missions || null,   // misiones del día con su progreso
       story: state.story || {}, storyRewarded: state.storyRewarded || {}, gadgets: state.gadgets || {}, alleyOpen: !!alley.open, mission: state.mission || null, alleyReturn: alley.returnTo || null, alleyUnlockedToast: !!state.alleyUnlockedToast,
       thiefMode: !!state.thiefMode, thief: state.thief || null, bankVaultOpen: !!state.bankVaultOpen, bankLooted: state.bankLooted || [],
-      jail: condena ? { n: condena.celda && condena.celda.n, left: Math.max(0, condena.left || 0), banco: !!condena.banco, hambreMuerte: !!condena.hambreMuerte } : null,
+      jail: condena ? { n: condena.celda && condena.celda.n, left: Math.max(0, condena.left || 0), banco: !!condena.banco, hambreMuerte: !!condena.hambreMuerte, cuchara: !!condena.cuchara, almuerzo: condena.almuerzo || null, rejaAbierta: !!condena.rejaAbierta, comio: !!condena.comio } : null,
       bestiary: state.bestiary || {},     // colección de monstruos
       album: state.album || {}, albumDone: !!state.albumDone,   // álbum de criaturas alien
       baseLevel: state.baseLevel || 0, baseTurrets: state.baseTurrets || 0, baseGenerator: !!state.baseGenerator,   // base espacial propia
@@ -20410,7 +20944,7 @@ function loadGame() {
     meleeColor: d.meleeColor != null ? d.meleeColor : (d.weaponColor || 0x94a3b8),
     lastNonBow: d.lastNonBow === 'gun' ? 'gun' : 'melee',
     dadGun: !!d.dadGun, hasRocket: !!d.hasRocket, momUnlocked: !!d.momUnlocked, planet: (d.planet === 'marte' ? 'platus' : (d.planet || 'tierra')), country:COUNTRIES.some(c=>c.id===d.country)?d.country:null,
-    wanted: 0, wantedLevel: 0, policeDelay: 0, driving: false, inFlight: false, poison: 0, dadPoison: 0, buildMode: false, phase: d.phase === 'NIGHT' ? 'NIGHT' : 'DAY', dayTime: d.dayTime || 0, nightTime: d.nightTime || 0,
+    wanted: 0, wantedLevel: 0, policeDelay: 0, fugaCarcel: false, driving: false, inFlight: false, poison: 0, dadPoison: 0, buildMode: false, phase: d.phase === 'NIGHT' ? 'NIGHT' : 'DAY', dayTime: d.dayTime || 0, nightTime: d.nightTime || 0,
     hasPhone: !!d.hasPhone, skiPass: !!d.skiPass, skiGear: d.skiGear || null, skiGearWorn: d.skiGearWorn != null ? !!d.skiGearWorn : !!d.skiGear, skiing: false, skiLiftRide: null,
     streak: d.streak || 0, stamina: 100, blocking: false, dodgeCd: 0, invulnerable: 0,
     inGym: false, gymReturn: null,
@@ -23754,7 +24288,9 @@ function colocarCuerpoCondena() {
   }
 }
 function meterEnCelda() {
-  if (!condena || condena.pose || condena.lavando) return;
+  if (!condena || condena.pose || condena.lavando || condena.enDucto || condena.almuerzo === 'escolta' || condena.almuerzo === 'sentado') return;
+  if (condena.almuerzo === 'fila' && rutinaCarcel.fila) { clampARects([rutinaCarcel.fila]); return; }
+  if (condena.almuerzo === 'aviso' && rutinaCarcel.fila) { clampARects(rectsDelAlmuerzo()); return; }
   const c = condena.celda;
   player.position.x = THREE.MathUtils.clamp(player.position.x, c.minX, c.maxX);
   player.position.z = THREE.MathUtils.clamp(player.position.z, c.minZ, c.maxZ);
@@ -23764,9 +24300,18 @@ function salirDeLaCelda() {
   const c = condena && condena.celda;
   const banco = !!(condena && condena.banco);
   if (c && c.preso) c.preso.userData.jailQuieto = false;
+  if (c && c.reja) c.reja.top = 4.2;
+  rutinaCarcel.guardias.forEach(g => {
+    g.userData.escolta = false;
+    g.userData.jailQuieto = false;
+    const ud = g.userData.jail;
+    if (ud) g.position.set(ud.ox, 0, ud.oz);
+  });
   condena = null;
+  soltarCuchara();
   soltarManosLavado();
   mostrarCamaCelda(false);
+  cerrarDuctoVisual();
   playerAvatar.rotation.order = 'XYZ';
   posarDePie(playerAvatar);
   player.position.set(JAIL_GATE.x, PLAYER_EYE, JAIL_GATE.z + 6);
@@ -23775,11 +24320,15 @@ function salirDeLaCelda() {
   toast(banco ? '🚪 Cumpliste los nueve minutos. La policía ya no te persigue.' : '🚪 Cumpliste el minuto. Sales de la celda.');
 }
 function terminarCondenaEnMemoria() {
+  if (condena && condena.celda && condena.celda.reja) condena.celda.reja.top = 4.2;
   if (condena && condena.celda && condena.celda.preso) condena.celda.preso.userData.jailQuieto = false;
   condena = null;
   state.jailPorBanco = false;
+  state.fugaCarcel = false;
+  if (typeof soltarCuchara === 'function') soltarCuchara();
   if (typeof soltarManosLavado === 'function') soltarManosLavado();
   if (typeof mostrarCamaCelda === 'function') mostrarCamaCelda(false);
+  if (typeof cerrarDuctoVisual === 'function') cerrarDuctoVisual();
   if (playerAvatar) {
     playerAvatar.rotation.order = 'XYZ';
     if (typeof posarDePie === 'function') posarDePie(playerAvatar);
@@ -23813,7 +24362,17 @@ function restaurarCondenaGuardada(data) {
     celda.preso.position.set(celda.maxX - .05, 0, celda.maxZ - .15);
     celda.preso.userData.jailQuieto = true;
   }
-  condena = { celda, left, pose: null, lavando: false, camLavado: false, hambreMuerte: !!data.hambreMuerte, banco: !!data.banco };
+  const almuerzo = data.almuerzo === 'listo' ? 'listo' : (data.almuerzo ? 'aviso' : null);
+  condena = nuevaCondena(celda, left, !!data.banco, {
+    hambreMuerte: !!data.hambreMuerte,
+    cuchara: !!data.cuchara,
+    almuerzo,
+    rejaAbierta: !!data.rejaAbierta,
+    comio: !!data.comio || data.almuerzo === 'listo',
+  });
+  if (almuerzo === 'aviso' && celda.reja) celda.reja.top = -8;
+  if (condena.rejaAbierta) abrirDuctoVisual();
+  if (condena.cuchara && rutinaCarcel.cucharaMesa) rutinaCarcel.cucharaMesa.visible = false;
   player.position.set(celda.ex, PLAYER_EYE, (celda.minZ + celda.maxZ) / 2);
   yaw = Math.PI; pitch = 0; vy = 0; grounded = true;
   const s = Math.max(0, Math.ceil(left));
@@ -23843,22 +24402,37 @@ function entrarACelda(n) {
   }
   const segundos = state.jailPorBanco ? 540 : 60;
   state.jailPorBanco = false;
-  condena = { celda, left: segundos, pose: null, lavando: false, camLavado: false, hambreMuerte: false, banco: segundos >= 540 };
+  cerrarDuctoVisual();
+  if (rutinaCarcel.cucharaMesa) rutinaCarcel.cucharaMesa.visible = true;
+  condena = nuevaCondena(celda, segundos, segundos >= 540);
   player.position.set(celda.ex, PLAYER_EYE, (celda.minZ + celda.maxZ) / 2);
   yaw = Math.PI; pitch = 0; vy = 0; grounded = true;
   toast(segundos >= 540
-    ? '🚔 Celda ' + celda.n + ' · nueve minutos. Si te mueres de hambre no puedes salir. Al terminar, la policía no te sigue.'
+    ? (state.thiefMode
+      ? '🚔 Celda ' + celda.n + ' · nueve minutos. A los cinco hay sopa verde. Si te mueres de hambre no puedes salir.'
+      : '🚔 Celda ' + celda.n + ' · nueve minutos. Si te mueres de hambre no puedes salir. Al terminar, la policía no te sigue.')
     : '🚔 Celda ' + celda.n + ' · te quedas un minuto. E en el lavamanos o en la cama.');
   return true;
 }
 function frenarCondena(dt) {
   if (!condena) return false;
-  condena.left -= dt;
+  if (condena.enDucto) condena.left = Math.max(2, condena.left);
+  else condena.left -= dt;
   if (condena.left < 0) condena.left = 0;
   creativeFlying = false;
   state.jetOn = false;
   state.skiing = false;
   state.driving = false;
+  if (rutinaDeLadron() && !condena.almuerzo && !condena.enDucto && condena.left <= 240 && condena.left > 0) abrirFilaAlmuerzo();
+  if (condena.enDucto) {
+    moverEnDucto(dt);
+    return true;
+  }
+  if (condena.almuerzo === 'escolta') {
+    mirarConFlechas(dt);
+    avanzarEscolta(dt);
+    return true;
+  }
   if (condena.left <= 0) {
     if (condena.hambreMuerte || state.hunger <= 0) {
       condena.hambreMuerte = true;
@@ -23872,6 +24446,24 @@ function frenarCondena(dt) {
     }
     salirDeLaCelda();
     return true;
+  }
+  if (condena.atornillando) {
+    mirarConFlechas(dt);
+    if (!cercaDeLaRejaDucto() || condena.almuerzo !== 'listo') {
+      condena.atornillando = false;
+      soltarCuchara();
+    } else {
+      avanzarTornillo(dt);
+      return true;
+    }
+  }
+  if (condena.rejaAbierta && cercaDeLaRejaDucto() && (keys['ControlLeft'] || keys['ControlRight'] || touch.crouch)) {
+    entrarAlDucto();
+    return true;
+  }
+  if (condena.pose === 'sopa' && condena.comio && condena.almuerzo === 'sentado') {
+    condena.esperaGuardia = (condena.esperaGuardia || 0) + dt;
+    if (condena.esperaGuardia > 14) empezarEscolta();
   }
   if (condena.pose || condena.lavando) {
     colocarCuerpoCondena();
@@ -23942,6 +24534,25 @@ function encuadrarLavado() {
 }
 function encuadrarCondena(dt) {
   if (condena.camLavado) { encuadrarLavado(); return; }
+  if (condena.pose === 'sopa') {
+    const m = rutinaCarcel.mesa;
+    playerAvatar.visible = true;
+    viewmodel.visible = false;
+    playerAvatar.position.set(player.position.x, 0, player.position.z);
+    playerAvatar.rotation.set(0, yaw + Math.PI, 0);
+    posarSentado(playerAvatar);
+    mostrarCamaCelda(false);
+    if (cameraMode === 0) {
+      camera.position.set(player.position.x, player.position.y, player.position.z);
+      camera.rotation.set(pitch, yaw, 0);
+    } else {
+      const lado = cameraMode === 1 ? 1 : -1;
+      camera.position.set(m.x + Math.sin(yaw) * 2.2 * lado, 1.35, m.z + Math.cos(yaw) * 2.2 * lado);
+      camera.lookAt(m.x, 1.05, m.z);
+    }
+    applyCameraFeedback(dt);
+    return;
+  }
   const c = condena.celda;
   if (condena.lavando && !condena.pose && cameraMode === 0) {
     viewmodel.visible = true;
@@ -23987,7 +24598,19 @@ function promptCondena() {
   const c = condena.celda;
   const seg = Math.max(0, Math.ceil(condena.left));
   const reloj = condena.banco ? (Math.floor(seg / 60) + ':' + String(seg % 60).padStart(2, '0')) : (seg + ' s');
-  if (condena.hambreMuerte) return { key: 'Q', touch: '🍖', text: 'Te moriste de hambre · come para salir de la celda ' + c.n };
+  if (condena.hambreMuerte && !(condena.almuerzo === 'sentado' || condena.almuerzo === 'aviso' || condena.almuerzo === 'fila')) return { key: 'Q', touch: '🍖', text: 'Te moriste de hambre · come para salir de la celda ' + c.n };
+  if (condena.enDucto) return { key: 'WASD', touch: '🌬️', text: 'Ducto · recto y dos recodos · ' + reloj };
+  if (condena.atornillando || (rutinaDeLadron() && condena.almuerzo === 'listo' && condena.cuchara && !condena.rejaAbierta && cercaDeLaRejaDucto())) return { key: 'E', touch: '🥄', force: true, text: 'Desatornillar' };
+  if (rutinaDeLadron() && condena.rejaAbierta && cercaDeLaRejaDucto()) return { key: 'E', touch: '🧎', force: true, text: 'Agacharse' };
+  if (rutinaDeLadron() && condena.almuerzo === 'listo' && !condena.cuchara && cercaDeLaRejaDucto()) return { key: '🔒', touch: '🥄', text: 'Te falta la cuchara del almuerzo' };
+  if (condena.almuerzo === 'aviso') return { key: 'E', touch: '🍲', force: true, text: enLaFila() ? 'Hacer fila para la sopa verde' : 'Ve a la fila del almuerzo · no recorras el pasillo' };
+  if (condena.almuerzo === 'fila') return { key: 'E', touch: '🪑', force: true, text: frenteDeLaFila() ? 'Sentarte a la mesa' : 'Sigue la fila hasta la mesa' };
+  if (condena.almuerzo === 'sentado' || condena.pose === 'sopa') {
+    if (!condena.comio) return { key: 'E', touch: '🍲', force: true, text: 'Comer la sopa verde' };
+    if (!condena.cuchara) return { key: 'E', touch: '🥄', force: true, text: 'Robar la cuchara' };
+    return { key: 'E', touch: '👮', force: true, text: 'Que los guardias te lleven' };
+  }
+  if (condena.almuerzo === 'escolta') return { key: '👮', touch: '👮', text: 'Los guardias te llevan a la celda · ' + reloj };
   if (condena.lavando || condena.camLavado) return { key: 'F5', touch: '💧', text: 'Te lavas la cara · las manos se refriegan y cae agua · celda ' + c.n + ' · ' + reloj };
   if (condena.pose === 'acostado') return { key: 'E', touch: '🛏️', text: 'Levantarte de la cama · celda ' + c.n + ' · ' + reloj };
   if (Math.hypot(player.position.x - c.lavabo.x, player.position.z - c.lavabo.z) < 1.7) return { key: 'E · F5', touch: '💧', text: 'Lavarte la cara en el lavamanos · F5 pone esa cámara' };
@@ -23996,6 +24619,34 @@ function promptCondena() {
 }
 function tryCelda() {
   if (!condena) return false;
+  if (condena.enDucto || condena.almuerzo === 'escolta') return true;
+  if (condena.atornillando) return true;
+  if (rutinaDeLadron() && condena.rejaAbierta && cercaDeLaRejaDucto()) { entrarAlDucto(); return true; }
+  if (rutinaDeLadron() && condena.almuerzo === 'listo' && condena.cuchara && !condena.rejaAbierta && cercaDeLaRejaDucto()) {
+    condena.atornillando = true;
+    condena.tornillo = 0;
+    return true;
+  }
+  if (rutinaDeLadron() && condena.almuerzo === 'listo' && !condena.cuchara && cercaDeLaRejaDucto()) {
+    toast('🥄 Sin la cuchara no puedes desatornillar el ducto.');
+    return true;
+  }
+  if (condena.almuerzo === 'aviso') {
+    if (enLaFila()) empezarFila();
+    else toast('🚶 La fila está al oeste del pasillo, junto al mostrador.');
+    return true;
+  }
+  if (condena.almuerzo === 'fila') {
+    if (!frenteDeLaFila()) { toast('🚶 Sigue hasta el frente de la fila.'); return true; }
+    sentarEnElAlmuerzo();
+    return true;
+  }
+  if (condena.pose === 'sopa' || condena.almuerzo === 'sentado') {
+    if (!condena.comio) { comerSopa(); return true; }
+    if (!condena.cuchara) { robarCuchara(); return true; }
+    empezarEscolta();
+    return true;
+  }
   const c = condena.celda;
   if (condena.lavando && !condena.pose) {
     condena.lavando = false;
@@ -25472,6 +26123,7 @@ try { if (new URLSearchParams(location.search).has('debug')) {
     const l = playerAvatar.userData.limbs;
     return {
       n: c.n, left: +condena.left.toFixed(2), pose: condena.pose, lavando: !!condena.lavando, cam: !!condena.camLavado,
+      almuerzo: condena.almuerzo, cuchara: !!condena.cuchara, ducto: !!condena.enDucto, reja: !!condena.rejaAbierta,
       x: +player.position.x.toFixed(2), y: +player.position.y.toFixed(2), z: +player.position.z.toFixed(2),
       minX: +c.minX.toFixed(2), maxX: +c.maxX.toFixed(2), minZ: +c.minZ.toFixed(2), maxZ: +c.maxZ.toFixed(2),
       fase: state.phase, celdas: CELDAS_PRESO.map(o => o.n),
@@ -26055,6 +26707,16 @@ function posarManosGym() {
 }
 function updateViewmodel(dt) {
   if (gymSesion && state.inGym) { posarManosGym(); return; }
+  if (condena && condena.atornillando) {
+    viewmodel.visible = cameraMode === 0;
+    viewmodel.position.set(.16, -.02, -.46);
+    viewmodel.rotation.set(1.2, .2, .4);
+    asegurarCuchara();
+    if (viewmodel.userData.cuchara) viewmodel.userData.cuchara.visible = true;
+    if (viewmodel.userData.manoLavado) viewmodel.userData.manoLavado.visible = false;
+    return;
+  }
+  mostrarArmaEnMano(true);
   if (condena && condena.lavando && !condena.camLavado && !condena.pose) {
     viewmodel.visible = true;
     viewmodel.position.set(.08, .12, -.38);
