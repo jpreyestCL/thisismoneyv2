@@ -2613,12 +2613,13 @@ function recortarPiel(canvas, pred) {
 function ocultarCuerpoPorSkin() {
   if (!playerSkinOn) return;
   playerAvatar.traverse(o => {
-    if (!o.isMesh || o.userData.piezaSkin || o.userData.sobreCuerpo) return;
+    if (!o.isMesh || o.userData.piezaSkin || o.userData.sobreCuerpo || o.userData.armaEquipada) return;
     o.visible = false;
   });
   const manga = viewmodel.children[0], puno = viewmodel.children[1];
   if (manga) manga.visible = false;
   if (puno) puno.visible = false;
+  acomodarArmaEnLaPiel();
 }
 function mostrarAvatarOriginal() {
   playerAvatar.traverse(o => { if (o.isMesh && !o.userData.piezaSkin) o.visible = true; });
@@ -2639,6 +2640,7 @@ function despegarEquipoDeLaPiel() {
 }
 function tirarPiel() {
   soltarManosPiel();
+  soltarArmaDeLaPiel();
   despegarEquipoDeLaPiel();
   if (!playerSkinRig) return;
   for (const obj of playerSkinRig.partes) {
@@ -2803,22 +2805,25 @@ function espaldaSinCara(src) {
 }
 function asegurarManosPiel() {
   if (viewmodel.userData.manosPiel) return viewmodel.userData.manosPiel;
-  const grupo = new THREE.Group();
-  const plano = (x, z) => {
+  const plano = (poso) => {
     const m = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.28, 0.72),
+      new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.08, side: THREE.FrontSide, depthWrite: false })
     );
-    m.position.set(x, -0.02, z);
     m.visible = false;
     m.userData.piezaSkin = true;
-    grupo.add(m);
+    m.userData.poso = poso;
+    m.renderOrder = 12;
+    m.position.set(poso.x, poso.y, poso.z);
+    m.rotation.set(poso.rx, poso.ry, poso.rz);
     return m;
   };
-  const der = plano(0.02, -0.22);
-  const izq = plano(-0.86, -0.16);
-  viewmodel.add(grupo);
-  viewmodel.userData.manosPiel = { grupo, der, izq };
+  // La derecha queda en el puño, junto al arma. La izquierda al otro lado, a la misma altura.
+  const der = plano({ x: 0.02, y: -0.02, z: -0.32, rx: 0.42, ry: -0.22, rz: -0.38 });
+  const izq = plano({ x: -0.36, y: -0.5, z: -1.08, rx: 0.42, ry: 0.22, rz: 0.38 });
+  viewmodel.add(der);
+  camera.add(izq);
+  viewmodel.userData.manosPiel = { der, izq };
   return viewmodel.userData.manosPiel;
 }
 function texturaDelHueso(hueso) {
@@ -2836,16 +2841,21 @@ function montarManosPiel(huesos) {
   const poner = (mesh, tex) => {
     mesh.material.map = tex || null;
     mesh.material.needsUpdate = true;
-    mesh.visible = !!tex;
+    mesh.visible = false;
+    const img = tex && tex.image;
+    const w = Math.max(1, img && img.width || 1), h = Math.max(1, img && img.height || 1);
+    const aspecto = w / h;
+    let alto = 0.4, ancho = alto * aspecto;
+    if (ancho > 0.5) { ancho = 0.5; alto = ancho / aspecto; }
+    if (alto > 0.48) { alto = 0.48; ancho = alto * aspecto; }
+    mesh.scale.set(ancho, alto, 1);
   };
   poner(manos.der, texturaDelHueso(huesos.armR));
   poner(manos.izq, texturaDelHueso(huesos.armL));
-  manos.grupo.visible = false;
 }
 function soltarManosPiel() {
   const manos = viewmodel.userData.manosPiel;
   if (!manos) return;
-  manos.grupo.visible = false;
   manos.der.material.map = null;
   manos.izq.material.map = null;
   manos.der.visible = false;
@@ -2887,20 +2897,22 @@ function colocarSkinDibujada() {
   if (playerSkinOn) ocultarCuerpoPorSkin();
   const manos = viewmodel.userData.manosPiel;
   if (manos) {
-    const verManos = !!(playerSkinOn && cameraMode === 0 && (manos.der.visible || manos.izq.visible));
-    manos.grupo.visible = verManos;
-    if (verManos && condena && (condena.pose === 'sopa' || condena.almuerzo === 'plato')) manos.grupo.visible = false;
-    else if (verManos) {
-      const aire = pielEnElAire();
-      const fase = playerAvatar.userData.walkPhase || 0;
-      const paso = aire ? 0 : Math.sin(fase) * 0.14;
-      const alza = aire ? 0.07 : 0;
-      manos.der.rotation.z = -0.18 + paso;
-      manos.izq.rotation.z = 0.18 - paso;
-      manos.der.position.y = -0.02 + alza;
-      manos.izq.position.y = -0.02 + alza;
-      if (viewmodel.userData.bracer && viewmodel.userData.bracer.visible) acomodarBrazalete(true);
-    }
+    const tapadas = !!(condena && (condena.pose === 'sopa' || condena.almuerzo === 'plato'));
+    const verManos = !!(playerSkinOn && cameraMode === 0 && viewmodel.visible && !tapadas);
+    const apoyar = (mesh, paso, alza) => {
+      const p = mesh.userData.poso;
+      if (!p) return;
+      mesh.visible = !!(verManos && mesh.material && mesh.material.map);
+      mesh.position.set(p.x, p.y + alza + paso, p.z);
+      mesh.rotation.set(p.rx, p.ry, p.rz);
+    };
+    const aire = pielEnElAire();
+    const fase = playerAvatar.userData.walkPhase || 0;
+    const paso = aire ? 0 : Math.sin(fase) * 0.025;
+    const alza = aire ? 0.05 : 0;
+    apoyar(manos.der, paso, alza);
+    apoyar(manos.izq, -paso, alza);
+    if (verManos && viewmodel.userData.bracer && viewmodel.userData.bracer.visible) acomodarBrazalete(true);
   }
   if (!playerSkinRig) return;
   const mostrar = !!(playerSkinOn && playerAvatar.visible);
@@ -2957,7 +2969,16 @@ function applyMinecraftArmor(person, tier, scale) {
     m.userData.lado = lado || '';
     m.userData.padre = parent;
     m.userData.base = m.position.clone();
-    m.renderOrder = 4;
+    m.renderOrder = 6;
+    if (tier === 'obsidiana' && m.material) {
+      m.material.emissive.setHex(0x6d28d9);
+      m.material.emissiveIntensity = 0.55;
+      m.material.metalness = 0.42;
+      m.material.roughness = 0.28;
+    } else if (tier === 'metal' && m.material) {
+      m.material.metalness = 0.72;
+      m.material.roughness = 0.22;
+    }
     parts.push(m);
     return m;
   };
@@ -3030,12 +3051,12 @@ function ponerPiezaEnMiembro(mesh, nombre, rol, extra) {
   else if (rol === 'bota') { dist = info.largo * 0.8; alto = Math.max(0.08, info.largo * 0.22); z = 0.12; }
   padre.add(mesh);
   const d = info.dir;
-  const grosor = Math.max(0.1, info.grosor) * extra;
-  mesh.position.set(d.x * dist, d.y * dist, z);
+  const grosor = Math.max(0.12, info.grosor) * extra;
+  mesh.position.set(d.x * dist, d.y * dist, 0.02);
   mesh.quaternion.setFromUnitVectors(EJE_MIEMBRO_ABAJO, d);
-  if (rol === 'hombrera') mesh.scale.set(grosor / 0.24, alto / 0.22, grosor / 0.24);
-  else if (rol === 'greba') mesh.scale.set(grosor / 0.26, alto / 0.32, grosor / 0.26);
-  else mesh.scale.set((grosor * 1.15) / 0.22, alto / 0.1, (grosor * 1.45) / 0.3);
+  if (rol === 'hombrera') mesh.scale.set(grosor / 0.24, alto / 0.22, (grosor * 1.8) / 0.24);
+  else if (rol === 'greba') mesh.scale.set(grosor / 0.26, alto / 0.32, (grosor * 1.8) / 0.26);
+  else mesh.scale.set((grosor * 1.15) / 0.22, alto / 0.1, (grosor * 2.2) / 0.3);
   mesh.visible = true;
   return true;
 }
@@ -3083,29 +3104,29 @@ function acomodarArmaduraJugador() {
     for (const m of parts) {
       const rol = m.userData.rol;
       if (rol === 'casco' && head) {
-        const radio = Math.max(0.14, Math.max(head.ancho, head.alto) * 0.52) * (wearG ? 1.34 : 1.05) * extra;
+        const radio = Math.max(0.2, Math.max(head.ancho, head.alto) * 0.68) * (wearG ? 1.34 : 1.12) * extra;
         playerAvatar.add(m);
         m.quaternion.identity();
         m.scale.setScalar(radio / 0.32);
-        m.position.set(head.x, head.y + head.alto * (wearG ? 0.28 : 0.1), 0.02);
+        m.position.set(head.x, head.y + head.alto * (wearG ? 0.22 : 0.02), -0.06);
         m.visible = true;
       } else if (rol === 'peto' && t) {
         playerAvatar.add(m);
         m.quaternion.identity();
-        m.scale.set((t.ancho * 0.84 * extra) / 0.5, (t.alto * 0.36 * extra) / 0.58, 0.4 * extra);
-        m.position.set(t.x, t.y + t.alto * 0.02, 0.2);
+        m.scale.set((t.ancho * 1.05 * extra) / 0.5, (t.alto * 0.42 * extra) / 0.58, 1.25 * extra);
+        m.position.set(t.x, t.y, 0.02);
         m.visible = true;
       } else if (rol === 'cinturon' && t) {
         playerAvatar.add(m);
         m.quaternion.identity();
-        m.scale.set((t.ancho * 0.8 * extra) / 0.48, Math.max(0.7, (t.alto * 0.08 * extra) / 0.1), 0.42 * extra);
-        m.position.set(t.x, t.y - t.alto * 0.28, 0.19);
+        m.scale.set((t.ancho * 0.95 * extra) / 0.48, Math.max(0.85, (t.alto * 0.1 * extra) / 0.1), 1.35 * extra);
+        m.position.set(t.x, t.y - t.alto * 0.28, 0.02);
         m.visible = true;
       } else if (rol === 'cuello' && head) {
         playerAvatar.add(m);
         m.quaternion.identity();
-        m.scale.set((head.ancho * 0.72 * extra) / 0.28, 0.75 * extra, 0.45 * extra);
-        m.position.set(head.x, head.y - head.alto * 0.55, 0.16);
+        m.scale.set((head.ancho * 0.85 * extra) / 0.28, 0.9 * extra, 1.35 * extra);
+        m.position.set(head.x, head.y - head.alto * 0.55, 0.02);
         m.visible = true;
       } else if (rol === 'hombrera' || rol === 'greba' || rol === 'bota') {
         m.visible = ponerPiezaEnMiembro(m, m.userData.lado, rol, extra);
@@ -3114,10 +3135,47 @@ function acomodarArmaduraJugador() {
   }
   const tier = armorTierFor(state.armorFactor);
   if (viewmodel.userData.bracer) {
-    viewmodel.userData.bracer.visible = !!tier;
-    if (tier) viewmodel.userData.bracer.material = mat(ARMOR_TIERS[tier].color);
-    acomodarBrazalete(!!(tier && med));
+  viewmodel.userData.bracer.visible = !!tier;
+  if (tier) {
+    viewmodel.userData.bracer.material = mat(ARMOR_TIERS[tier].color);
+    if (tier === 'obsidiana') {
+      viewmodel.userData.bracer.material.emissive.setHex(0x6d28d9);
+      viewmodel.userData.bracer.material.emissiveIntensity = 0.45;
+    }
   }
+  acomodarBrazalete(!!(tier && med));
+  }
+}
+const EJE_ESPADA = new THREE.Vector3(0, 1, 0);
+const dirEspada = new THREE.Vector3();
+function soltarArmaDeLaPiel() {
+  const arm = playerAvatar && playerAvatar.userData.limbs && playerAvatar.userData.limbs.armR;
+  const mount = arm && arm.userData.toolMount;
+  if (!arm || !mount || mount.parent === arm) return;
+  arm.add(mount);
+  mount.position.set(0, -.72, .08);
+  mount.rotation.set(-.25, 0, -.18);
+  mount.scale.setScalar(1);
+}
+function acomodarArmaEnLaPiel() {
+  const arm = playerAvatar && playerAvatar.userData.limbs && playerAvatar.userData.limbs.armR;
+  const mount = arm && arm.userData.toolMount;
+  if (!mount) return;
+  mount.traverse(o => { if (o.isMesh) { o.userData.armaEquipada = true; o.visible = true; } });
+  const piel = playerSkinOn && playerSkinRig && playerSkinRig.huesos && playerSkinRig.huesos.armR;
+  const info = piel && playerSkinRig.medidas && playerSkinRig.medidas.miembros.armR;
+  if (!(piel && info && info.largo > 0.05)) { soltarArmaDeLaPiel(); return; }
+  const mano = piel.userData.extremo || piel.userData.junta || piel;
+  if (mount.parent !== mano) mano.add(mount);
+  const resto = mano === piel.userData.extremo ? info.largo * 0.14 : info.largo * 0.72;
+  const d = info.dir;
+  mount.position.set(d.x * resto + 0.1, d.y * resto, 0.08);
+  dirEspada.copy(d);
+  if (dirEspada.lengthSq() < 1e-6) dirEspada.set(0, -1, 0);
+  dirEspada.normalize().negate();
+  mount.quaternion.setFromUnitVectors(EJE_ESPADA, dirEspada);
+  mount.scale.setScalar(Math.max(0.85, Math.min(1.25, info.largo / 0.75)));
+  mount.visible = true;
 }
 // El jugador: se ve en las cámaras de 3ª persona y en la manga del viewmodel
 function applyPlayerArmor() {
@@ -3149,8 +3207,9 @@ function syncHeldTool(forceKind) {
   const arm = playerAvatar.userData.limbs && playerAvatar.userData.limbs.armR;
   if (arm) {
     if (!arm.userData.toolMount) { const mount = new THREE.Group(); mount.position.set(0, -.72, .08); mount.rotation.set(-.25, 0, -.18); arm.add(mount); arm.userData.toolMount = mount; }
-    replaceToolInMount(arm.userData.toolMount, kind, color, .52, true);
+    replaceToolInMount(arm.userData.toolMount, kind, color, .62, true);
   }
+  acomodarArmaEnLaPiel();
 }
 const cameraAim = new THREE.Vector3(), cameraDesired = new THREE.Vector3(), cameraOffset = new THREE.Vector3();
 const reduceGameMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
