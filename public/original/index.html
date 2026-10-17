@@ -2383,9 +2383,6 @@ scene.add(playerAvatar);
 playerAvatar.traverse(o => { if (o.isMesh) o.userData.cuerpoBase = true; });
 const SKIN_KEY = 'tim_player_skin';
 const SKIN_ALTO = 2.16;
-const EJE_Z_PIEL = new THREE.Vector3(0, 0, 1);
-const pielQ1 = new THREE.Quaternion();
-const pielQ2 = new THREE.Quaternion();
 let playerSkinOn = false, playerSkinRig = null, playerSkinFuente = null;
 function medirDibujo(data, w, h) {
   const opaco = (x, y) => data[(y * w + x) * 4 + 3] > 28;
@@ -2656,11 +2653,6 @@ function tirarPiel() {
   }
   playerSkinRig = null;
 }
-function girarPiezaPiel(grupo, eje, anguloX, anguloZ) {
-  pielQ1.setFromAxisAngle(eje, anguloX);
-  pielQ2.setFromAxisAngle(EJE_Z_PIEL, anguloZ);
-  grupo.quaternion.copy(pielQ2).multiply(pielQ1);
-}
 function montarPiel(canvas, corte) {
   tirarPiel();
   const mallas = [], partesRig = [], huesos = {}, extremos = {};
@@ -2727,9 +2719,24 @@ function montarPiel(canvas, corte) {
     const punta = corte.aMundo(p.punta.x, p.punta.y);
     const dx = punta.x - piv.x, dy = punta.y - piv.y;
     const largo = Math.hypot(dx, dy);
+    const origen = p.pivote, destino = p.punta;
+    const largoPix = Math.hypot(destino.x - origen.x, destino.y - origen.y) || 1;
+    const ux = (destino.x - origen.x) / largoPix, uy = (destino.y - origen.y) / largoPix;
+    const tDe = (x, y) => (x + 0.5 - origen.x) * ux + (y + 0.5 - origen.y) * uy;
+    const codo = largoPix * 0.5, munecaT = largoPix * 0.78;
+    const pega = Math.max(4, largoPix * 0.1);
     const g = new THREE.Group();
     g.position.set(piv.x, piv.y, 0);
-    g.userData.eje = new THREE.Vector3(-dy / largo, dx / largo, 0);
+    const junta = new THREE.Group();
+    const jointAv = corte.aMundo(origen.x + ux * codo, origen.y + uy * codo);
+    junta.position.set(jointAv.x - piv.x, jointAv.y - piv.y, 0);
+    const extremo = new THREE.Group();
+    const wristAv = corte.aMundo(origen.x + ux * munecaT, origen.y + uy * munecaT);
+    extremo.position.set(wristAv.x - jointAv.x, wristAv.y - jointAv.y, 0);
+    junta.add(extremo);
+    g.add(junta);
+    g.userData.junta = junta;
+    g.userData.extremo = extremo;
     const pixW = (p.maxX - p.minX + 1) * corte.esc, pixH = (p.maxY - p.minY + 1) * corte.esc;
     medidas.miembros[nombre] = {
       largo,
@@ -2741,12 +2748,23 @@ function montarPiel(canvas, corte) {
     huesos[nombre] = g;
     const solapa = (x, y) => {
       if (corte.marca[y * corte.w + x] !== 1) return false;
-      if (nombre === 'armL') return y >= p.minY && y <= p.maxY && x > p.maxX && x <= p.maxX + 5;
-      if (nombre === 'armR') return y >= p.minY && y <= p.maxY && x < p.minX && x >= p.minX - 5;
-      return y < p.minY && y >= p.minY - 5 && x >= p.minX && x <= p.maxX;
+      if (nombre === 'armL') return y >= p.minY && y <= p.maxY && x > p.maxX && x <= p.maxX + 8;
+      if (nombre === 'armR') return y >= p.minY && y <= p.maxY && x < p.minX && x >= p.minX - 8;
+      return y < p.minY && y >= p.minY - 8 && x >= p.minX && x <= p.maxX;
     };
-    const pieza = recortarPiel(canvas, (x, y) => corte.marca[y * corte.w + x] === id || solapa(x, y));
-    if (pieza) poner(pieza, g, piv, z, 3, false);
+    const esDel = (x, y) => corte.marca[y * corte.w + x] === id || solapa(x, y);
+    const partir = largoPix >= 12;
+    const superior = partir ? recortarPiel(canvas, (x, y) => esDel(x, y) && tDe(x, y) <= codo + pega) : null;
+    const mano = partir ? recortarPiel(canvas, (x, y) => esDel(x, y) && tDe(x, y) >= munecaT - pega) : null;
+    const inferior = partir ? recortarPiel(canvas, (x, y) => esDel(x, y) && tDe(x, y) >= codo - pega && (mano ? tDe(x, y) <= munecaT + pega : true)) : null;
+    if (superior) poner(superior, g, piv, z, 3, false);
+    if (inferior) poner(inferior, junta, jointAv, z + 0.02, 4, false);
+    if (mano) poner(mano, extremo, wristAv, z + 0.04, 5, false);
+    g.userData.dobla = !!(inferior || mano);
+    if (!superior && !inferior && !mano) {
+      const pieza = recortarPiel(canvas, esDel);
+      if (pieza) poner(pieza, g, piv, z, 3, false);
+    }
   };
   miembro('armL', 0.2);
   miembro('armR', 0.2);
@@ -2804,10 +2822,14 @@ function asegurarManosPiel() {
   return viewmodel.userData.manosPiel;
 }
 function texturaDelHueso(hueso) {
-  let tex = null;
   if (!hueso) return null;
-  hueso.traverse(o => { if (o.isMesh && o.material && o.material.map) tex = o.material.map; });
-  return tex;
+  const sacar = (nodo) => {
+    let tex = null;
+    if (!nodo) return null;
+    nodo.traverse(o => { if (o.isMesh && o.material && o.material.map) tex = o.material.map; });
+    return tex;
+  };
+  return sacar(hueso.userData.extremo) || sacar(hueso.userData.junta) || sacar(hueso);
 }
 function montarManosPiel(huesos) {
   const manos = asegurarManosPiel();
@@ -2887,12 +2909,20 @@ function colocarSkinDibujada() {
   const l = playerAvatar.userData.limbs;
   if (!l) return;
   const aire = pielEnElAire();
-  const salto = { armL: -0.32, armR: -0.32, legL: -0.4, legR: -0.4 };
+  const salto = { armL: -0.95, armR: -0.95, legL: -0.4, legR: -0.4 };
+  const flexSalto = { armL: -1.15, armR: -1.15, legL: 0.9, legR: 0.9 };
   for (const nombre of ['armL', 'armR', 'legL', 'legR']) {
     const h = l[nombre], g = playerSkinRig.huesos[nombre];
-    if (!h || !g || !g.userData.eje) continue;
-    if (aire) girarPiezaPiel(g, g.userData.eje, salto[nombre], 0);
-    else girarPiezaPiel(g, g.userData.eje, h.rotation.x, h.rotation.z);
+    if (!h || !g) continue;
+    if (aire) {
+      g.rotation.set(salto[nombre], 0, nombre.indexOf('L') >= 0 ? -0.08 : 0.08);
+      if (g.userData.junta) g.userData.junta.rotation.set(g.userData.dobla ? flexSalto[nombre] : 0, 0, 0);
+      if (g.userData.extremo) g.userData.extremo.rotation.set(0, 0, 0);
+    } else {
+      g.rotation.set(h.rotation.x, h.rotation.y, h.rotation.z);
+      if (g.userData.junta) g.userData.junta.rotation.copy(h.userData.junta ? h.userData.junta.rotation : g.userData.junta.rotation);
+      if (g.userData.extremo) g.userData.extremo.rotation.copy(h.userData.extremo ? h.userData.extremo.rotation : g.userData.extremo.rotation);
+    }
   }
 }
 try { const guardada = localStorage.getItem(SKIN_KEY); if (guardada) aplicarSkinDibujada(guardada); } catch (e) {}
@@ -2991,13 +3021,16 @@ function ponerPiezaEnMiembro(mesh, nombre, rol, extra) {
   const g = playerSkinRig.huesos[nombre];
   const info = playerSkinRig.medidas.miembros[nombre];
   if (!g || !info || info.largo < 0.05) return false;
-  g.add(mesh);
+  const dobla = !!(g.userData.dobla && g.userData.junta);
+  let padre = g, dist = info.largo * 0.18, alto = info.largo * 0.3, z = 0.1;
+  if (rol === 'greba' && dobla) { padre = g.userData.junta; dist = info.largo * 0.14; alto = info.largo * 0.3; z = 0.12; }
+  else if (rol === 'greba') { dist = info.largo * 0.32; alto = info.largo * 0.38; }
+  else if (rol === 'bota' && dobla && g.userData.extremo) { padre = g.userData.extremo; dist = info.largo * 0.1; alto = Math.max(0.08, info.largo * 0.18); z = 0.14; }
+  else if (rol === 'bota' && dobla) { padre = g.userData.junta; dist = info.largo * 0.34; alto = Math.max(0.08, info.largo * 0.18); z = 0.12; }
+  else if (rol === 'bota') { dist = info.largo * 0.8; alto = Math.max(0.08, info.largo * 0.22); z = 0.12; }
+  padre.add(mesh);
   const d = info.dir;
   const grosor = Math.max(0.1, info.grosor) * extra;
-  let tAlong = 0.2, alto = info.largo * 0.32, z = 0.1;
-  if (rol === 'greba') { tAlong = 0.32; alto = info.largo * 0.38; }
-  if (rol === 'bota') { tAlong = 0.8; alto = Math.max(0.08, info.largo * 0.22); z = 0.12; }
-  const dist = info.largo * tAlong;
   mesh.position.set(d.x * dist, d.y * dist, z);
   mesh.quaternion.setFromUnitVectors(EJE_MIEMBRO_ABAJO, d);
   if (rol === 'hombrera') mesh.scale.set(grosor / 0.24, alto / 0.22, grosor / 0.24);
