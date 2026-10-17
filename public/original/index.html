@@ -7317,31 +7317,36 @@ function updateEsposas(dt) {
   if (state.fuegoPolicial) pegarConBates(tr, dt);
   if (tr.t > 2.15) subirAlPatrulla();
 }
-function makePatrullaAbierta() {
+function makePatrullaAbierta(naranjo) {
   const g = new THREE.Group();
-  const pintura = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: .4, metalness: .35, side: THREE.DoubleSide });
-  const tela = mat(0x1e293b);
-  const vidrio = new THREE.MeshStandardMaterial({ color: 0x9fd8ff, roughness: .08, metalness: .2, transparent: true, opacity: .22, side: THREE.DoubleSide });
+  const pintura = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: .45, metalness: .2, side: THREE.DoubleSide });
+  const cuero = new THREE.MeshStandardMaterial({ color: naranjo ? 0xf97316 : 0x475569, roughness: .7, side: THREE.DoubleSide });
+  const cueroOsc = new THREE.MeshStandardMaterial({ color: naranjo ? 0xc2410c : 0x1e293b, roughness: .8, side: THREE.DoubleSide });
+  const vidrio = new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: .05, transparent: true, opacity: .16, side: THREE.DoubleSide, depthWrite: false });
   const caja = (w, h, d, x, y, z, m) => { const o = new THREE.Mesh(smoothBox(w, h, d), m); o.position.set(x, y, z); g.add(o); return o; };
-  caja(1.92, .16, 4.05, 0, .4, 0, pintura);
-  caja(1.86, .1, 1.7, 0, 1.78, .05, pintura);
-  for (const [x, z] of [[-.94, 1.2], [.94, 1.2], [-.94, -.95], [.94, -.95]]) caja(.08, 1.2, .08, x, 1.15, z, pintura);
-  caja(1.8, .55, .06, 0, 1.2, 1.55, vidrio);
-  caja(1.72, .32, 1.15, 0, .72, .85, tela);
-  caja(1.72, .55, .1, 0, 1.05, .35, tela);
-  caja(1.72, .32, 1.2, 0, .68, -.62, tela);
-  caja(1.72, .62, .1, 0, 1.08, -1.15, tela);
-  caja(1.9, .26, 1.05, 0, .62, 1.9, pintura);
-  const volante = new THREE.Mesh(new THREE.TorusGeometry(.18, .025, 6, 12), mat(0x111827));
-  volante.position.set(-.38, 1.08, 1.28); volante.rotation.x = .65; g.add(volante);
-  const luz = new THREE.Mesh(smoothBox(.55, .14, .32), new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 1 }));
-  luz.position.set(0, 1.9, .1); g.add(luz); g.userData.luz = luz;
+  caja(1.9, .08, 3.5, 0, .4, .1, pintura);
+  caja(1.9, .08, 2.3, 0, 1.92, .05, pintura);
+  for (const [x, z] of [[-.92, 1.05], [.92, 1.05], [-.92, -.75], [.92, -.75]]) caja(.07, 1.35, .07, x, 1.18, z, pintura);
+  caja(1.7, .62, .04, 0, 1.28, 1.32, vidrio);
+  for (const x of [-.94, .94]) caja(.04, .5, 1.2, x, 1.28, .1, vidrio);
+  for (const x of [-.42, .42]) {
+    caja(.64, .14, .52, x, .56, .7, cueroOsc);
+    caja(.64, .36, .08, x, .74, .46, cueroOsc);
+  }
+  const almohadon = caja(1.58, .22, .82, 0, .62, -.22, cuero);
+  almohadon.name = 'almohadon';
+  caja(1.58, .48, .1, 0, .9, -.68, cueroOsc);
+  const volante = new THREE.Mesh(new THREE.TorusGeometry(.16, .022, 6, 14), mat(0x111827));
+  volante.position.set(-.42, .98, 1.02); volante.rotation.x = .95; g.add(volante);
+  const luz = new THREE.Mesh(smoothBox(.5, .12, .28), new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 1 }));
+  luz.position.set(0, 1.98, .05); g.add(luz); g.userData.luz = luz;
+  g.userData.almohadon = almohadon;
   return g;
 }
 function subirAlPatrulla() {
   const tr = trasladoPolicial;
   if (!tr || tr.car) return;
-  const car = makePatrullaAbierta();
+  const car = makePatrullaAbierta(!!tr.banco);
   const x = player.position.x, z = player.position.z;
   car.position.set(x, mountainHeightAt(x, z), z);
   car.rotation.y = Math.atan2(JAIL_GATE.x - x, JAIL_GATE.z - z);
@@ -7350,7 +7355,7 @@ function subirAlPatrulla() {
   const sentar = (p, lx) => {
     if (!p) return;
     car.add(p); p.visible = true;
-    p.position.set(lx, .08, .78); p.rotation.set(0, 0, 0); posarSentado(p);
+    p.position.set(lx, -.42, .78); p.rotation.set(0, 0, 0); posarSentado(p);
     if (p.userData.bate) p.userData.bate.visible = false;
   };
   sentar(vivos[0], -.38);
@@ -7365,14 +7370,18 @@ function subirAlPatrulla() {
   state.wanted = 0; state.wantedLevel = 0; state.driving = false; state.arrestoT = 0;
   quitarCarteles();
   if (state.tanque) { scene.remove(state.tanque); state.tanque = null; }
-  yaw = car.rotation.y + Math.PI; pitch = .12; tr.yawAlEntrar = yaw;
+  yaw = car.rotation.y + Math.PI; pitch = -.32; tr.yawAlEntrar = yaw;
+  if (camera.near > .06) { camera.near = .05; camera.updateProjectionMatrix(); }
   verEsposas(true);
-  toast('🚔 Asiento de atrás, en primera persona. Mueve la cámara: ves los asientos y a quien maneja.');
+  toast(tr.banco
+    ? '🚔 Primera persona, en el almohadón naranja. Mira abajo el asiento y al frente a quien maneja.'
+    : '🚔 Primera persona, asiento de atrás. Mira el almohadón y a quien maneja.');
 }
 function terminarTraslado() {
   const tr = trasladoPolicial;
   trasladoPolicial = null;
   ocultarManosEsposadas();
+  if (camera.near < .1) { camera.near = .2; camera.updateProjectionMatrix(); }
   if (tr && tr.car) scene.remove(tr.car);
   verEsposas(false);
   if (playerAvatar) { playerAvatar.rotation.set(0, 0, 0); posarDePie(playerAvatar); }
@@ -7386,17 +7395,17 @@ function updateTraslado(dt) {
   state.driving = false;
   creativeFlying = false;
   const lookSpeed = 1.8 * dt;
-  if (keys['ArrowLeft'] || keys['KeyA']) yaw += lookSpeed;
-  if (keys['ArrowRight'] || keys['KeyD']) yaw -= lookSpeed;
-  if (keys['ArrowUp'] || keys['KeyW']) pitch += lookSpeed * .65;
-  if (keys['ArrowDown'] || keys['KeyS']) pitch -= lookSpeed * .65;
-  pitch = Math.max(-1.15, Math.min(1.05, pitch));
+  if (keys['ArrowLeft']) yaw += lookSpeed;
+  if (keys['ArrowRight']) yaw -= lookSpeed;
+  if (keys['ArrowUp']) pitch += lookSpeed;
+  if (keys['ArrowDown']) pitch -= lookSpeed;
+  pitch = Math.max(-.9, Math.min(.85, pitch));
   const car = tr.car;
   if (!car) return;
   if (tr.luz) tr.luz.material.color.setHex((Math.floor(performance.now() / 180) % 2) ? 0xef4444 : 0x3b82f6);
   const dx = JAIL_GATE.x - car.position.x, dz = JAIL_GATE.z - car.position.z;
-  const dist = Math.hypot(dx, dz);
-  if (dist < 8 || tr.t > 26) { terminarTraslado(); return; }
+  const dist = Math.hypot(dx, dz) || 1;
+  if (tr.t > 8 && (dist < 7 || tr.t > 20)) { terminarTraslado(); return; }
   const paso = Math.min(dist, 18 * dt);
   let nx = car.position.x + dx / dist * paso, nz = car.position.z + dz / dist * paso;
   if (obstacleAt(nx, nz, 0, 1.3, true)) { nx = car.position.x - dz / dist * paso; nz = car.position.z + dx / dist * paso; }
@@ -7421,13 +7430,14 @@ function encuadrarTraslado() {
   const car = tr.car;
   if (!car) return;
   car.updateMatrixWorld(true);
-  const ojo = new THREE.Vector3(.05, 1.22, -.32).applyMatrix4(car.matrixWorld);
+  const ojo = new THREE.Vector3(.28, 1.05, -.58).applyMatrix4(car.matrixWorld);
   player.position.set(ojo.x, ojo.y, ojo.z);
   camera.position.copy(ojo);
   camera.rotation.order = 'YXZ';
   const extra = yaw - (tr.yawAlEntrar == null ? yaw : tr.yawAlEntrar);
   camera.rotation.set(pitch, car.rotation.y + Math.PI + extra, 0);
   colocarManosEsposadas(tr, false);
+  if (manosEsposas) manosEsposas.position.set(.05, -.46, .08);
   verEsposas(true);
 }
 function policeCatch() { empezarTraslado(); }
