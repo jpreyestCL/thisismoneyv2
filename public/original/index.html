@@ -2985,8 +2985,12 @@ function updatePlayerCamera(dt) {
     if (l) {
       l.armL.rotation.set(-.7, .15, .2);
       l.armR.rotation.set(-.7, -.15, -.2);
-      l.legL.rotation.set(1.05, 0, .05);
-      l.legR.rotation.set(1.05, 0, -.05);
+      l.legL.rotation.set(.55, 0, .08);
+      l.legR.rotation.set(.85, 0, -.08);
+      ponerJunta(l.armL, -.65, .1);
+      ponerJunta(l.armR, -.7, .1);
+      ponerJunta(l.legL, .7, -.15);
+      ponerJunta(l.legR, .45, -.1);
     }
     if (cameraMode === 0) {
       camera.position.copy(player.position);
@@ -5235,7 +5239,7 @@ function updateNPCs(dt) {
     }
     if (state.phase === 'NIGHT' && dist2D(n.position, b.home) < 1.2) n.visible = false;
     if (!state.country) n.position.y = sueloReal(n.position.x, n.position.z);
-    if (moved) swingLimbs(n, dt); else swingLimbs(n, 0);
+    swingLimbs(n, dt);
     n.userData.activity = b.activity;
   }
 }
@@ -5368,12 +5372,7 @@ function makeStadium(cx, cz, fieldColor, name) {
     const v = makePerson([0x9333ea, 0x0891b2, 0xca8a04, 0xdc2626, 0x16a34a, 0xf97316][victims.length % 6], 0xf1c27d);
     v.position.set(px, py - .9, pz);                       // la cadera queda a la altura del asiento
     v.rotation.y = Math.atan2(cx - px, cz - pz);           // la cara (eje +Z) apunta al centro de la cancha
-    const l = v.userData.limbs;
-    if (l) {
-      l.legL.rotation.x = -Math.PI / 2; l.legR.rotation.x = -Math.PI / 2;   // muslos hacia adelante: sentado
-      l.armL.rotation.x = -.45; l.armR.rotation.x = -.45;                   // manos sobre las piernas
-      v.userData.seated = true;                             // que swingLimbs no lo haga "caminar"
-    }
+    posarSentado(v);
     v.userData.victim = true; v.userData.robbed = false;
     scene.add(v); victims.push(v);
   };
@@ -5771,12 +5770,7 @@ function edifRejas(x, y, z, ancho, alto, n, color, horizontal) {
 // Persona sentada mirando hacia `haciaY` (la cajera del banco, los presos del patio…)
 function sentarPersona(p, x, y, z, haciaY) {
   p.position.set(x, y - .9, z); p.rotation.y = haciaY;
-  const l = p.userData.limbs;
-  if (l) {
-    l.legL.rotation.x = -Math.PI / 2; l.legR.rotation.x = -Math.PI / 2;
-    l.armL.rotation.x = -.5; l.armR.rotation.x = -.5;
-    p.userData.seated = true;   // que swingLimbs no lo haga caminar
-  }
+  posarSentado(p);
   return p;
 }
 
@@ -6400,8 +6394,10 @@ function updateComidaCarcel() {
     if (!p.userData.come) continue;
     const l = p.userData.limbs;
     if (l) {
-      l.legL.rotation.x = -Math.PI / 2;
-      l.legR.rotation.x = -Math.PI / 2;
+      l.legL.rotation.set(-1.2, 0.02, -0.08);
+      l.legR.rotation.set(-1.2, -0.02, 0.08);
+      ponerJunta(l.legL, 1.35, -0.1);
+      ponerJunta(l.legR, 1.35, -0.1);
     }
     animarBocado(p, p.userData.faseBocado || 0);
   }
@@ -6409,6 +6405,8 @@ function updateComidaCarcel() {
   if (senora && senora.userData.limbs) {
     const k = kBocado(1.4);
     senora.userData.limbs.armR.rotation.set(-.35 - k * .9, -.2, -.25);
+    ponerJunta(senora.userData.limbs.armR, -.35 - k * .7, .1);
+    ponerJunta(senora.userData.limbs.armL, -.4, .05);
     if (senora.userData.cucharon) senora.userData.cucharon.rotation.x = .8 + k * .7;
   }
 }
@@ -6461,8 +6459,10 @@ function posarPlatoEnManos() {
   mostrarArmaEnMano(false);
   const l = playerAvatar.userData.limbs;
   if (l) {
-    l.armL.rotation.set(-1.15, .35, .55);
-    l.armR.rotation.set(-1.15, -.25, -.55);
+    l.armL.rotation.set(-.85, .3, .4);
+    l.armR.rotation.set(-.7, -.2, -.35);
+    ponerJunta(l.armL, -.75, .12);
+    ponerJunta(l.armR, -.9, .08);
   }
   if (playerAvatar.userData.platoMano) playerAvatar.userData.platoMano.visible = cameraMode !== 0;
   if (playerAvatar.userData.tenedorMano) playerAvatar.userData.tenedorMano.visible = false;
@@ -6543,7 +6543,8 @@ function posarAtornillado() {
   if (!l) return;
   l.armR.rotation.set(-1.55, -.35, -.85);
   l.armL.rotation.set(-.35, .2, .35);
-  if (l.armR.userData.junta) l.armR.userData.junta.rotation.x = Math.sin(giro) * .4;
+  ponerJunta(l.armR, Math.sin(giro) * .4, 0);
+  ponerJunta(l.armL, -.45, 0);
 }
 function abrirDuctoVisual() {
   for (const g of rutinaCarcel.rejas) {
@@ -7278,8 +7279,14 @@ function colocarPoliciasEsposando(tr) {
     const l = p.userData.limbs;
     if (l && !tr.conBates) {
       const swing = Math.sin(tr.t * 5 + i) * .2;
-      l.armL.rotation.set(-1.15, .45, .55 + swing);
-      l.armR.rotation.set(-1.15, -.45, -.55 - swing);
+      l.armL.rotation.set(-1.05, .4, .42 + swing);
+      l.armR.rotation.set(-1.15, -.42, -.48 - swing);
+      l.legL.rotation.set(.16, 0, -.06);
+      l.legR.rotation.set(.1, 0, .06);
+      ponerJunta(l.armL, -.8, .08);
+      ponerJunta(l.armR, -.95, .06);
+      ponerJunta(l.legL, .28, -.08);
+      ponerJunta(l.legR, .22, -.06);
     }
     if (p.userData.bate) p.userData.bate.visible = !!tr.conBates;
   });
@@ -7294,7 +7301,13 @@ function pegarConBates(tr, dt) {
   }
   vivos.forEach((p, i) => {
     const l = p.userData.limbs;
-    if (l) l.armR.rotation.set(-.2 + Math.sin(tr.t * 9 + i) * 1.15, -.2, -.4);
+    if (l) {
+      const golpe = Math.sin(tr.t * 9 + i);
+      l.armR.rotation.set(-.35 + golpe * .9, -.15, -.35);
+      l.armL.rotation.set(-.4, .1, .2);
+      ponerJunta(l.armR, -.35 - Math.max(0, golpe) * .9, .05);
+      ponerJunta(l.armL, -.4, 0);
+    }
   });
   tr.bateCd -= dt;
   if (tr.bateCd > 0) return;
@@ -7360,6 +7373,9 @@ function subirAlPatrulla() {
   };
   sentar(vivos[0], -.38);
   sentar(vivos[1], .38);
+  tr.conductor = vivos[0] || null;
+  tr.copiloto = vivos[1] || null;
+  if (tr.conductor) posarManejando(tr.conductor, 0);
   for (const p of police) {
     if (p !== vivos[0] && p !== vivos[1]) { if (p.userData.car) scene.remove(p.userData.car); scene.remove(p); }
   }
@@ -7413,6 +7429,8 @@ function updateTraslado(dt) {
   car.position.y = mountainHeightAt(nx, nz);
   car.rotation.y = Math.atan2(dx, dz);
   car.updateMatrixWorld(true);
+  if (tr.conductor) posarManejando(tr.conductor, tr.t);
+  if (tr.copiloto) posarSentado(tr.copiloto);
 }
 function encuadrarTraslado() {
   const tr = trasladoPolicial;
@@ -7831,7 +7849,8 @@ function matarEmpleadoBanco(person) {
   person.userData.dead = true;
   person.userData.seated = false;
   const l = person.userData.limbs;
-  if (l) { l.legL.rotation.x = 0; l.legR.rotation.x = 0; l.armL.rotation.x = 0; l.armR.rotation.x = 0; }
+  if (l) { l.legL.rotation.set(0, 0, 0); l.legR.rotation.set(0, 0, 0); l.armL.rotation.set(0, 0, 0); l.armR.rotation.set(0, 0, 0); }
+  soltarJuntas(person);
   person.rotation.x = -Math.PI / 2;
   person.position.y = 0.35;
   voxelImpact(person.position.clone().setY(1.1), 0xb91c1c, 10);
@@ -7958,14 +7977,7 @@ function resetRoboBanco() {
     p.rotation.x = 0;
     p.position.y = 0;
     if (p.userData.home) p.position.copy(p.userData.home);
-    if (p.userData.wasSeated) {
-      const l = p.userData.limbs;
-      if (l) {
-        l.legL.rotation.x = -Math.PI / 2; l.legR.rotation.x = -Math.PI / 2;
-        l.armL.rotation.x = -.5; l.armR.rotation.x = -.5;
-      }
-      p.userData.seated = true;
-    }
+    if (p.userData.wasSeated) posarSentado(p);
   }
   applyThiefLook();
 }
@@ -10403,28 +10415,56 @@ const skiPasajeros = [];
 const arrastreGente = [];
 let playerChair = null;
 let caidaAndarivelAviso = 0;
+function ponerJunta(pivot, flexion, muneca) {
+  if (!pivot) return;
+  if (pivot.userData.junta) pivot.userData.junta.rotation.set(flexion || 0, 0, 0);
+  if (pivot.userData.extremo) pivot.userData.extremo.rotation.set(muneca || 0, 0, 0);
+}
 function soltarJuntas(n) {
   const l = n && n.userData.limbs;
   if (!l) return;
-  for (const k of ['armL', 'armR', 'legL', 'legR']) {
-    const junta = l[k] && l[k].userData.junta;
-    if (junta) junta.rotation.set(0, 0, 0);
-  }
+  for (const k of ['armL', 'armR', 'legL', 'legR']) ponerJunta(l[k], 0, 0);
 }
 function posarSentado(n) {
   if (!n) return;
   n.userData.seated = true;
+  n.userData.manejando = false;
   const l = n.userData.limbs;
   if (!l) return;
-  l.legL.rotation.set(-1.5, 0, 0.08);
-  l.legR.rotation.set(-1.5, 0, -0.08);
-  l.armL.rotation.set(-0.85, 0, 0.22);
-  l.armR.rotation.set(-0.85, 0, -0.22);
-  soltarJuntas(n);
+  const t = performance.now() * 0.0016 + (n.id || 0) * 0.37;
+  const resp = Math.sin(t) * 0.04;
+  const pierna = Math.sin(t * 0.41) * 0.05;
+  l.legL.rotation.set(-1.22 + pierna, 0.02, -0.1);
+  l.legR.rotation.set(-1.22 - pierna, -0.02, 0.1);
+  l.armL.rotation.set(-0.48 + resp, 0.08, 0.24);
+  l.armR.rotation.set(-0.48 + resp, -0.08, -0.24);
+  ponerJunta(l.legL, 1.38 + pierna * 0.25, -0.12);
+  ponerJunta(l.legR, 1.38 - pierna * 0.25, -0.12);
+  ponerJunta(l.armL, -0.5 + resp, 0.08);
+  ponerJunta(l.armR, -0.5 + resp, 0.08);
+}
+function posarManejando(n, tiempo) {
+  if (!n) return;
+  n.userData.seated = true;
+  n.userData.manejando = true;
+  const l = n.userData.limbs;
+  if (!l) return;
+  const t = tiempo || 0;
+  const giro = Math.sin(t * 1.35) * 0.1;
+  const resp = Math.sin(t * 1.7) * 0.025;
+  l.legL.rotation.set(-0.58, 0.04, -0.08);
+  l.legR.rotation.set(-0.52, -0.04, 0.08);
+  ponerJunta(l.legL, -1.9, 0.12);
+  ponerJunta(l.legR, -1.82, 0.1);
+  l.armL.rotation.set(0.32 + resp, 0.22 + giro, 0.16);
+  l.armR.rotation.set(0.28 + resp, -0.34 + giro, -0.1);
+  ponerJunta(l.armL, -1.9, 0.12);
+  ponerJunta(l.armR, -1.85 - giro * 0.2, 0.1);
 }
 function posarDePie(n) {
   if (!n) return;
   n.userData.seated = false;
+  n.userData.manejando = false;
   const l = n.userData.limbs;
   if (!l) return;
   l.legL.rotation.set(0, 0, 0);
@@ -10608,11 +10648,15 @@ function marcarVisible(obj) {
 function posarEsquiando(n, fase) {
   if (!n || !n.userData.limbs) return;
   const l = n.userData.limbs;
-  const s = Math.sin(fase) * 0.38;
-  l.legL.rotation.set(0.5 + s, 0, 0.1);
-  l.legR.rotation.set(0.5 - s, 0, -0.1);
-  l.armL.rotation.set(-0.7, 0, 0.62);
-  l.armR.rotation.set(-0.42, 0, -0.28);
+  const s = Math.sin(fase) * 0.28;
+  l.legL.rotation.set(-0.32 + s, 0, -0.08);
+  l.legR.rotation.set(-0.32 - s, 0, 0.08);
+  l.armL.rotation.set(-0.5, 0.08, 0.5);
+  l.armR.rotation.set(-0.38, -0.05, -0.28);
+  ponerJunta(l.legL, 0.7 - s * 0.35, -0.18);
+  ponerJunta(l.legR, 0.7 + s * 0.35, -0.18);
+  ponerJunta(l.armL, -0.65, 0.08);
+  ponerJunta(l.armR, -0.5, 0.06);
 }
 function asegurarEsquis(n) {
   if (!n || n.userData.esquisListos) return;
@@ -13636,6 +13680,7 @@ function doblarMiembro(pivot, ty, tz, rodillaArriba) {
   }
   pivot.rotation.set(best.hx, 0, 0);
   junta.rotation.set(best.kx, 0, 0);
+  if (extremo) extremo.rotation.set(0, 0, 0);
 }
 function apuntarA(pivot, world, rodillaArriba) {
   playerAvatar.updateMatrixWorld(true);
@@ -16395,9 +16440,14 @@ function makeKnight() {   // comandante de los toros: sentado en el trono, espad
   helmet.position.y = 2.02; helmet.castShadow = true; g.add(helmet);
   const limbs = g.userData.limbs;
   if (limbs) {
-    limbs.legL.rotation.x = -1.2; limbs.legR.rotation.x = -1.2;
-    limbs.armL.rotation.x = -.35;
-    limbs.armR.rotation.x = -1.55;
+    limbs.legL.rotation.set(-1.2, 0.02, -0.08);
+    limbs.legR.rotation.set(-1.2, -0.02, 0.08);
+    limbs.armL.rotation.set(-.4, .08, .22);
+    limbs.armR.rotation.set(-1.45, -.15, -.2);
+    ponerJunta(limbs.legL, 1.32, -.1);
+    ponerJunta(limbs.legR, 1.32, -.1);
+    ponerJunta(limbs.armL, -.5, .06);
+    ponerJunta(limbs.armR, -.25, 0);
     const sword = makeVoxelSword(0xe2e8f0, .46);
     sostenerEspada(sword, 0, -.92, .08, 'y');
     limbs.armR.add(sword);
@@ -26302,10 +26352,14 @@ function drawMinimap() {
 function aquietarCuerpoEsqui() {
   const l = playerAvatar.userData.limbs;
   if (!l) return;
-  l.legL.rotation.x = 0.22; l.legR.rotation.x = 0.22;
-  l.legL.rotation.z = 0.06; l.legR.rotation.z = -0.06;
-  l.armL.rotation.x = -0.22; l.armR.rotation.x = -0.22;
-  l.armL.rotation.z = 0.5; l.armR.rotation.z = -0.5;
+  l.legL.rotation.set(-0.3, 0, -0.06);
+  l.legR.rotation.set(-0.3, 0, 0.06);
+  l.armL.rotation.set(-0.32, 0.04, 0.42);
+  l.armR.rotation.set(-0.32, -0.04, -0.42);
+  ponerJunta(l.legL, 0.62, -0.16);
+  ponerJunta(l.legR, 0.62, -0.16);
+  ponerJunta(l.armL, -0.5, 0.06);
+  ponerJunta(l.armR, -0.5, 0.06);
 }
 function flexionarEsquis(gear, dt, steer, speedNow) {
   gear.userData.flexT = (gear.userData.flexT || 0) + dt * (2.4 + Math.min(10, speedNow));
@@ -27519,7 +27573,7 @@ function updateNet(dt) {
     p.group.position.lerp(p.target, Math.min(1, dt * 10));
     p.group.rotation.y = p.yaw + Math.PI;
     const moviendo = p.group.position.distanceToSquared(p.target) > 0.01;
-    swingLimbs(p.group, moviendo ? dt : 0);
+    swingLimbs(p.group, dt);
     if (p.pets) for (const q of p.pets) {   // sus mascotas flotan y lo siguen igual que las tuyas
       if (q.userData.netTarget) q.position.lerp(q.userData.netTarget, Math.min(1, dt * 8));
       q.position.y = 0.3 + Math.sin(performance.now() * 0.004 + q.position.x) * 0.12;
@@ -27641,26 +27695,67 @@ function updateDayNight(dt) {
   }
 }
 
+function pasoPierna(fase) {
+  const cadera = Math.sin(fase) * 0.55;
+  const flex = Math.max(0, Math.sin(fase + 2.2));
+  const rodilla = 0.06 + flex * flex * 0.95;
+  const atras = Math.max(0, cadera);
+  const tobillo = -(cadera + rodilla) * 0.45 + atras * 0.35;
+  return { cadera, rodilla, tobillo };
+}
+function pasoBrazo(fase) {
+  const hombro = Math.sin(fase) * 0.42;
+  const atras = Math.max(0, Math.sin(fase));
+  const codo = -0.42 - atras * 0.72;
+  const muneca = 0.06 + atras * 0.12;
+  return { hombro, codo, muneca };
+}
 function swingLimbs(o, dt) {
-  const l = o.userData.limbs; if (!l || !o.visible || o.userData.seated) return;   // el público sentado no mueve las piernas
+  const l = o.userData.limbs; if (!l || !o.visible) return;
+  if (o.userData.seated) {
+    if (!o.userData.come && !o.userData.manejando) posarSentado(o);
+    return;
+  }
   if (!o.userData.prevPos) o.userData.prevPos = o.position.clone();
   const moved = o.position.distanceTo(o.userData.prevPos); o.userData.prevPos.copy(o.position);
   const walking = moved > 0.003;
-  o.userData.walkPhase = (o.userData.walkPhase || 0) + (walking ? dt * 9 : 0);
-  const s = walking ? Math.sin(o.userData.walkPhase) * 0.6 : 0;
+  const blend = o.userData.walkBlend = walking
+    ? Math.min(1, (o.userData.walkBlend || 0) + dt * 7)
+    : Math.max(0, (o.userData.walkBlend || 0) - dt * 5);
+  if (walking) o.userData.walkPhase = (o.userData.walkPhase || 0) + dt * 8.2;
+  const fase = o.userData.walkPhase || 0;
+  const respirar = Math.sin(performance.now() * 0.0022 + (o.id || 0)) * 0.03 * (1 - blend);
+  const aplicarPierna = (pivot, f, lado) => {
+    const p = pasoPierna(f);
+    pivot.rotation.set(p.cadera * blend, 0, lado * (0.04 + blend * 0.02));
+    ponerJunta(pivot, p.rodilla * blend + 0.06 * (1 - blend), p.tobillo * blend);
+  };
+  const aplicarBrazo = (pivot, f, lado) => {
+    const p = pasoBrazo(f);
+    pivot.rotation.set(p.hombro * blend + respirar, 0, lado * (0.07 + blend * 0.03));
+    ponerJunta(pivot, p.codo * blend - 0.42 * (1 - blend), p.muneca * blend);
+  };
   if (o.userData.attackAnim > 0) {
     const strike = Math.sin((1 - o.userData.attackAnim / .34) * Math.PI);
     if (o.userData.weapon) {
       l.armR.rotation.set(-.4 - strike * .3, 0, -.2);
       l.armL.rotation.set(-.15, 0, .08);
+      ponerJunta(l.armR, -.85 - strike * .45, .1);
+      ponerJunta(l.armL, -.4, .05);
     } else {
-      l.armL.rotation.x = -1.15 - strike * 1.05; l.armR.rotation.x = -1.15 - strike * 1.05;
-      l.armL.rotation.z = .18 + strike * .28; l.armR.rotation.z = -.18 - strike * .28;
+      l.armL.rotation.set(-1.15 - strike * 1.05, 0, .18 + strike * .28);
+      l.armR.rotation.set(-1.15 - strike * 1.05, 0, -.18 - strike * .28);
+      ponerJunta(l.armL, -.35 - strike * .85, 0);
+      ponerJunta(l.armR, -.35 - strike * .85, 0);
     }
-    l.legL.rotation.x = s * .35; l.legR.rotation.x = -s * .35; return;
+    aplicarPierna(l.legL, fase, -1);
+    aplicarPierna(l.legR, fase + Math.PI, 1);
+    return;
   }
-  l.armL.rotation.z = 0; l.armR.rotation.z = 0;
-  l.legL.rotation.x = s; l.legR.rotation.x = -s; l.armL.rotation.x = -s; l.armR.rotation.x = s;
+  aplicarPierna(l.legL, fase, -1);
+  aplicarPierna(l.legR, fase + Math.PI, 1);
+  aplicarBrazo(l.armL, fase + Math.PI, -1);
+  aplicarBrazo(l.armR, fase, 1);
 }
 // Balanceo del papá 3D al caminar (el modelo no trae animación de piernas)
 function dadWalkBob(dt) {
