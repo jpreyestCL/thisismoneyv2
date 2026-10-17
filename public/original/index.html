@@ -1089,7 +1089,7 @@
           <kbd>B / G</kbd><span>Activa construcción con B. En ese modo, G abre planos completos; F coloca y X quita.</span>
           <kbd>1–9 · 0</kbd><span>Elegir herramienta o pieza de la pestaña activa (🏠 casa · 🛡️ defensa · 🪑 muebles). La tecla 1: un toque = espada, pala o pistola láser (nunca los puños si ya las compraste); dos toques seguidos = arco. La rueda recorre TODO el inventario y Shift+rueda cambia de pestaña.</span>
           <kbd>P · L</kbd><span>Girar la pieza al ángulo que quieras: un toque la mueve 15° y si mantienes apretado gira sin parar (igual que el botón 🔄 Girar).</span>
-          <kbd>Q / K</kbd><span>Comer o plantar. Shift+K cambia entre manzana, zanahoria, trigo y tomate.</span>
+          <kbd>Q / K</kbd><span>Comer o plantar. Junto a un horno, E cocina una comida: cura más hambre y, si no tienes toda la vida, también más vida. Q come primero la cocinada. Shift+K cambia entre manzana, zanahoria, trigo y tomate.</span>
           <kbd>C/V/O</kbd><span>Ordenar a papá: seguir, esperar o limpiar. G lo arma y Z lo deja descansar.</span>
           <kbd>X</kbd><span>Fuera de construcción: planta una banderita 🚩 donde tus mascotas de huevos se quedan cuidando. X de nuevo las llama de vuelta.</span>
           <kbd>U / I</kbd><span>Abrir desafíos de mates o esta guía.</span>
@@ -15249,7 +15249,7 @@ let buildCat = 'casa';
 function catKeys() { return BUILD_CATS[buildCat] || BUILD_KEYS; }          // piezas visibles ahora
 function catOf(key) { for (const c in BUILD_CATS) if (BUILD_CATS[c].includes(key)) return c; return 'casa'; }
 // Inventario inicial: 0 de cada cosa colocable + comida/semillas
-function freshInv() { const inv = { food: 0, semillas: 0, semillas_zanahoria: 0, semillas_trigo: 0, semillas_tomate: 0, carbon: 0 }; for (const k of BUILD_KEYS) inv[k] = 0; return inv; }
+function freshInv() { const inv = { food: 0, cooked: 0, semillas: 0, semillas_zanahoria: 0, semillas_trigo: 0, semillas_tomate: 0, carbon: 0 }; for (const k of BUILD_KEYS) inv[k] = 0; return inv; }
 let buildSel = 0, buildRot = 0;
 let buildScale = { x: 1, y: 1, z: 1 };
 const BUILD_VARIANTS = {
@@ -18553,7 +18553,7 @@ function tryInteract() {
   if (tryDoor()) return;          // abrir / cerrar la puerta de tu casa
   if (tryCine()) return;          // boleto, puerta de la sala o butaca
   if (tryBuyPlot()) return;       // comprar el terreno del condominio
-  if (!tryRefuelCar() && !trySkiResort() && !tryWorldSites() && !tryArcadeRewards() && !tryArcadeZone() && !tryHarvestMiner() && !toggleBoat() && !tryIslandTempleChest() && !tryFocusedFurniture() && !tryLeaderboard() && !tryAirport() && !countryHello() && !tryParkFood() && !tryParkRide() && !tryRepairBuilding() && !tryHarvest() && !tryDiscoverSecret() && !tryWorldEvent() && !tryMount() && !toggleCar() && !tryShelter() && !tryRuins() && !tryCastle() && !tryColiseum() && !tryRocket() && !tryBankHeist() && !tryBank() && !trySitGrada() && !trySportInteract() && !tryBusiness() && !tryFamilyOrCitizenInteract() && !tryVendorHere() && !tryHelperHere()) { if (!tryCollectGolden() && !tryRob() && !sellHouse()) tryGardenHere(); }
+  if (!tryRefuelCar() && !trySkiResort() && !tryWorldSites() && !tryArcadeRewards() && !tryArcadeZone() && !tryHarvestMiner() && !toggleBoat() && !tryIslandTempleChest() && !tryFocusedFurniture() && !tryLeaderboard() && !tryAirport() && !countryHello() && !tryParkFood() && !tryParkRide() && !tryRepairBuilding() && !tryHarvest() && !cocinarComida() && !tryDiscoverSecret() && !tryWorldEvent() && !tryMount() && !toggleCar() && !tryShelter() && !tryRuins() && !tryCastle() && !tryColiseum() && !tryRocket() && !tryBankHeist() && !tryBank() && !trySitGrada() && !trySportInteract() && !tryBusiness() && !tryFamilyOrCitizenInteract() && !tryVendorHere() && !tryHelperHere()) { if (!tryCollectGolden() && !tryRob() && !sellHouse()) tryGardenHere(); }
 }
 addEventListener('keydown', e => {
   if (e.code === 'KeyI' && ui('help').style.display === 'flex') { toggleHelp(false); return; }
@@ -18853,15 +18853,44 @@ function setBuildCat(cat) {
   buildCat = cat;
   const key = catKeys()[0]; if (key) selectBuildKey(key);
 }
+function hornoCerca(maxD = 2.4) {
+  let best = null, bd = maxD;
+  for (const o of placed) {
+    if (!o || o.key !== 'oven' || !o.mesh) continue;
+    const d = dist2D(player.position, o.mesh.position);
+    if (d < bd) { best = o; bd = d; }
+  }
+  return best;
+}
+function cocinarComida() {
+  if (!hornoCerca()) return false;
+  if ((state.inv.food || 0) <= 0) { toast('🔥 El horno está listo, pero no tienes comida cruda.'); return true; }
+  state.inv.food--;
+  state.inv.cooked = (state.inv.cooked || 0) + 1;
+  tone(180, .06, .04, 'square');
+  setTimeout(() => tone(640, .08, .045, 'sine'), 90);
+  toast('🍳 Cocinaste una comida. Cura más hambre y, si te falta vida, también más vida. Q para comerla.');
+  return true;
+}
 function eatFood() {
-  if ((state.inv.food || 0) <= 0) { toast('No tienes comida (cómprala en el SÚPER)'); return; }
-  if (state.hunger >= 100) { toast('No tienes hambre todavía'); return; }
-  state.inv.food--; state.hunger = Math.min(100, state.hunger + 45); state.hp = Math.min(100, state.hp + 8);
+  const cocinada = (state.inv.cooked || 0) > 0;
+  const cruda = (state.inv.food || 0) > 0;
+  if (!cocinada && !cruda) { toast('No tienes comida (cómprala en el SÚPER y cocínala en un horno)'); return; }
+  const puedeVida = cocinada && state.hp < 100;
+  if (state.hunger >= 100 && !puedeVida) { toast(cocinada ? 'No tienes hambre y ya tienes toda la vida' : 'No tienes hambre todavía'); return; }
+  const hambre = cocinada ? 80 : 45;
+  const vida = cocinada ? 32 : 8;
+  if (cocinada) state.inv.cooked--; else state.inv.food--;
+  state.hunger = Math.min(100, state.hunger + hambre);
+  const vidaAntes = state.hp;
+  if (state.hp < 100) state.hp = Math.min(100, state.hp + vida);
+  const curoVida = state.hp > vidaAntes;
   if (condena && condena.hambreMuerte && state.hunger > 0) {
     condena.hambreMuerte = false;
     toast('🍖 Comiste. Ya puedes cumplir lo que te quede de condena.');
-  } else toast('🍖 Comiste (+45 hambre)');
-  beep(440, 0.08, 0.04);
+  } else if (cocinada) toast(curoVida ? '🍳 Comida cocinada · +' + hambre + ' hambre · +' + Math.round(state.hp - vidaAntes) + ' vida' : '🍳 Comida cocinada · +' + hambre + ' hambre · ya tienes toda la vida');
+  else toast('🍖 Comiste (+' + hambre + ' hambre)');
+  beep(cocinada ? 560 : 440, 0.08, 0.04);
 }
 // OJO: soltar una tecla SIEMPRE la limpia, aunque en ese momento haya un menú abierto
 // (antes, si abrías el vendedor caminando con W, el keyup se ignoraba y el personaje
@@ -27755,6 +27784,9 @@ function updateContextPrompt() {
       }
       else if (nearestMiner(3)) { const mn = nearestMiner(3); action = { key: 'E', touch: '⛏️', text: 'Recoger del minero · ' + Math.floor(mn.userData.coal) + ' carbón + $' + Math.floor(mn.userData.money) }; }
       else if (harvest) { const d = CROP_DEFS[harvest.crop]; action = { key: 'E', touch: '🤝', text: 'Cosechar ' + d.name.toLowerCase() + ' · ' + harvest.produce + ' listo(s)' }; }
+      else if (hornoCerca()) action = (state.inv.food || 0) > 0
+        ? { key: 'E', touch: '🍳', text: 'Cocinar comida · más hambre y más vida' }
+        : { key: '🔥', touch: '🔥', text: 'Horno listo · te falta comida cruda' };
       else if (nearestDamagedBuilding()) action = { key: 'E', touch: '🔧', text: 'Reparar construcción dañada' };
       else if (state.sportGame) action = { key: 'CLIC/Q', touch: '🏅', text: state.sportGame.name + ' · primario / técnica · rojos ' + state.sportGame.teamScore[0] + '-' + state.sportGame.teamScore[1] + ' azules' };
       else if (parkedFuelCar) action = { key: 'E', touch: '⛽', text: 'Comprar gasolina · $3 por unidad' };
@@ -27929,7 +27961,7 @@ function renderHUD() {
   if (state.dadGun) gear.push('🔫 papá');
   if (state.dadArmor < 1) gear.push('🛡️ papá');
   if (state.momUnlocked) gear.push('👩 H');
-  gear.push('🍖 ' + (state.inv.food || 0) + ' (Q comer)');
+  gear.push('🍖 ' + (state.inv.food || 0) + ((state.inv.cooked || 0) ? ' · 🍳 ' + state.inv.cooked : '') + ' (Q comer)');
   if (vehicles.length > 1) gear.push('🚘 ' + vehicles.length + ' vehículos');
   if (car) gear.push((car.helicopter ? '🚁 ' : '🚗 ') + Math.max(0, Math.round(car.hp)) + (!car.helicopter ? ' · ⛽ ' + Math.round(car.fuel) + '%' : (state.driving ? ' · ⬆️ ' + Math.round(car.group.position.y) + ' m' : '')));
   if (state.poison > 0) gear.push('🟢 veneno ' + Math.ceil(state.poison) + 's');
