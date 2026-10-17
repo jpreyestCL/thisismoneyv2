@@ -1084,7 +1084,7 @@
           <kbd>WASD</kbd><span>Caminar. Shift corre, Espacio salta y Ctrl agacha.</span>
           <kbd>Espacio ×3</kbd><span>Llamar al mayordomo y darle una orden o encargarle compras. Primero contrátalo en el súper por $500. Su sueldo es $100 cada 7 días del juego.</span>
           <kbd>P</kbd><span>Llamar por celular a tus amigos cuando estés en una partida online.</span>
-          <kbd>E</kbd><span>Interactuar, entrar a vehículos, banco, cohete, tesoros, edificios y la puerta del callejón de Tito (misión a $20.000). En el Banco Central, con el sistema hacker del mercado negro, mantén E 10 segundos en la puerta de la bóveda, entra a la sala. Al abrir la puerta las cajas se ponen doradas. Se abren si les apuntas con el puntito del centro, y al abrirse quedan negras. Dentro del banco suena una alarma roja hasta que sales. No se abren con E ni con C. Las cajas grandes con diamantes no se abren. Al salir del banco la policía te persigue 3 minutos. Con el arco en la mano, mantén E (o el clic) para tensar: cuanto más tiempo, más fuerte sale la flecha. Daño del arco: tensado bajo 9, medio 12 y máximo 18 (si tu arco es de 16). Mira hacia arriba para que vuele lejos; abajo llega menos. Si tienes espada, láser y arco: pulsa 1 una vez para la espada (o el láser), 1 otra vez para cambiar entre espada y láser, y 1 dos veces seguidas para el arco. En casa, E en la Play abre juegos de consola (fútbol, Gran Prix y Héroes), pero la mesa tiene que tener una tele.</span>
+          <kbd>E</kbd><span>Interactuar, entrar a vehículos, banco, cohete, tesoros, edificios y la puerta del callejón de Tito (misión a $20.000). En el Banco Central, con el sistema hacker del mercado negro, mantén E 10 segundos en la puerta de la bóveda, entra a la sala. Al abrir la puerta las cajas se ponen doradas. Se abren si les apuntas con el puntito del centro, y al abrirse quedan negras. Dentro del banco suena una alarma roja hasta que sales. No se abren con E ni con C. Las cajas grandes con diamantes no se abren. La policía te persigue desde el banco por 2 minutos, entra con pistolas y, si tú disparas, ellos también disparan a tres bloques. Si te tienen cerca unos 2 segundos, te esposan y vas en el asiento de atrás del patrulla. Con el arco en la mano, mantén E (o el clic) para tensar: cuanto más tiempo, más fuerte sale la flecha. Daño del arco: tensado bajo 9, medio 12 y máximo 18 (si tu arco es de 16). Mira hacia arriba para que vuele lejos; abajo llega menos. Si tienes espada, láser y arco: pulsa 1 una vez para la espada (o el láser), 1 otra vez para cambiar entre espada y láser, y 1 dos veces seguidas para el arco. En casa, E en la Play abre juegos de consola (fútbol, Gran Prix y Héroes), pero la mesa tiene que tener una tele.</span>
           <kbd>Y</kbd><span>Abrir el catálogo del vendedor cuando estés cerca.</span>
           <kbd>B / G</kbd><span>Activa construcción con B. En ese modo, G abre planos completos; F coloca y X quita.</span>
           <kbd>1–9 · 0</kbd><span>Elegir herramienta o pieza de la pestaña activa (🏠 casa · 🛡️ defensa · 🪑 muebles). La tecla 1: un toque = espada, pala o pistola láser (nunca los puños si ya las compraste); dos toques seguidos = arco. La rueda recorre TODO el inventario y Shift+rueda cambia de pestaña.</span>
@@ -2954,6 +2954,7 @@ function getAimDirection(out) {
 }
 
 function updatePlayerCamera(dt) {
+  if (trasladoPolicial) { encuadrarTraslado(); return; }
   if (gymSesion && state.inGym) { encuadrarGym(); return; }
   if (caidaChoque) {
     encuadrarCaida();
@@ -5705,7 +5706,7 @@ function sentarPersona(p, x, y, z, haciaY) {
 const BANK_POS = new THREE.Vector3(LUGARES.banco.x, 0, LUGARES.banco.z);
 const BANK = { x: LUGARES.banco.x, z: LUGARES.banco.z, w: 20, d: 11, h: 6.4, t: .6 };
 BANK.frente = BANK.z + BANK.d / 2;   // la puerta mira al norte, hacia la avenida
-BANK.boveda = { puertaX: BANK.x - 7.6, puertaZ: BANK.z - BANK.d / 2, puertaAncho: 3.2, gracia: 45 };
+BANK.boveda = { puertaX: BANK.x - 7.6, puertaZ: BANK.z - BANK.d / 2, puertaAncho: 3.2, gracia: 12 };
 let bankTeller = null;
 const bankAtms = [];
 const bankStaff = [];
@@ -6848,6 +6849,10 @@ function spawnPolice(n) {
     const p = makePerson(0x1e3a8a, 0xf1c27d);
     const helm = new THREE.Mesh(smoothBox(0.52, 0.22, 0.52), mat(0x1e40af)); helm.position.y = 2.35; p.add(helm);
     const tag = makeSign('POLICIA', 0x60a5fa); tag.scale.set(.5, .5, .5); tag.position.set(0, 3, 0); p.add(tag);
+    const mano = p.userData.limbs && p.userData.limbs.armR && p.userData.limbs.armR.userData.extremo;
+    if (mano) mano.add(makeHandGun('pistol', 0x111827, .62, false));
+    p.userData.hp = 36;
+    p.userData.shotCd = .6 + Math.random() * .4;
     const sitio = sitioPolicia();
     p.position.set(sitio.x, mountainHeightAt(sitio.x, sitio.z), sitio.z);
     scene.add(p); police.push(p);
@@ -6880,14 +6885,24 @@ function updatePolice(dt) {
     const driving = state.driving;              // si conduces, la policía te persigue EN AUTO
     const lvl = Math.max(1, state.wantedLevel || 1);
     const desired = Math.min(6, lvl + (driving ? 1 : 0));
-    while (police.length < desired) spawnPolice(1);
-    while (police.length > desired) { const p = police.pop(); if (p.userData.car) scene.remove(p.userData.car); scene.remove(p); }
+    state.policeRefuerzo = Math.max(0, (state.policeRefuerzo || 0) - dt);
+    const vivos = police.filter(p => !p.userData.muerto);
+    while (vivos.length < desired && state.policeRefuerzo <= 0) { spawnPolice(1); vivos.push(police[police.length - 1]); }
+    while (vivos.length > desired) {
+      const p = vivos.pop();
+      const i = police.indexOf(p);
+      if (p.userData.car) scene.remove(p.userData.car);
+      scene.remove(p);
+      if (i >= 0) police.splice(i, 1);
+    }
     const escondido = playerInSmoke();   // metido en el humo: te pierden de vista
     if (escondido && !state.fugaCarcel) {
       state.wanted = Math.max(0, state.wanted - dt * 2.5);   // además se les pasa más rápido
       if (!state.smokeHintShown) { state.smokeHintShown = true; toast('💨 Dentro del humo la policía NO te ve · quédate quieto'); }
     } else state.smokeHintShown = false;
+    let agarrando = false;
     for (const p of police) {
+      if (p.userData.muerto) continue;
       setPoliceCar(p, driving);
       const speed = (driving ? 22 : 7) + lvl * (driving ? 1.2 : 0.4);
       const catchD = driving ? 3.4 : 1.9;
@@ -6901,9 +6916,14 @@ function updatePolice(dt) {
         continue;
       }
       p.userData.lostAt = null;
+      p.userData.shotCd = (p.userData.shotCd || 0) - dt;
+      if (state.fuegoPolicial && !p.userData.car && d <= ALCANCE_POLICIA && d > .35 && p.userData.shotCd <= 0) {
+        p.userData.shotCd = .9;
+        dispararPolicia(p);
+      }
       if (d <= catchD && !rutaPoliciaBanco(p)) {
         if (playerAirborne()) { airCombatMiss('police'); continue; }   // volando: te persiguen abajo, no te esposan
-        policeCatch(); return;
+        agarrando = true;
       }
       const objetivo = rutaPoliciaBanco(p) || player.position;
       const ax = p.position.x, az = p.position.z;
@@ -6923,22 +6943,292 @@ function updatePolice(dt) {
         if (p.userData.light) p.userData.light.material.color.setHex((Math.floor(performance.now() / 250) % 2) ? 0xef4444 : 0x3b82f6);   // sirena
       } else { p.rotation.y = face; swingLimbs(p, dt); }
     }
-  } else if (police.length || state.wantedLevel) {
+    updateTanque(dt);
+    if (agarrando) {
+      state.arrestoT = (state.arrestoT || 0) + dt;
+      if (state.arrestoT >= 2) { empezarTraslado(); return; }
+    } else state.arrestoT = 0;
+  } else if (police.length || state.wantedLevel || state.tanque) {
     const libre = !!state.fugaCarcel;
     clearPolice(); state.wantedLevel = 0;
+    state.fuegoPolicial = false;
+    if (state.tanque) { scene.remove(state.tanque); state.tanque = null; }
     if (libre) { state.fugaCarcel = false; toast('🕊️ Aguantaste los cinco minutos. Sigues libre.'); }
   }
 }
-function policeCatch() {
-  const banco = !!state.bankChase || !!state.fugaCarcel;
-  state.fugaCarcel = false;
+const ALCANCE_POLICIA = 3;
+const manchasSangre = [];
+let trasladoPolicial = null;
+function puntoDeSangre(pos, color) {
+  if (!state.thiefMode || !pos) return;
+  const ySuelo = mountainHeightAt(pos.x, pos.z) + .06;
+  for (let i = 0; i < 4; i++) {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(.1 + Math.random() * .16, 7), new THREE.MeshBasicMaterial({ color: color || 0x991b1b, transparent: true, opacity: .88 }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(pos.x + (Math.random() - .5) * 1.1, ySuelo, pos.z + (Math.random() - .5) * 1.1);
+    scene.add(m);
+    manchasSangre.push(m);
+  }
+  while (manchasSangre.length > 80) { const vieja = manchasSangre.shift(); scene.remove(vieja); }
+}
+function dispararPolicia(p) {
+  const desde = p.position.clone(); desde.y = 1.4;
+  spawnTracer(desde, player.position.clone());
+  state.heridaPolicia = true;
+  damagePlayer(24, p.position);
+  puntoDeSangre(player.position, 0xb91c1c);
+  beep(170, .05, .04);
+}
+function herirAgente(p, dmg) {
+  if (!p || p.userData.muerto) return;
+  state.fuegoPolicial = true;
+  p.userData.hp = (p.userData.hp == null ? (p.userData.tanque ? 160 : 36) : p.userData.hp) - dmg;
+  voxelImpact(p.position.clone().setY(p.userData.tanque ? 1.4 : 1.2), p.userData.tanque ? 0x44403c : 0xb91c1c, 8);
+  puntoDeSangre(p.position, p.userData.tanque ? 0x292524 : 0x7f1d1d);
+  if (p.userData.hp > 0) return;
+  p.userData.muerto = true;
+  state.policeRefuerzo = 10;
+  if (p.userData.tanque) {
+    p.rotation.z = .55;
+    p.position.y = mountainHeightAt(p.position.x, p.position.z) + .15;
+    toast('💥 Destruiste el tanque.');
+    return;
+  }
+  if (p.userData.car) { scene.remove(p.userData.car); p.userData.car = null; p.visible = true; }
+  p.rotation.x = -Math.PI / 2;
+  p.position.y = .35;
+  toast('👮 Derribaste a un policía.');
+}
+function gunRaycastAgente(from, dir, range) {
+  let best = null, bestT = range, bestPoint = null;
+  const lista = police.slice();
+  if (state.tanque && !state.tanque.userData.muerto) lista.push(state.tanque);
+  for (const person of lista) {
+    if (!person.visible || person.userData.muerto) continue;
+    const relx = person.position.x - from.x, rely = (person.position.y + 1) - from.y, relz = person.position.z - from.z;
+    const t = relx * dir.x + rely * dir.y + relz * dir.z;
+    if (t < .2 || t > bestT) continue;
+    const px = from.x + dir.x * t, py = from.y + dir.y * t, pz = from.z + dir.z * t;
+    const radio = person.userData.tanque ? 1.8 : .7;
+    const alto = person.userData.tanque ? 2.2 : 2.3;
+    if (Math.hypot(px - person.position.x, pz - person.position.z) > radio) continue;
+    if (py < person.position.y - .2 || py > person.position.y + alto) continue;
+    best = person; bestT = t; bestPoint = new THREE.Vector3(px, py, pz);
+  }
+  return best ? { person: best, point: bestPoint, dist: bestT } : null;
+}
+function hacerTanque() {
+  const g = new THREE.Group();
+  g.userData.tanque = true;
+  g.userData.hp = 160;
+  g.userData.shotCd = 1.2;
+  const verde = new THREE.MeshStandardMaterial({ color: 0x3f6212, roughness: .55, metalness: .35 });
+  const caja = (w, h, d, x, y, z, m) => { const o = new THREE.Mesh(smoothBox(w, h, d), m); o.position.set(x, y, z); o.castShadow = true; g.add(o); return o; };
+  caja(3.2, .5, 4.8, 0, .4, 0, mat(0x1c1917));
+  caja(2.4, .85, 3.6, 0, .95, -.1, verde);
+  caja(1.45, .62, 1.6, 0, 1.6, -.15, verde);
+  const canon = new THREE.Mesh(new THREE.CylinderGeometry(.11, .14, 2.2, 8), mat(0x292524));
+  canon.rotation.x = Math.PI / 2;
+  canon.position.set(0, 1.65, 1.35);
+  g.add(canon);
+  const tag = makeSign('TANQUE', 0xbef264); tag.scale.set(.4, .4, .4); tag.position.set(0, 2.35, 0); g.add(tag);
+  return g;
+}
+function updateTanque(dt) {
+  if (!(state.thiefMode && state.bankChase && state.wanted > 0) || state.planet === 'platus' || state.country) {
+    if (state.tanque && !state.bankChase) { scene.remove(state.tanque); state.tanque = null; }
+    return;
+  }
+  if (!state.tanque) {
+    const t = hacerTanque();
+    const x = BANK.x + 16, z = BANK.frente + 10;
+    t.position.set(x, mountainHeightAt(x, z), z);
+    scene.add(t);
+    state.tanque = t;
+    toast('🪖 Llegó un tanque: el blindado de la policía. Es lento, aguanta muchos tiros y solo dispara si tú disparas.');
+  }
+  const t = state.tanque;
+  if (!t || t.userData.muerto) return;
+  const dentro = dentroDelBanco(player.position.x, player.position.z);
+  const meta = dentro ? { x: BANK.x, z: BANK.frente + 4.5 } : player.position;
+  const dx = meta.x - t.position.x, dz = meta.z - t.position.z;
+  const len = Math.hypot(dx, dz) || 1;
+  if (len > 2.2) {
+    const nx = t.position.x + dx / len * 4.2 * dt, nz = t.position.z + dz / len * 4.2 * dt;
+    if (!dentroDelBanco(nx, nz)) {
+      t.position.x = nx; t.position.z = nz;
+      t.position.y = mountainHeightAt(nx, nz);
+    }
+  }
+  t.rotation.y = Math.atan2(player.position.x - t.position.x, player.position.z - t.position.z);
+  t.userData.shotCd -= dt;
+  const alcance = dist2D(t.position, player.position);
+  if (state.fuegoPolicial && alcance <= ALCANCE_POLICIA && t.userData.shotCd <= 0) {
+    t.userData.shotCd = 1.5;
+    const desde = t.position.clone(); desde.y = 1.6;
+    spawnTracer(desde, player.position.clone());
+    state.heridaPolicia = true;
+    damagePlayer(34, t.position);
+    puntoDeSangre(player.position, 0xb91c1c);
+    beep(90, .12, .07);
+  }
+}
+function asegurarEsposas() {
+  if (playerAvatar.userData.esposas) return playerAvatar.userData.esposas;
+  const l = playerAvatar.userData.limbs;
+  if (!l) return null;
+  const metal = new THREE.MeshStandardMaterial({ color: 0xe7e5e4, metalness: .85, roughness: .25 });
+  const aros = [];
+  for (const arm of [l.armL, l.armR]) {
+    const aro = new THREE.Mesh(new THREE.TorusGeometry(.06, .016, 6, 8), metal);
+    (arm.userData.extremo || arm).add(aro);
+    aro.rotation.x = Math.PI / 2;
+    aro.visible = false;
+    aros.push(aro);
+  }
+  playerAvatar.userData.esposas = aros;
+  return aros;
+}
+function verEsposas(on) {
+  const aros = asegurarEsposas();
+  if (aros) aros.forEach(a => { a.visible = !!on; });
+}
+function apartarPoliciaCercano() {
+  let cop = null, best = 1e9, idx = -1;
+  for (let i = 0; i < police.length; i++) {
+    const p = police[i];
+    if (p.userData.muerto || p.userData.car) continue;
+    const d = dist2D(p.position, player.position);
+    if (d < best) { best = d; cop = p; idx = i; }
+  }
+  if (idx >= 0) police.splice(idx, 1);
+  clearPolice();
+  if (!cop) {
+    cop = makePerson(0x1e3a8a, 0xf1c27d);
+    cop.position.set(player.position.x + 1.1, 0, player.position.z);
+    scene.add(cop);
+  }
+  cop.visible = true;
+  return cop;
+}
+function empezarTraslado() {
+  if (trasladoPolicial || condena) return;
+  const banco = !!state.bankChase || !!state.fugaCarcel || !!state.thiefMode;
   state.jailPorBanco = banco;
+  state.fugaCarcel = false;
   state.bankChase = false;
+  state.fuegoPolicial = false;
+  state.heridaPolicia = false;
+  state.wanted = 0;
+  state.wantedLevel = 0;
+  state.driving = false;
+  state.arrestoT = 0;
+  if (state.hp < 30) state.hp = 40;
   quitarCarteles();
-  state.wanted = 0; state.wantedLevel = 0; state.driving = false; clearPolice();
-  toast(banco ? '🚔 ¡Te atraparon! La búsqueda se reinicia. Nueve minutos en la celda.' : '🚔 ¡Te atrapó la policía! A la cárcel…');
+  if (state.tanque) { scene.remove(state.tanque); state.tanque = null; }
+  const cop = apartarPoliciaCercano();
+  trasladoPolicial = { t: 0, fase: 'esposas', cop, banco };
+  verEsposas(true);
+  toast(banco ? '🚔 Te esposan. Vas en el asiento de atrás. Nueve minutos en la celda.' : '🚔 Te esposan. Vas en el asiento de atrás del patrulla.');
+}
+function subirAlPatrulla() {
+  const tr = trasladoPolicial;
+  if (!tr || tr.car) return;
+  const car = makeCar(0x1e3a8a);
+  const light = new THREE.Mesh(smoothBox(.5, .2, .5), new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 1 }));
+  light.position.set(0, 1.95, 0); car.add(light);
+  const x = player.position.x, z = player.position.z;
+  car.position.set(x, mountainHeightAt(x, z), z);
+  car.rotation.y = Math.atan2(JAIL_GATE.x - x, JAIL_GATE.z - z);
+  scene.add(car);
+  if (tr.cop) {
+    car.add(tr.cop);
+    tr.cop.position.set(.32, .15, .4);
+    tr.cop.rotation.set(0, 0, 0);
+    posarSentado(tr.cop);
+  }
+  tr.car = car;
+  tr.luz = light;
+  tr.fase = 'auto';
+  tr.t = 0;
+}
+function terminarTraslado() {
+  const tr = trasladoPolicial;
+  trasladoPolicial = null;
+  if (tr && tr.car) scene.remove(tr.car);
+  verEsposas(false);
+  if (playerAvatar) { playerAvatar.rotation.set(0, 0, 0); posarDePie(playerAvatar); }
   goToJail();
 }
+function updateTraslado(dt) {
+  const tr = trasladoPolicial;
+  if (!tr) return;
+  tr.t += dt;
+  vy = 0; grounded = true;
+  state.driving = false;
+  creativeFlying = false;
+  if (tr.fase === 'esposas') {
+    if (tr.t > 1.7) subirAlPatrulla();
+    return;
+  }
+  const car = tr.car;
+  if (!car) return;
+  if (tr.luz) tr.luz.material.color.setHex((Math.floor(performance.now() / 180) % 2) ? 0xef4444 : 0x3b82f6);
+  const dx = JAIL_GATE.x - car.position.x, dz = JAIL_GATE.z - car.position.z;
+  const dist = Math.hypot(dx, dz);
+  if (dist < 8 || tr.t > 26) { terminarTraslado(); return; }
+  const paso = Math.min(dist, 18 * dt);
+  let nx = car.position.x + dx / dist * paso, nz = car.position.z + dz / dist * paso;
+  if (obstacleAt(nx, nz, 0, 1.3, true)) { nx = car.position.x - dz / dist * paso; nz = car.position.z + dx / dist * paso; }
+  car.position.x = nx;
+  car.position.z = nz;
+  car.position.y = mountainHeightAt(nx, nz);
+  car.rotation.y = Math.atan2(dx, dz);
+  car.updateMatrixWorld(true);
+}
+function encuadrarTraslado() {
+  const tr = trasladoPolicial;
+  if (!tr) return;
+  viewmodel.visible = false;
+  playerAvatar.visible = true;
+  verEsposas(true);
+  const l = playerAvatar.userData.limbs;
+  if (tr.fase === 'esposas') {
+    player.position.y = PLAYER_EYE;
+    playerAvatar.position.set(player.position.x, 0, player.position.z);
+    playerAvatar.rotation.set(0, yaw + Math.PI, 0);
+    if (l) {
+      l.armL.rotation.set(-1.2, .5, .85);
+      l.armR.rotation.set(-1.2, -.5, -.85);
+      l.legL.rotation.set(0, 0, 0);
+      l.legR.rotation.set(0, 0, 0);
+    }
+    if (tr.cop) {
+      tr.cop.visible = true;
+      tr.cop.position.set(player.position.x - Math.sin(yaw) * 1.15, 0, player.position.z - Math.cos(yaw) * 1.15);
+      tr.cop.rotation.set(0, yaw, 0);
+    }
+    camera.position.set(player.position.x + Math.sin(yaw) * 3.3, 1.75, player.position.z + Math.cos(yaw) * 3.3);
+    camera.lookAt(player.position.x, 1.15, player.position.z);
+    return;
+  }
+  const car = tr.car;
+  if (!car) return;
+  car.updateMatrixWorld(true);
+  const asiento = new THREE.Vector3(-.2, .2, -.78).applyMatrix4(car.matrixWorld);
+  player.position.set(asiento.x, asiento.y + .9, asiento.z);
+  playerAvatar.position.set(asiento.x, asiento.y - .72, asiento.z);
+  playerAvatar.rotation.set(.12, car.rotation.y, 0);
+  posarSentado(playerAvatar);
+  if (l) {
+    l.armL.rotation.set(-.9, .45, .7);
+    l.armR.rotation.set(-.9, -.45, -.7);
+  }
+  const cam = new THREE.Vector3(1.9, 1.65, -3.15).applyMatrix4(car.matrixWorld);
+  camera.position.copy(cam);
+  camera.lookAt(asiento.x, asiento.y + .35, asiento.z);
+}
+function policeCatch() { empezarTraslado(); }
 
 // Robo del Banco Central que ya existe: traje naranjo, gorro, hacker, cajones y carteles.
 function disfrazDeBanco() {
@@ -7045,19 +7335,20 @@ function iniciarPersecucionBanco() {
   state.bankDispatched = false;
   state.bankGrace = BANK.boveda.gracia;
   toast(camara
-    ? '🚨 Alarma. Sal del banco: ahí empiezan los 3 minutos. Con el traje y el gorro, el cartel es una cámara, sin tu cara.'
-    : '🚨 Alarma. Sal del banco: ahí empiezan los 3 minutos. Sin el traje y el gorro, el cartel lleva tu cara.');
+    ? '🚨 Alarma. La policía sale desde el banco y te persigue 2 minutos. Con el traje y el gorro, el cartel es una cámara, sin tu cara.'
+    : '🚨 Alarma. La policía sale desde el banco y te persigue 2 minutos. Sin el traje y el gorro, el cartel lleva tu cara.');
 }
 function despacharPoliciaBanco(alSalir) {
   if (state.bankDispatched) return;
   state.bankDispatched = true;
   state.bankGrace = 0;
   state.wantedLevel = Math.max(3, Math.min(5, state.wantedLevel || 3));
-  state.wanted = 180;
+  state.wanted = 120;
   state.policeDelay = 0;
+  state.fuegoPolicial = false;
   toast(alSalir
-    ? '🚓 Saliste del banco. La policía te persigue 3 minutos.'
-    : '🚓 Te quedaste en el banco. Entra la policía y te persigue 3 minutos.');
+    ? '🚓 Saliste del banco. La policía te persigue 2 minutos.'
+    : '🚓 La policía entra al banco con pistolas. Te persigue 2 minutos.');
 }
 function cajonCerca(maxD) {
   if (!bankHeist.ready) return null;
@@ -7332,6 +7623,7 @@ function matarEmpleadoBanco(person) {
   person.rotation.x = -Math.PI / 2;
   person.position.y = 0.35;
   voxelImpact(person.position.clone().setY(1.1), 0xb91c1c, 10);
+  puntoDeSangre(person.position, 0x7f1d1d);
   iniciarPersecucionBanco();
 }
 function ladoPuertaBanco() {
@@ -23912,6 +24204,16 @@ function fireGun(spec) {
   const dir = new THREE.Vector3(); getAimDirection(dir);
   const from = player.position.clone().addScaledVector(dir, .7); from.y -= .18;
   const hit = gunRaycastEnemy(from, dir, spec.range);
+  const agente = gunRaycastAgente(from, dir, spec.range);
+  if (agente && (!hit || agente.dist <= hit.dist)) {
+    const personaAntes = gunRaycastPerson(from, dir, agente.dist);
+    if (!personaAntes) {
+      spawnTracer(from, agente.point);
+      herirAgente(agente.person, spec.dmg);
+      if ((state.clip || 0) <= 0) startReload(true);
+      return true;
+    }
+  }
   const persona = gunRaycastPerson(from, dir, hit ? hit.dist : spec.range);   // a la gente también le llega
   const to = persona ? persona.point.clone() : hit ? hit.point.clone() : from.clone().addScaledVector(dir, spec.range);
   spawnTracer(from, to);
@@ -23923,6 +24225,7 @@ function fireGun(spec) {
     const push = new THREE.Vector3().subVectors(persona.person.position, player.position).setY(0).normalize().multiplyScalar(persona.head ? 2.2 : 1.3);
     persona.person.position.add(push);
     voxelImpact(persona.point.clone(), 0xb91c1c, 8);
+    puntoDeSangre(persona.point, 0x991b1b);
     becomeWanted(persona.head ? 26 : 18, persona.head ? 2 : 1);
     toast(persona.head ? '🚨 ¡Le disparaste a alguien en la cabeza! BUSCADO ⭐⭐' : '🚨 ¡Le disparaste a una persona! Te volviste BUSCADO');
     return true;
@@ -25499,7 +25802,10 @@ function loop() {
     updateLivingWater(dt);                // monstruos y seres vivos se hunden en piscinas y mar
     if (state.creative) { state.hp = 100; state.dadHp = 100; if (state.hunger < 20) state.hunger = 20; }   // creativo: no se puede morir (ni tú ni el papá)
     hurtFeedback();
-    if (!state.creative && state.hp <= 0) goToJail();         // monstruos te matan -> cárcel (día o noche)
+    if (!state.creative && state.hp <= 0 && !trasladoPolicial) {
+      if (state.heridaPolicia) empezarTraslado();
+      else goToJail();
+    }
     else if (!state.creative && state.dadHp <= 0 && dad.visible) gameOver();
     updateTimers(dt);
   }
@@ -26018,6 +26324,7 @@ function updateMovement(dt) {
     return;
   }
   if (state.cinematic) return;   // durante la cinemática del cohete el personaje se mueve solo
+  if (trasladoPolicial) { updateTraslado(dt); return; }
   if (frenarCondena(dt)) return;
   if (state.sailing) { camera.rotation.y = yaw; camera.rotation.x = pitch; return; }
   if (typing) clearInput();   // con un menú abierto (vendedor, banco, mates…) no se camina (la gravedad sigue)
