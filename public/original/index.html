@@ -6854,12 +6854,13 @@ function fugarDeLaCarcel() {
   quitarCarteles();
   toast('🏃 Saliste por el ducto. La policía te persigue cinco minutos. Si aguantas, quedas libre.');
 }
+const TIEMPO_TORNILLO = 1;
 function avanzarTornillo(dt) {
   const tiene = !!(keys['KeyE'] || touch.useHeld);
   if (tiene) condena.tornillo += dt;
   else condena.tornillo = Math.max(0, condena.tornillo - dt * .35);
-  if (condena.tornillo < 3) return;
-  condena.tornillo = 3;
+  if (condena.tornillo < TIEMPO_TORNILLO) return;
+  condena.tornillo = TIEMPO_TORNILLO;
   condena.atornillando = false;
   condena.rejaAbierta = true;
   soltarCuchara();
