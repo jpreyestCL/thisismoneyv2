@@ -7912,6 +7912,8 @@ function buildWorldBiomes() {
     mesh.position.set(block.x, 0, block.z);
     mesh.receiveShadow = true;
     mesh.userData.walkSurface = true;
+    mesh.userData.sueloReal = true;
+    mesh.userData.bultoCiudad = true;
     g.add(mesh);
     if (block.kind === 'pond') {
       EXTRA_WATER.push({ cx: block.x, cz: block.z, rx: block.w * 0.22, rz: block.d * 0.22, surface: 0.5, bottom: 0.12, lake: true });
@@ -9215,7 +9217,8 @@ function mountainHeightAt(x, z) {
 }
 // La malla que se ve (tierra gruesa, bioma, cerro) no coincide con la fórmula:
 // un bulto dibujado puede quedar varios metros por encima del suelo que pisa
-// el jugador. Fuera de la ciudad y de los lagos, el piso es esa malla.
+// el jugador. En la ciudad el piso es el más alto entre la fórmula y esa malla.
+// Fuera de la ciudad y de los lagos, el piso es la malla.
 function alturaEnMalla(mesh, x, z) {
   const geo = mesh.geometry;
   const p = geo.parameters;
@@ -9260,6 +9263,17 @@ function alturaMalla(x, z) {
   }
   return top;
 }
+function alturaBulto(x, z) {
+  asegurarMallas();
+  let top = null;
+  for (const m of mallasDeSuelo) {
+    if (!m.userData.bultoCiudad) continue;
+    const h = alturaEnMalla(m, x, z);
+    if (h == null || h < -0.2) continue;
+    if (top == null || h > top) top = h;
+  }
+  return top;
+}
 // Altura para sentar casas y andariveles mientras el mundo se construye.
 // No mira el estado del juego: en ese momento todavía no existe.
 function alturaDeApoyo(x, z) {
@@ -9278,7 +9292,12 @@ function sueloReal(x, z) {
     if (p.hueco && Math.abs(x - p.hueco.x) < p.hueco.hw && Math.abs(z - p.hueco.z) < p.hueco.hd) continue;
     return p.y;
   }
-  if (Math.abs(x) < 260 && Math.abs(z) < 260) return anal;
+  if (Math.abs(x) < 260 && Math.abs(z) < 260) {
+    if (typeof lakeAt === 'function' && lakeAt(x, z)) return anal;
+    const bulto = alturaBulto(x, z);
+    if (bulto == null) return anal;
+    return Math.max(anal, bulto);
+  }
   if (typeof lakeAt === 'function' && lakeAt(x, z)) return anal;
   const vis = alturaMalla(x, z);
   if (vis == null) return anal;
