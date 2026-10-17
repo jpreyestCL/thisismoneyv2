@@ -46,6 +46,9 @@
   #objective { position: absolute; top: 92px; left: 50%; transform: translateX(-50%);
     background: rgba(0,0,0,.5); padding: 7px 16px; border-radius: 18px; font-size: 14px; font-weight: 600; text-align: center; max-width: 90%; }
   #crosshair { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; background: #fff; border-radius: 50%; opacity: .8; }
+  #alarmaBanco { position: fixed; inset: 0; z-index: 6; pointer-events: none; display: none; background: radial-gradient(ellipse at center, rgba(127,29,29,.12) 18%, rgba(153,27,27,.62) 100%); }
+  #alarmaBanco.on { display: block; animation: alarma-ni .32s steps(2, end) infinite; }
+  @keyframes alarma-ni { 0% { opacity: .22; } 50% { opacity: .92; } 100% { opacity: .22; } }
   #bowcharge { position: absolute; left: 50%; top: calc(50% + 18px); width: 200px; margin-left: -90px; z-index: 8; display: none; pointer-events: none; text-align: center; }
   #bowcharge.show { display: block; }
   #bowcharge i { display: block; height: 8px; width: 0; background: linear-gradient(90deg, #b45309, #facc15, #fff7ed); border: 1px solid #fde047; border-radius: 6px; box-sizing: border-box; }
@@ -595,6 +598,7 @@
   <div id="escape"></div>
   <div id="objective">Objetivo</div>
   <div id="crosshair"></div>
+  <div id="alarmaBanco"></div>
   <div id="bowcharge"><i></i><span id="bowdmg"></span></div>
   <div id="laserBar" role="status" aria-label="Energía del láser"><div class="lb-track"><div class="lb-fill" id="laserFill"></div></div><div class="lb-txt" id="laserTxt">LÁSER</div></div>
   <div id="contextPrompt" role="status" aria-live="polite"><span id="contextKey">E</span><span id="contextText">Interactuar</span></div>
@@ -1080,7 +1084,7 @@
           <kbd>WASD</kbd><span>Caminar. Shift corre, Espacio salta y Ctrl agacha.</span>
           <kbd>Espacio ×3</kbd><span>Llamar al mayordomo y darle una orden o encargarle compras. Primero contrátalo en el súper por $500. Su sueldo es $100 cada 7 días del juego.</span>
           <kbd>P</kbd><span>Llamar por celular a tus amigos cuando estés en una partida online.</span>
-          <kbd>E</kbd><span>Interactuar, entrar a vehículos, banco, cohete, tesoros, edificios y la puerta del callejón de Tito (misión a $20.000). En el Banco Central, con el sistema hacker del mercado negro, mantén E 10 segundos en la puerta de la bóveda, entra a la sala. Las cajas doradas se abren solo si les apuntas con la flecha del arco, y al abrirse quedan negras. No se abren con E ni con C. Las cajas grandes con diamantes no se abren. Al salir del banco la policía te persigue 3 minutos. Con el arco en la mano, mantén E (o el clic) para tensar: cuanto más tiempo, más fuerte sale la flecha. Daño del arco: tensado bajo 9, medio 12 y máximo 18 (si tu arco es de 16). Mira hacia arriba para que vuele lejos; abajo llega menos. Si tienes espada, láser y arco: pulsa 1 una vez para la espada (o el láser), 1 otra vez para cambiar entre espada y láser, y 1 dos veces seguidas para el arco. En casa, E en la Play abre juegos de consola (fútbol, Gran Prix y Héroes), pero la mesa tiene que tener una tele.</span>
+          <kbd>E</kbd><span>Interactuar, entrar a vehículos, banco, cohete, tesoros, edificios y la puerta del callejón de Tito (misión a $20.000). En el Banco Central, con el sistema hacker del mercado negro, mantén E 10 segundos en la puerta de la bóveda, entra a la sala. Al abrir la puerta las cajas se ponen doradas. Se abren si les apuntas con el puntito del centro, y al abrirse quedan negras. Dentro del banco suena una alarma roja hasta que sales. No se abren con E ni con C. Las cajas grandes con diamantes no se abren. Al salir del banco la policía te persigue 3 minutos. Con el arco en la mano, mantén E (o el clic) para tensar: cuanto más tiempo, más fuerte sale la flecha. Daño del arco: tensado bajo 9, medio 12 y máximo 18 (si tu arco es de 16). Mira hacia arriba para que vuele lejos; abajo llega menos. Si tienes espada, láser y arco: pulsa 1 una vez para la espada (o el láser), 1 otra vez para cambiar entre espada y láser, y 1 dos veces seguidas para el arco. En casa, E en la Play abre juegos de consola (fútbol, Gran Prix y Héroes), pero la mesa tiene que tener una tele.</span>
           <kbd>Y</kbd><span>Abrir el catálogo del vendedor cuando estés cerca.</span>
           <kbd>B / G</kbd><span>Activa construcción con B. En ese modo, G abre planos completos; F coloca y X quita.</span>
           <kbd>1–9 · 0</kbd><span>Elegir herramienta o pieza de la pestaña activa (🏠 casa · 🛡️ defensa · 🪑 muebles). La tecla 1: un toque = espada, pala o pistola láser (nunca los puños si ya las compraste); dos toques seguidos = arco. La rueda recorre TODO el inventario y Shift+rueda cambia de pestaña.</span>
@@ -4485,7 +4489,7 @@ const BLACK_MARKET = [
   { key: 'bm_radio', name: 'Radio chatarra', price: 380, color: 0x334155, gadget: 'radio', icon: '📻', blurb: 'Pitido cuando se acerca un patrullero.' },
   { key: 'bm_naranjo', name: 'Traje naranjo de ladrón', price: 1200, color: 0xf97316, icon: '🟠', thief: 'naranjo', blurb: 'Uniforme naranja de la cárcel. Con el gorro puesto, el cartel del banco es una cámara desde arriba y no muestra tu cara.' },
   { key: 'bm_gorro', name: 'Gorro con hoyos', price: 700, color: 0x111827, icon: '🎭', thief: 'gorro', blurb: 'Gorro negro con hoyos para los ojos. Si robas el banco sin este gorro, el cartel de buscado lleva tu cara.' },
-  { key: 'bm_hacker', name: 'Sistema hacker', price: 2200, color: 0x22d3ee, icon: '💻', thief: 'hacker', blurb: 'Abre la puerta de la bóveda del Banco Central en 10 segundos. Cada caja dorada tiene $1000 y se abre con la flecha.' },
+  { key: 'bm_hacker', name: 'Sistema hacker', price: 2200, color: 0x22d3ee, icon: '💻', thief: 'hacker', blurb: 'Abre la puerta de la bóveda del Banco Central en 10 segundos. Ahí las cajas se ponen doradas: cada una tiene $1000 y se abre con el puntito del centro.' },
 ];
 // Armas de fuego de verdad (las del mercado negro). Cargador de 20 balas, 5 s de recarga.
 const GUN_CLIP = 20, GUN_RELOAD = 5;
@@ -7089,8 +7093,10 @@ function abrirBoveda() {
   }
   ponerHojaBoveda(true);
   beep(520, .1, .05);
-  toast('💻 Puerta abierta. Las cajas doradas se abren apuntándoles con la flecha · $1000 · son 20.');
+  for (const d of bankHeist.drawers) if (!d.open) correrCajon(d, false);
+  toast('💻 Puerta abierta. Las cajas se pusieron doradas: apúntales con el puntito · $1000 · son 20.');
   iniciarPersecucionBanco();
+  syncAlarmaBanco();
 }
 function hacerPuertaMetalBoveda(puertaX, puertaZ, ancho) {
   const alto = 4.05, grosor = 0.5, hojaAncho = ancho - 0.06;
@@ -7158,12 +7164,16 @@ function construirSalaBoveda() {
   mcFloor(scene, mitadX, mitadZ, east - west - 0.2, north - south - 0.2, 0x374151, 0.04);
   const techo = new THREE.Mesh(smoothBox(east - west + vt, 0.28, north - south + vt), mat(0x4b5563));
   techo.position.set(mitadX, alto - 0.1, mitadZ); scene.add(techo);
-  const panelLuz = new THREE.MeshStandardMaterial({ color: 0xfff7d6, emissive: 0xfff4cf, emissiveIntensity: 2.8 });
+  bankHeist.luces = [];
+  bankHeist.paneles = [];
   for (const [lx, lz] of [[puertaX, north - 2.2], [mitadX, mitadZ], [mitadX, south + 2.4]]) {
+    const panelLuz = new THREE.MeshStandardMaterial({ color: 0xfff7d6, emissive: 0xfff4cf, emissiveIntensity: 2.8 });
     const panel = new THREE.Mesh(smoothBox(2.4, 0.1, 1.15), panelLuz);
     panel.position.set(lx, alto - 0.38, lz); scene.add(panel);
+    bankHeist.paneles.push(panel);
     const pl = new THREE.PointLight(0xfff6e8, 2.8, 26, 1.15);
     pl.position.set(lx, alto - 0.85, lz); scene.add(pl);
+    bankHeist.luces.push(pl);
   }
 }
 function prepararRoboBanco() {
@@ -7176,7 +7186,7 @@ function prepararRoboBanco() {
   bankHeist.spot = new THREE.Vector3(BANK.boveda.puertaX, 0, BANK.boveda.puertaZ + 1.7);
   ponerPuertaBovedaSolida();
   const ponerCajon = (i, x, y, z, ox, oz) => {
-    const mesh = new THREE.Mesh(smoothBox(Math.abs(oz) > 0.5 ? 0.72 : 0.36, 0.4, Math.abs(ox) > 0.5 ? 0.72 : 0.36), new THREE.MeshStandardMaterial({ color: 0xf6c445, emissive: 0xb45309, emissiveIntensity: .35, roughness: .32, metalness: .62 }));
+    const mesh = new THREE.Mesh(smoothBox(Math.abs(oz) > 0.5 ? 0.72 : 0.36, 0.4, Math.abs(ox) > 0.5 ? 0.72 : 0.36), new THREE.MeshStandardMaterial({ color: 0x64748b, emissive: 0x000000, emissiveIntensity: 0, roughness: .4, metalness: .55 }));
     mesh.position.set(x, y, z); mesh.castShadow = true; scene.add(mesh);
     const tirador = new THREE.Mesh(smoothBox(Math.abs(oz) > 0.5 ? 0.28 : 0.06, 0.06, Math.abs(ox) > 0.5 ? 0.28 : 0.06), mat(0xfacc15));
     tirador.position.set(x + ox * 0.24, y, z + oz * 0.24); scene.add(tirador);
@@ -7245,10 +7255,11 @@ function ponerPuertaBovedaSolida() {
 }
 function correrCajon(d, abierto) {
   d.open = !!abierto;
-  d.mesh.material.color.setHex(d.open ? 0x0c0c0c : 0xf6c445);
+  const dorada = !d.open && bankHeist.open;
+  d.mesh.material.color.setHex(d.open ? 0x0c0c0c : (dorada ? 0xf6c445 : 0x64748b));
   if (d.mesh.material.emissive) {
-    d.mesh.material.emissive.setHex(d.open ? 0x000000 : 0xb45309);
-    d.mesh.material.emissiveIntensity = d.open ? 0 : .35;
+    d.mesh.material.emissive.setHex(dorada ? 0xb45309 : 0x000000);
+    d.mesh.material.emissiveIntensity = dorada ? .35 : 0;
   }
   const s = d.open ? 0.28 : 0;
   d.mesh.position.set(d.home.x + d.ox * s, d.home.y, d.home.z + d.oz * s);
@@ -7289,27 +7300,19 @@ function abrirCajonConFlecha(d) {
   addMoney(1000);
   iniciarPersecucionBanco();
   const quedan = cajonesCerrados();
-  toast(quedan ? '💵 La flecha abrió la caja · $1000 · quedan ' + quedan : '💵 La flecha abrió la caja · $1000 · la bóveda quedó vacía');
+  toast(quedan ? '💵 El puntito abrió la caja · $1000 · quedan ' + quedan : '💵 El puntito abrió la caja · $1000 · la bóveda quedó vacía');
   beep(680, .06, .04);
   cajaApuntada = null;
   cajaApuntaT = 0;
   return true;
 }
 function updateCajasConFlecha(dt) {
-  if (!bankHeist.open || !bowEquipped() || !bowDrawing) { cajaApuntada = null; cajaApuntaT = 0; return; }
+  if (!bankHeist.open || state.paused || !state.running || condena || state.driving) { cajaApuntada = null; cajaApuntaT = 0; return; }
   getAimDirection(bowAimDir);
   const d = cajonEnRayo(camera.position, bowAimDir, 16);
   if (!d || d !== cajaApuntada) { cajaApuntada = d; cajaApuntaT = 0; if (!d) return; }
   cajaApuntaT += dt;
   if (cajaApuntaT >= .28) abrirCajonConFlecha(d);
-}
-function flechaTocaCajon(a, b) {
-  if (!bankHeist.open || !a || !b) return false;
-  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
-  const largo = Math.hypot(dx, dy, dz);
-  if (largo < 1e-4) return false;
-  const d = cajonEnRayo(a, { x: dx / largo, y: dy / largo, z: dz / largo }, largo);
-  return abrirCajonConFlecha(d);
 }
 function piezaBoveda() {
   const cajon = cajonCerca(1.65);
@@ -7355,7 +7358,7 @@ function tryBankHeist() {
     if (!pieza) return false;
     if (pieza.tipo === 'diamante') { toast('💎 Esa caja está sellada. Se ven los diamantes, pero no se abre.'); return true; }
     const d = pieza.item;
-    toast(d.open ? 'Esa caja ya está vacía' : '🏹 Esa caja se abre apuntándole con la flecha. Ni E ni C la abren.');
+    toast(d.open ? 'Esa caja ya está vacía' : 'Esa caja se abre apuntándole con el puntito del centro. Ni E ni C la abren.');
     return true;
   }
   if (cercaDeLaPuertaBanco()) {
@@ -7374,7 +7377,7 @@ function bankHeistPrompt() {
     if (!pieza) return null;
     if (pieza.tipo === 'diamante') return { key: 'E', touch: '💎', force: true, text: 'Caja sellada · se ven diamantes' };
     const d = pieza.item;
-    return { key: '🏹', touch: '🏹', text: d.open ? 'Caja vacía' : 'Apunta la flecha: la caja dorada se abre y queda negra' };
+    return { key: '•', touch: '•', text: d.open ? 'Caja vacía' : 'Apunta el puntito: la caja dorada se abre y queda negra' };
   }
   if (!cercaDeLaPuertaBanco()) return null;
   if (!(state.thief && state.thief.hacker)) return { key: '🔒', touch: '💻', text: 'Puerta de la bóveda · cómprala con el sistema hacker' };
@@ -7383,6 +7386,8 @@ function bankHeistPrompt() {
 }
 function updateBankHack(dt) {
   if (!bankHeist.ready) return;
+  syncAlarmaBanco();
+  updateCajasConFlecha(dt);
   if (state.bankChase && !state.bankDispatched && !condena) {
     state.bankGrace -= dt;
     const afuera = !dentroDelBanco(player.position.x, player.position.z);
@@ -7426,6 +7431,7 @@ function abrirBovedaSilencio() {
     bankHeist.obs = null;
   }
   ponerHojaBoveda(true);
+  for (const d of bankHeist.drawers) if (!d.open) correrCajon(d, false);
 }
 function resetRoboBanco() {
   state.thief = { naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false };
@@ -16838,7 +16844,6 @@ function updatePlayerArrows(dt) {
       const trail = a.getObjectByName('flyTrail');
       if (trail && trail.material) trail.material.opacity = .42 + Math.abs(Math.sin(ud.life * 16)) * .38;
       arrowMid.lerpVectors(arrowPrev, a.position, .5);
-      flechaTocaCajon(arrowPrev, a.position);
       if (hitWithArrow(a.position, ud.dmg) || hitWithArrow(arrowMid, ud.dmg) || hitWithArrow(arrowPrev, ud.dmg)) { voxelImpact(a.position.clone(), 0xfde047, 8); scene.remove(a); playerArrows.splice(i, 1); continue; }
       const zonaSuelo = waterZoneAt(a.position.x, a.position.z);
       const floor = zonaSuelo ? zonaSuelo.bottom : arrowFloorY(a.position.x, a.position.z);   // en el agua se hunde hasta el fondo
@@ -16865,7 +16870,6 @@ function updateBow(dt) {
       applyBowDrawVisual(bowDrawT);
     }
   } else if (bowEquipped()) applyBowDrawVisual(0);
-  updateCajasConFlecha(dt);
   updatePlayerArrows(dt);
 }
 // Las ballestas/torretas colocadas disparan solas a los zombis de noche
@@ -17987,8 +17991,42 @@ const MUSIC = {
   night:  { mel: [0, 3, 7, 3, 10, 8, 7, 3, 0, -2, 1, 3, 7, 3, 1, -2], bass: [-12, -12, -9, -14], base: 130.81, wave: 'triangle' },
   platus: { mel: [0, -2, 3, 0, 7, 5, -2, 0, 3, -4, 0, -2, 5, 3, 0, -5], bass: [-12, -17, -12, -19], base: 146.83, wave: 'triangle' },
 };
+let alarmaTimer = null, alarmaStep = 0, alarmaBancoOn = false;
+function alarmaDelBancoActiva() {
+  return !!(bankHeist.open && state.running && !condena && state.planet === 'tierra' && !state.country && dentroDelBanco(player.position.x, player.position.z));
+}
+function pintarLucesBoveda(roja) {
+  for (const pl of bankHeist.luces || []) pl.color.setHex(roja ? 0xff1a1a : 0xfff6e8);
+  for (const p of bankHeist.paneles || []) {
+    p.material.color.setHex(roja ? 0xef4444 : 0xfff7d6);
+    if (p.material.emissive) p.material.emissive.setHex(roja ? 0x991b1b : 0xfff4cf);
+  }
+}
+function startSirena() {
+  if (musicTimer) { clearInterval(musicTimer); musicTimer = null; }
+  if (alarmaTimer || !soundOn) return;
+  alarmaTimer = setInterval(() => {
+    if (!soundOn || !alarmaBancoOn || !state.running || state.paused || document.hidden) return;
+    const hi = alarmaStep++ % 2;
+    tone(hi ? 932 : 740, .13, .055, 'square');
+  }, 160);
+}
+function stopSirena(reanudar) {
+  if (alarmaTimer) { clearInterval(alarmaTimer); alarmaTimer = null; }
+  if (reanudar && !activeGamerSpeaker) startMusic();
+}
+function syncAlarmaBanco() {
+  const on = alarmaDelBancoActiva();
+  if (on === alarmaBancoOn) return;
+  alarmaBancoOn = on;
+  const el = ui('alarmaBanco');
+  if (el) el.classList.toggle('on', on);
+  pintarLucesBoveda(on);
+  if (on) startSirena();
+  else stopSirena(true);
+}
 function startMusic() {
-  if (activeGamerSpeaker) return;
+  if (activeGamerSpeaker || alarmaBancoOn) return;
   if (musicTimer) { clearInterval(musicTimer); musicTimer = null; }
   if (!soundOn) return;
   musicTimer = setInterval(() => {
@@ -18165,7 +18203,8 @@ function trySeatedPlay() {
 }
 function toggleSound() {
   soundOn = !soundOn;
-  if (!soundOn) { if (engineGain) engineGain.gain.value = 0; if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } if (speakerMusicTimer) { clearInterval(speakerMusicTimer); speakerMusicTimer = null; } }
+  if (!soundOn) { if (engineGain) engineGain.gain.value = 0; if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } if (alarmaTimer) { clearInterval(alarmaTimer); alarmaTimer = null; } if (speakerMusicTimer) { clearInterval(speakerMusicTimer); speakerMusicTimer = null; } }
+  else if (alarmaBancoOn) startSirena();
   else if (activeGamerSpeaker) startGamerSpeaker(activeGamerSpeaker, Number.isFinite(speakerMusicEndStep) ? Math.max(180, (speakerMusicEndStep - speakerMusicStep) * 180) : undefined, speakerMusicFinished); else startMusic();
   const b = ui('soundBtn'); if (b) b.textContent = soundOn ? '🔊' : '🔇';
   try { localStorage.setItem('tim_sound', soundOn ? '1' : '0'); } catch (e) {}
