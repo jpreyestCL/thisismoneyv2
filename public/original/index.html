@@ -2615,11 +2615,13 @@ function recortarPiel(canvas, pred) {
 }
 function ocultarCuerpoPorSkin() {
   if (!playerSkinOn) return;
-  playerAvatar.traverse(o => { if (o.isMesh && !o.userData.piezaSkin) o.visible = false; });
+  playerAvatar.traverse(o => {
+    if (!o.isMesh || o.userData.piezaSkin || o.userData.sobreCuerpo) return;
+    o.visible = false;
+  });
   const manga = viewmodel.children[0], puno = viewmodel.children[1];
   if (manga) manga.visible = false;
   if (puno) puno.visible = false;
-  if (viewmodel.userData.bracer) viewmodel.userData.bracer.visible = false;
 }
 function mostrarAvatarOriginal() {
   playerAvatar.traverse(o => { if (o.isMesh && !o.userData.piezaSkin) o.visible = true; });
@@ -2630,8 +2632,17 @@ function mostrarAvatarOriginal() {
   soltarManosPiel();
   if (typeof applyThiefLook === 'function') applyThiefLook();
 }
+function despegarEquipoDeLaPiel() {
+  if (!playerSkinRig) return;
+  const salvar = [];
+  for (const obj of playerSkinRig.partes) {
+    obj.traverse(o => { if (o.userData && o.userData.sobreCuerpo) salvar.push(o); });
+  }
+  for (const o of salvar) if (o.userData.padre) o.userData.padre.add(o); else playerAvatar.add(o);
+}
 function tirarPiel() {
   soltarManosPiel();
+  despegarEquipoDeLaPiel();
   if (!playerSkinRig) return;
   for (const obj of playerSkinRig.partes) {
     if (obj.parent) obj.parent.remove(obj);
@@ -2690,6 +2701,7 @@ function montarPiel(canvas, corte) {
     if (id === 5 && !seMonta(corte.partes.legR)) return true;
     return false;
   };
+  const medidas = { torso: null, cabeza: null, miembros: {} };
   const torso = recortarPiel(canvas, predTorso);
   if (torso) {
     const centro = corte.aMundo((torso.minX + torso.maxX + 1) / 2, (torso.minY + torso.maxY + 1) / 2);
@@ -2701,6 +2713,11 @@ function montarPiel(canvas, corte) {
     atras.position.set(centro.x, centro.y, 0.1);
     atras.material.side = THREE.BackSide;
     partesRig.push(frente, atras);
+    medidas.torso = {
+      x: centro.x, y: centro.y,
+      ancho: torso.canvas.width * corte.esc,
+      alto: torso.canvas.height * corte.esc
+    };
   }
   const miembro = (nombre, z) => {
     const p = corte.partes[nombre];
@@ -2713,6 +2730,12 @@ function montarPiel(canvas, corte) {
     const g = new THREE.Group();
     g.position.set(piv.x, piv.y, 0);
     g.userData.eje = new THREE.Vector3(-dy / largo, dx / largo, 0);
+    const pixW = (p.maxX - p.minX + 1) * corte.esc, pixH = (p.maxY - p.minY + 1) * corte.esc;
+    medidas.miembros[nombre] = {
+      largo,
+      grosor: Math.max(0.1, Math.min(pixW, pixH) * 0.9),
+      dir: new THREE.Vector3(dx / largo, dy / largo, 0)
+    };
     playerAvatar.add(g);
     partesRig.push(g);
     huesos[nombre] = g;
@@ -2729,8 +2752,10 @@ function montarPiel(canvas, corte) {
   miembro('armR', 0.2);
   miembro('legL', 0.18);
   miembro('legR', 0.18);
-  playerSkinRig = { mallas, partes: partesRig, huesos, extremos };
+  medidas.cabeza = medirCabezaPiel(canvas, corte);
+  playerSkinRig = { mallas, partes: partesRig, huesos, extremos, medidas };
   montarManosPiel(huesos);
+  acomodarArmaduraJugador();
 }
 function espaldaSinCara(src) {
   const w = src.width, h = src.height;
@@ -2814,6 +2839,7 @@ function aplicarSkinDibujada(dataUrl) {
     playerSkinOn = false;
     tirarPiel();
     mostrarAvatarOriginal();
+    applyPlayerArmor();
     return;
   }
   playerSkinOn = true;
@@ -2847,6 +2873,7 @@ function colocarSkinDibujada() {
       manos.izq.rotation.z = 0.18 - paso;
       manos.der.position.y = -0.02 + alza;
       manos.izq.position.y = -0.02 + alza;
+      if (viewmodel.userData.bracer && viewmodel.userData.bracer.visible) acomodarBrazalete(true);
     }
   }
   if (!playerSkinRig) return;
@@ -2890,23 +2917,170 @@ function applyMinecraftArmor(person, tier, scale) {
   person.userData.mcArmorTier = tier || null;
   if (!tier || !ARMOR_TIERS[tier]) return;
   const T = ARMOR_TIERS[tier], k = scale || 1, parts = [];
-  const piece = (parent, w, h, d, x, y, z, col) => {
+  const marcar = (m, parent, rol, lado) => {
+    m.userData.sobreCuerpo = true;
+    m.userData.rol = rol;
+    m.userData.lado = lado || '';
+    m.userData.padre = parent;
+    m.userData.base = m.position.clone();
+    m.renderOrder = 4;
+    parts.push(m);
+    return m;
+  };
+  const piece = (parent, w, h, d, x, y, z, col, rol, lado) => {
     const m = new THREE.Mesh(smoothBox(w * k, h * k, d * k), mat(col));
-    m.position.set(x * k, y * k, z * k); m.castShadow = true; parent.add(m); parts.push(m); return m;
+    m.position.set(x * k, y * k, z * k); m.castShadow = true; parent.add(m);
+    return marcar(m, parent, rol, lado);
   };
   const limbs = person.userData.limbs || {};
   const helm = new THREE.Mesh(new THREE.SphereGeometry(0.32 * k, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), mat(T.color));
-  helm.position.set(0, 2.0 * k, -0.02 * k); helm.castShadow = true; person.add(helm); parts.push(helm);
-  piece(person, .5, .58, .46, 0, 1.38, 0.03, T.color);       // peto
-  piece(person, .48, .1, .3, 0, 1.04, 0.05, T.trim);         // cinturón
-  piece(person, .28, .08, .28, 0, 1.72, 0.04, T.trim);       // cuello
-  if (limbs.armL) piece(limbs.armL, .24, .22, .24, 0, -.08, 0, T.color);
-  if (limbs.armR) piece(limbs.armR, .24, .22, .24, 0, -.08, 0, T.color);
-  for (const leg of [limbs.legL, limbs.legR]) if (leg) {
-    piece(leg, .26, .32, .26, 0, -.18, 0, T.color);          // greba
-    piece(leg.userData.extremo || leg, .22, .1, .3, 0, 0, .05, T.trim); // bota, sigue al pie
+  helm.position.set(0, 2.0 * k, -0.02 * k); helm.castShadow = true; person.add(helm);
+  marcar(helm, person, 'casco');
+  piece(person, .5, .58, .46, 0, 1.38, 0.03, T.color, 'peto');
+  piece(person, .48, .1, .3, 0, 1.04, 0.05, T.trim, 'cinturon');
+  piece(person, .28, .08, .28, 0, 1.72, 0.04, T.trim, 'cuello');
+  if (limbs.armL) piece(limbs.armL, .24, .22, .24, 0, -.08, 0, T.color, 'hombrera', 'armL');
+  if (limbs.armR) piece(limbs.armR, .24, .22, .24, 0, -.08, 0, T.color, 'hombrera', 'armR');
+  const piernas = [['legL', limbs.legL], ['legR', limbs.legR]];
+  for (const [lado, leg] of piernas) if (leg) {
+    piece(leg, .26, .32, .26, 0, -.18, 0, T.color, 'greba', lado);
+    piece(leg.userData.extremo || leg, .22, .1, .3, 0, 0, .05, T.trim, 'bota', lado);
   }
   person.userData.mcArmor = parts;
+}
+const EJE_MIEMBRO_ABAJO = new THREE.Vector3(0, -1, 0);
+function medirCabezaPiel(canvas, corte) {
+  const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+  const yFin = Math.floor(corte.minY + Math.max(4, corte.bh * 0.3));
+  let minX = 1e9, minY = 1e9, maxX = -1, maxY = -1, n = 0;
+  const x0 = Math.max(0, Math.floor(corte.L)), x1 = Math.min(canvas.width - 1, Math.ceil(corte.R));
+  for (let y = corte.minY; y <= yFin && y < canvas.height; y++) {
+    for (let x = x0; x <= x1; x++) {
+      if (data[(y * canvas.width + x) * 4 + 3] <= 28) continue;
+      n++;
+      if (x < minX) minX = x; if (y < minY) minY = y;
+      if (x > maxX) maxX = x; if (y > maxY) maxY = y;
+    }
+  }
+  if (n < 6) return null;
+  const c = corte.aMundo((minX + maxX + 1) / 2, (minY + maxY + 1) / 2);
+  return { x: c.x, y: c.y, ancho: (maxX - minX + 1) * corte.esc, alto: (maxY - minY + 1) * corte.esc };
+}
+function restaurarTrajeBase() {
+  const r = playerAvatar.userData.rayasNaranjas;
+  if (r) { r.position.set(0, 0, 0); r.scale.set(1, 1, 1); }
+  const g = playerAvatar.userData.gorroHoyos;
+  if (g) { g.position.set(0, 0, 0); g.scale.set(1, 1, 1); }
+}
+function devolverPiezaAlCuerpo(m, extra, cascoAlto) {
+  const padre = m.userData.padre || playerAvatar;
+  if (m.parent !== padre) padre.add(m);
+  const base = m.userData.base;
+  if (base) m.position.copy(base);
+  m.quaternion.identity();
+  const s = extra * (m.userData.rol === 'casco' && cascoAlto ? 1.28 : 1);
+  m.scale.setScalar(s);
+  if (m.userData.rol === 'casco' && cascoAlto) m.position.y += 0.1;
+  m.visible = true;
+}
+function ponerPiezaEnMiembro(mesh, nombre, rol, extra) {
+  const g = playerSkinRig.huesos[nombre];
+  const info = playerSkinRig.medidas.miembros[nombre];
+  if (!g || !info || info.largo < 0.05) return false;
+  g.add(mesh);
+  const d = info.dir;
+  const grosor = Math.max(0.1, info.grosor) * extra;
+  let tAlong = 0.2, alto = info.largo * 0.32, z = 0.1;
+  if (rol === 'greba') { tAlong = 0.32; alto = info.largo * 0.38; }
+  if (rol === 'bota') { tAlong = 0.8; alto = Math.max(0.08, info.largo * 0.22); z = 0.12; }
+  const dist = info.largo * tAlong;
+  mesh.position.set(d.x * dist, d.y * dist, z);
+  mesh.quaternion.setFromUnitVectors(EJE_MIEMBRO_ABAJO, d);
+  if (rol === 'hombrera') mesh.scale.set(grosor / 0.24, alto / 0.22, grosor / 0.24);
+  else if (rol === 'greba') mesh.scale.set(grosor / 0.26, alto / 0.32, grosor / 0.26);
+  else mesh.scale.set((grosor * 1.15) / 0.22, alto / 0.1, (grosor * 1.45) / 0.3);
+  mesh.visible = true;
+  return true;
+}
+function acomodarBrazalete(conPiel) {
+  const b = viewmodel.userData.bracer;
+  if (!b) return;
+  const manos = viewmodel.userData.manosPiel;
+  const der = manos && manos.der;
+  if (conPiel && der && der.material && der.material.map) {
+    const brazo = playerSkinRig && playerSkinRig.medidas && playerSkinRig.medidas.miembros.armR;
+    const grosor = (brazo && brazo.grosor) || 0.2;
+    b.position.set(der.position.x, der.position.y + 0.22, der.position.z + 0.03);
+    b.scale.set(Math.max(0.75, grosor / 0.2), 0.42, 0.7);
+  } else {
+    b.position.set(0, 0, -0.16);
+    b.scale.set(1, 1, 1);
+  }
+}
+// La armadura, el traje y el gorro siguen la skin dibujada y se ponen unos sobre otros.
+function acomodarArmaduraJugador() {
+  if (!playerAvatar) return;
+  const wearN = !!(state.thief && state.thief.wearNaranjo);
+  const wearG = !!(state.thief && state.thief.wearGorro);
+  const extra = wearN ? 1.12 : 1;
+  const parts = playerAvatar.userData.mcArmor || [];
+  const med = playerSkinOn && playerSkinRig && playerSkinRig.medidas;
+  const t = med && med.torso;
+  const head = med && (med.cabeza || (t && { x: t.x, y: t.y + t.alto * 0.36, ancho: t.ancho * 0.62, alto: t.alto * 0.28 }));
+  if (!med) {
+    restaurarTrajeBase();
+    for (const m of parts) devolverPiezaAlCuerpo(m, extra, wearG);
+  } else {
+    if (t && playerAvatar.userData.rayasNaranjas) {
+      const r = playerAvatar.userData.rayasNaranjas;
+      const sy = Math.max(0.45, t.alto * 0.5 / 0.5);
+      r.scale.set(Math.max(0.35, t.ancho * 0.9 / 0.5), sy, 1);
+      r.position.set(t.x, t.y - 1.3 * sy, 0.18);
+    }
+    if (head && playerAvatar.userData.gorroHoyos) {
+      const g = playerAvatar.userData.gorroHoyos;
+      const s = Math.max(0.65, Math.max(head.ancho, head.alto) / 0.64);
+      g.scale.setScalar(s);
+      g.position.set(head.x, head.y - 1.92 * s, 0.02);
+    }
+    for (const m of parts) {
+      const rol = m.userData.rol;
+      if (rol === 'casco' && head) {
+        const radio = Math.max(0.14, Math.max(head.ancho, head.alto) * 0.52) * (wearG ? 1.34 : 1.05) * extra;
+        playerAvatar.add(m);
+        m.quaternion.identity();
+        m.scale.setScalar(radio / 0.32);
+        m.position.set(head.x, head.y + head.alto * (wearG ? 0.28 : 0.1), 0.02);
+        m.visible = true;
+      } else if (rol === 'peto' && t) {
+        playerAvatar.add(m);
+        m.quaternion.identity();
+        m.scale.set((t.ancho * 0.84 * extra) / 0.5, (t.alto * 0.36 * extra) / 0.58, 0.4 * extra);
+        m.position.set(t.x, t.y + t.alto * 0.02, 0.2);
+        m.visible = true;
+      } else if (rol === 'cinturon' && t) {
+        playerAvatar.add(m);
+        m.quaternion.identity();
+        m.scale.set((t.ancho * 0.8 * extra) / 0.48, Math.max(0.7, (t.alto * 0.08 * extra) / 0.1), 0.42 * extra);
+        m.position.set(t.x, t.y - t.alto * 0.28, 0.19);
+        m.visible = true;
+      } else if (rol === 'cuello' && head) {
+        playerAvatar.add(m);
+        m.quaternion.identity();
+        m.scale.set((head.ancho * 0.72 * extra) / 0.28, 0.75 * extra, 0.45 * extra);
+        m.position.set(head.x, head.y - head.alto * 0.55, 0.16);
+        m.visible = true;
+      } else if (rol === 'hombrera' || rol === 'greba' || rol === 'bota') {
+        m.visible = ponerPiezaEnMiembro(m, m.userData.lado, rol, extra);
+      } else devolverPiezaAlCuerpo(m, extra, wearG);
+    }
+  }
+  const tier = armorTierFor(state.armorFactor);
+  if (viewmodel.userData.bracer) {
+    viewmodel.userData.bracer.visible = !!tier;
+    if (tier) viewmodel.userData.bracer.material = mat(ARMOR_TIERS[tier].color);
+    acomodarBrazalete(!!(tier && med));
+  }
 }
 // El jugador: se ve en las cámaras de 3ª persona y en la manga del viewmodel
 function applyPlayerArmor() {
@@ -8019,7 +8193,6 @@ function applyThiefLook() {
   pintarCapsulas(limbs.armR, wearN ? naranjo : verde);
   pintarCapsulas(limbs.legL, wearN ? naranjo : pantalon);
   pintarCapsulas(limbs.legR, wearN ? naranjo : pantalon);
-  if (playerAvatar.userData.mcArmor) for (const m of playerAvatar.userData.mcArmor) m.visible = !wearN;
   if (!playerAvatar.userData.rayasNaranjas) {
     const g = new THREE.Group();
     const blanco = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.7 });
@@ -8030,6 +8203,7 @@ function applyThiefLook() {
     playerAvatar.add(g);
     playerAvatar.userData.rayasNaranjas = g;
   }
+  playerAvatar.userData.rayasNaranjas.traverse(o => { if (o.isMesh) o.userData.sobreCuerpo = true; });
   playerAvatar.userData.rayasNaranjas.visible = wearN;
   if (!playerAvatar.userData.gorroHoyos) {
     const g = new THREE.Group();
@@ -8047,13 +8221,14 @@ function applyThiefLook() {
     playerAvatar.add(g);
     playerAvatar.userData.gorroHoyos = g;
   }
+  playerAvatar.userData.gorroHoyos.traverse(o => { if (o.isMesh) o.userData.sobreCuerpo = true; });
   playerAvatar.userData.gorroHoyos.visible = wearG;
   const manga = viewmodel.children[0];
   if (manga && manga.material && manga.material.color) {
     const tier = armorTierFor(state.armorFactor);
     manga.material.color.setHex(wearN ? naranjo : (tier ? ARMOR_TIERS[tier].color : verde));
   }
-  if (viewmodel.userData.bracer) viewmodel.userData.bracer.visible = !wearN && !!armorTierFor(state.armorFactor);
+  acomodarArmaduraJugador();
   if (playerSkinOn) ocultarCuerpoPorSkin();
 }
 
