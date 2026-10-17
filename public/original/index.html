@@ -201,7 +201,7 @@
     padding: 14px 40px; font-size: 19px; font-weight: 800; border-radius: 14px; box-shadow: 0 8px 24px rgba(34,197,94,.4); }
   .btn:hover { transform: scale(1.04); }
   .big { font-size: 34px; margin: 8px 0; }
-  #help { position: fixed; inset: 0; background: rgba(2,6,23,.92); display: none; flex-direction: column; align-items: center; justify-content: center; padding: 26px; z-index: 5; }
+  #help { position: fixed; inset: 0; background: rgba(2,6,23,.92); display: none; flex-direction: column; align-items: center; justify-content: center; padding: 26px; z-index: 16; }
 
   /* ===== CONTROLES TÁCTILES (solo en celular/tablet) ===== */
   #buildbar { z-index: 4; pointer-events: all; }
@@ -1078,10 +1078,14 @@
         </div>
       </section>
       <section class="guide-panel" data-guide-panel="controls">
-        <h3>Controles</h3>
-        <p>Las acciones frecuentes están cerca de la mano izquierda. Las acciones avanzadas aparecen en contexto.</p>
+        <h3>Todos los botones</h3>
+        <p id="guideModeNote" hidden></p>
+        <p>Q come. Aquí está cada botón y para qué sirve. Puedes volver a abrir esta guía con I o con el botón ❓.</p>
         <div class="key-list">
           <kbd>WASD</kbd><span>Caminar. Shift corre, Espacio salta y Ctrl agacha.</span>
+          <kbd>Ratón</kbd><span>Mirar. Clic en la pantalla para girar la vista. Las flechas también miran. El puntito del centro es tu puntería.</span>
+          <kbd>Clic</kbd><span>Golpear, disparar o picar. Clic derecho bloquea en un combate. Con el arco, mantén el clic para tensar.</span>
+          <kbd>Tab</kbd><span>Menú de acciones: papá, ayudantes, mates, noche y más. Tab o Esc lo cierra.</span>
           <kbd>Espacio ×3</kbd><span>Llamar al mayordomo y darle una orden o encargarle compras. Primero contrátalo en el súper por $500. Su sueldo es $100 cada 7 días del juego.</span>
           <kbd>P</kbd><span>Llamar por celular a tus amigos cuando estés en una partida online.</span>
           <kbd>E</kbd><span>Interactuar, entrar a vehículos, banco, cohete, tesoros, edificios y la puerta del callejón de Tito (misión a $20.000). En el Banco Central, con el sistema hacker del mercado negro, mantén E 10 segundos en la puerta de la bóveda, entra a la sala. Al abrir la puerta las cajas se ponen doradas. Se abren si les apuntas con el puntito del centro, y al abrirse quedan negras. Dentro del banco suena una alarma roja hasta que sales. No se abren con E ni con C. Las cajas grandes con diamantes no se abren. La policía te persigue desde el banco por 2 minutos, entra con pistolas y, si tú disparas, ellos también disparan a tres bloques. Si te tienen cerca unos 2 segundos, te esposan y vas en el asiento de atrás del patrulla. Con el arco en la mano, mantén E (o el clic) para tensar: cuanto más tiempo, más fuerte sale la flecha. Daño del arco: tensado bajo 9, medio 12 y máximo 18 (si tu arco es de 16). Mira hacia arriba para que vuele lejos; abajo llega menos. Si tienes espada, láser y arco: pulsa 1 una vez para la espada (o el láser), 1 otra vez para cambiar entre espada y láser, y 1 dos veces seguidas para el arco. En casa, E en la Play abre juegos de consola (fútbol, Gran Prix y Héroes), pero la mesa tiene que tener una tele.</span>
@@ -1089,8 +1093,12 @@
           <kbd>B / G</kbd><span>Activa construcción con B. En ese modo, G abre planos completos; F coloca y X quita.</span>
           <kbd>1–9 · 0</kbd><span>Elegir herramienta o pieza de la pestaña activa (🏠 casa · 🛡️ defensa · 🪑 muebles). La tecla 1: un toque = espada, pala o pistola láser (nunca los puños si ya las compraste); dos toques seguidos = arco. La rueda recorre TODO el inventario y Shift+rueda cambia de pestaña.</span>
           <kbd>P · L</kbd><span>Girar la pieza al ángulo que quieras: un toque la mueve 15° y si mantienes apretado gira sin parar (igual que el botón 🔄 Girar).</span>
-          <kbd>Q / K</kbd><span>Comer o plantar. Junto a un horno, E cocina una comida: cura más hambre y, si no tienes toda la vida, también más vida. Q come primero la cocinada. Shift+K cambia entre manzana, zanahoria, trigo y tomate.</span>
+          <kbd>Q / K</kbd><span>Q come. Come primero la comida cocinada: cura más hambre y, si no tienes toda la vida, también más vida. K planta. Shift+K cambia entre manzana, zanahoria, trigo y tomate. Junto a un horno, E cocina una comida.</span>
           <kbd>C/V/O</kbd><span>Ordenar a papá: seguir, esperar o limpiar. G lo arma y Z lo deja descansar.</span>
+          <kbd>T</kbd><span>Cavar con la pala.</span>
+          <kbd>H</kbd><span>Llamar un hijo ayudante ($300), cuando ya conoces a mamá.</span>
+          <kbd>Z ×2</kbd><span>Solo en modo creativo: volar sin tope de altura. Un toque de Z deja descansar a papá.</span>
+          <kbd>J</kbd><span>Junto a la casa secreta, recoger el oro del día.</span>
           <kbd>X</kbd><span>Fuera de construcción: planta una banderita 🚩 donde tus mascotas de huevos se quedan cuidando. X de nuevo las llama de vuelta.</span>
           <kbd>U / I</kbd><span>Abrir desafíos de mates o esta guía.</span>
           <kbd>Enter</kbd><span>Chat mundial: escribirle a todos los que están jugando. Cuando alguien te habla aparece un globo con 💬 Responder que se borra solo a los 7 segundos.</span>
@@ -19329,6 +19337,7 @@ ui('nameOk').onclick = async () => {
     state.momUnlocked = true; state.momEventPending = false; dadReturnsWithMom();
     toast('🎨 MODO CREATIVO: plata infinita y todo desbloqueado. ¡Compra y construye lo que quieras!');
   }
+  if (state.running) abrirGuiaBotones(pendingMode);
 };
 ui('nameInput').addEventListener('keydown', e => { e.stopPropagation(); if (e.code === 'Enter') ui('nameOk').click(); });
 const DAVID_GATE_KEY = '5757';
@@ -19445,6 +19454,25 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) { cle
 addEventListener('pagehide', saveGame);
 setInterval(() => { if (state.running && state.phase !== 'OVER') saveGame(); }, 15000);
 // Menú de ayuda: botón ❓ y tecla I
+function seleccionarGuia(seccion) {
+  document.querySelectorAll('.guide-tab').forEach(b => {
+    const on = b.dataset.guide === seccion;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  document.querySelectorAll('.guide-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.guidePanel === seccion));
+}
+function abrirGuiaBotones(modo) {
+  const nota = ui('guideModeNote');
+  if (nota) {
+    nota.hidden = false;
+    nota.textContent = modo === 'creative'
+      ? 'Modo creativo: plata infinita y todo desbloqueado. Z dos veces seguidas te hace volar. El resto de los botones está abajo.'
+      : 'Partida nueva. Lee para qué sirve cada botón. Cuando termines, pulsa VOLVER AL JUEGO.';
+  }
+  seleccionarGuia('controls');
+  toggleHelp(true);
+}
 function toggleHelp(force) {
   const h = ui('help');
   const show = force !== undefined ? force : (h.style.display !== 'flex');
@@ -19454,14 +19482,14 @@ function toggleHelp(force) {
     if (state.running) state.paused = true;
     renderBestiary();   // el bestiario vive en el menú de ayuda
     const active = document.querySelector('.guide-tab.active'); if (active) active.focus();
-  } else if (state.running) state.paused = false;
+  } else {
+    const nota = ui('guideModeNote'); if (nota) nota.hidden = true;
+    if (state.running) state.paused = false;
+  }
 }
 ui('helpBtn').onclick = () => toggleHelp();
 ui('startGuideBtn').onclick = () => toggleHelp(true);
-document.querySelectorAll('.guide-tab').forEach(tab => tab.onclick = () => {
-  document.querySelectorAll('.guide-tab').forEach(b => { b.classList.toggle('active', b === tab); b.setAttribute('aria-selected', b === tab ? 'true' : 'false'); });
-  document.querySelectorAll('.guide-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.guidePanel === tab.dataset.guide));
-});
+document.querySelectorAll('.guide-tab').forEach(tab => tab.onclick = () => seleccionarGuia(tab.dataset.guide));
 ui('touchToggle').onclick = () => setTouchMode(!document.body.classList.contains('touch'));
 ui('soundBtn').onclick = () => toggleSound();
 ui('exitBtn').onclick = () => saveAndExit();
