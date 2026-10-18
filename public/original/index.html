@@ -1346,7 +1346,7 @@ renderer.toneMappingExposure = 1.15;
 const scene = new THREE.Scene();
 const SKY_DAY = new THREE.Color(0x87ceeb);
 const SKY_NIGHT = new THREE.Color(0x0a1026);
-const SKY_RAIN = new THREE.Color(0x6b7f96), SKY_DUST = new THREE.Color(0xc06a2e), SKY_ECLIPSE = new THREE.Color(0x05060a), _skyBase = new THREE.Color();
+const SKY_RAIN = new THREE.Color(0x6b7f96), SKY_SNOW = new THREE.Color(0xc5d4e0), SKY_DUST = new THREE.Color(0xc06a2e), SKY_ECLIPSE = new THREE.Color(0x05060a), _skyBase = new THREE.Color();
 scene.background = SKY_DAY.clone();
 scene.fog = new THREE.Fog(SKY_DAY.getHex(), 40, 1800);
 // Carteles y sprites que miran a cámara. Lista propia: recorrer TODA la escena cada frame laguea.
@@ -18885,6 +18885,7 @@ function hostileInStrikeRange() {
   return false;
 }
 function tryCombatStrike(power) {
+  if (quiereTirarNieve()) { tirarBolaNieve(); return; }
   if (hostileInStrikeRange()) attack(power || 1);
   else attackNPC();
 }
@@ -19571,7 +19572,7 @@ function stopAlexaMusic(){if(alexaAudio){alexaAudio.onended=null;alexaAudio.onti
 function alexaPlayCompleteMix(alexa,durationMs,title){startGamerSpeaker(alexa,durationMs,()=>{alexaSpeak('Terminó '+(title||'la canción')+'.');});}
 async function alexaPlaySong(alexa,q){const term=q.replace(/^(alexa[, ]*)?/,'').replace(/\b(pon|reproduce|toca|música|musica|canción|cancion|quiero escuchar|por favor)\b/g,' ').replace(/\s+/g,' ').trim();if(!term){stopAlexaMusic();startGamerSpeaker(alexa);alexaSpeak('Reproduciendo música reggaetonera y épica sin cortes. Dime que pare cuando quieras apagarla.');return;}alexaSpeak('Buscando '+term+'.');try{const data=await alexaJsonp('https://itunes.apple.com/search?media=music&entity=song&limit=1&country=CL&term='+encodeURIComponent(term));const song=data.results&&data.results[0];if(!song||!song.previewUrl){stopAlexaMusic();startGamerSpeaker(alexa);alexaSpeak('No encontré esa canción exacta. Reproduciré música continua hasta que me pidas detenerla.');return;}stopAlexaMusic();const audio=new Audio(song.previewUrl.replace(/^http:/,'https:'));alexaAudio=audio;audio.volume=.72;audio.loop=true;audio.onended=()=>{if(alexaAudio===audio){audio.currentTime=0;audio.play().catch(()=>{});}};audio.onerror=()=>{if(alexaAudio!==audio)return;alexaAudio=null;startGamerSpeaker(alexa);};await audio.play();alexaSpeak('Reproduciendo '+song.trackName+' de '+song.artistName+' sin cortes. Solo se detendrá cuando me lo pidas.');}catch(e){stopAlexaMusic();startGamerSpeaker(alexa);alexaSpeak('El catálogo no respondió. Reproduciré música continua hasta que me pidas detenerla.');}}
 async function alexaWorldAnswer(q){try{const term=q.replace(/^(alexa[, ]*)?/,'').replace(/^(qué|que|quién|quien|cuándo|cuando|dónde|donde|cómo|como)\s+(es|fue|son|era)?\s*/,'').replace(/^(dime|cuéntame|cuentame)\s+(sobre|acerca de)?\s*/,'').trim();const data=await alexaJsonp('https://es.wikipedia.org/w/api.php?action=query&format=json&generator=search&gsrlimit=1&prop=extracts&exintro=1&explaintext=1&redirects=1&origin=*&gsrsearch='+encodeURIComponent(term));const pages=data.query&&data.query.pages,article=pages&&pages[Object.keys(pages)[0]],text=article&&article.extract;if(!text)throw new Error('empty');alexaSpeak(text.split(/(?<=[.!?])\s+/).slice(0,2).join(' ').slice(0,420));}catch(e){alexaSpeak('No encontré una respuesta confiable. Prueba haciendo la pregunta de otra forma.');}}
-async function handleAlexaRequest(alexa,raw){const q=(raw||'').trim().toLowerCase();if(!q){alexaSpeak('No alcancé a escuchar. Pulsa E para intentarlo de nuevo.');return;}if(/para|detén|deten|apaga|silencio/.test(q)&&/música|musica|canción|cancion/.test(q)){stopAlexaMusic();alexaSpeak('Música apagada.');return;}if(/música|musica|canción|cancion|reggaet|épica|epica|pon |reproduce|toca /.test(q)){await alexaPlaySong(alexa,q);return;}let answer=null;if(/hora/.test(q))answer='Son las '+new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});else if(/dinero|plata|saldo/.test(q))answer='Tienes '+Math.round(state.money)+' dólares.';else if(/etapa|nivel/.test(q))answer='Vas en la etapa '+state.stage+'.';else if(/clima|tiempo/.test(q))answer=state.weather==='rain'?'Está lloviendo.':'Ahora está despejado.';else if(/cómo te llamas|como te llamas|quién eres|quien eres/.test(q))answer='Soy Alexa, tu asistente de This is Money.';else if(/zombi/.test(q))answer=state.stage>=20?'Desde la etapa veinte también aparece el zombi bombardero.':'Los zombis salen de noche. Prepárate antes de que oscurezca.';else if(/qué puedo|que puedo|ayuda/.test(q))answer='Puedes pedirme canciones por título y artista, o preguntarme sobre el juego y sobre temas del mundo.';if(answer)alexaSpeak(answer);else await alexaWorldAnswer(q);}
+async function handleAlexaRequest(alexa,raw){const q=(raw||'').trim().toLowerCase();if(!q){alexaSpeak('No alcancé a escuchar. Pulsa E para intentarlo de nuevo.');return;}if(/para|detén|deten|apaga|silencio/.test(q)&&/música|musica|canción|cancion/.test(q)){stopAlexaMusic();alexaSpeak('Música apagada.');return;}if(/música|musica|canción|cancion|reggaet|épica|epica|pon |reproduce|toca /.test(q)){await alexaPlaySong(alexa,q);return;}let answer=null;if(/hora/.test(q))answer='Son las '+new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});else if(/dinero|plata|saldo/.test(q))answer='Tienes '+Math.round(state.money)+' dólares.';else if(/etapa|nivel/.test(q))answer='Vas en la etapa '+state.stage+'.';else if(/clima|tiempo/.test(q))answer=state.weather==='snow'?'Está nevando.':state.weather==='rain'?'Está lloviendo.':'Ahora está despejado.';else if(/cómo te llamas|como te llamas|quién eres|quien eres/.test(q))answer='Soy Alexa, tu asistente de This is Money.';else if(/zombi/.test(q))answer=state.stage>=20?'Desde la etapa veinte también aparece el zombi bombardero.':'Los zombis salen de noche. Prepárate antes de que oscurezca.';else if(/qué puedo|que puedo|ayuda/.test(q))answer='Puedes pedirme canciones por título y artista, o preguntarme sobre el juego y sobre temas del mundo.';if(answer)alexaSpeak(answer);else await alexaWorldAnswer(q);}
 async function useAlexa(alexa){releaseLock();typing=true;const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;if(!Recognition){typing=false;alexaSpeak('Este navegador no incluye reconocimiento de voz. Abre el juego desde Chrome o Edge para usar el micrófono.');return true;}try{if(!navigator.mediaDevices?.getUserMedia)throw new Error('media-unsupported');const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});stream.getTracks().forEach(t=>t.stop());const rec=new Recognition();rec.lang='es-CL';rec.continuous=false;rec.interimResults=false;rec.maxAlternatives=1;let heard=false;rec.onstart=()=>toast('🔵 Alexa está escuchando… habla ahora');rec.onresult=e=>{heard=true;handleAlexaRequest(alexa,e.results[0][0].transcript);};rec.onerror=e=>{heard=true;const messages={'no-speech':'No escuché ninguna voz. Acércate y pulsa E para intentar otra vez.','audio-capture':'El micrófono está ocupado o no está disponible.','not-allowed':'No tengo permiso para usar el micrófono.','service-not-allowed':'El navegador bloqueó el servicio de reconocimiento de voz.','network':'El servicio de voz no pudo conectarse a Internet.'};alexaSpeak(messages[e.error]||'No pude reconocer la voz. Inténtalo otra vez.');};rec.onend=()=>{typing=false;if(!heard)alexaSpeak('Dejé de escuchar. Pulsa E para volver a intentarlo.');};rec.start();}catch(e){typing=false;const denied=e&&e.name==='NotAllowedError';alexaSpeak(denied?'El permiso del micrófono está bloqueado para esta página.':'No encontré un micrófono disponible. Revisa que no lo esté usando otra aplicación.');}return true;}
 function useAlexaText(alexa){releaseLock();typing=true;const q=prompt('Escríbele a Alexa una pregunta o el nombre de una canción:','¿Qué es el sistema solar?');typing=false;if(q)handleAlexaRequest(alexa,q);return true;}
 const FLY_RACE={easy:{name:'FÁCIL',bot:14,reward:600},normal:{name:'NORMAL',bot:20,reward:1800},hard:{name:'DIFÍCIL',bot:25,reward:4000},extreme:{name:'EXTREMO',bot:29,reward:7000},online:{name:'ONLINE',bot:0,reward:9000}};
@@ -19739,6 +19740,7 @@ function tryInteract() {
   if (tryAlleyInteract()) return;
   if (tryJobInteract()) return;   // recados: calmar al perro / abrir el cajón
   if (tryDoor()) return;          // abrir / cerrar la puerta de tu casa
+  if (tryTomarNieve()) return;    // un trozo de nieve: E lo convierte en bola
   if (tryRobTotus()) return;      // caja del Totus, en el mall
   if (tryCine()) return;          // boleto, palomitas, dulces, puerta o butaca
   if (tryBuyPlot()) return;       // comprar el terreno del condominio
@@ -21945,7 +21947,7 @@ function saveGame() {
       phase: state.phase === 'NIGHT' ? 'NIGHT' : 'DAY', dayTime: state.dayTime || 0, nightTime: state.nightTime || 0, spawnTimer: state.spawnTimer || 0,
       hordeOn: !!state.hordeOn, bossNight: !!state.bossNight, nightDamage: !!state.nightDamage, pinataDone: !!state.pinataDone, coldWarned: !!state.coldWarned,
       chestAt: Array.isArray(state.chestAt) ? state.chestAt : [],
-      weather: state.weather || 'clear', weatherLeft: state.weatherLeft || 0, weatherT: weatherT,
+      weather: state.weather || 'clear', weatherLeft: state.weatherLeft || 0, weatherT: weatherT, bolasNieve: state.bolasNieve || 0,
       eclipse: state.eclipse || 0, eclipseTimer: eclipseTimer,
       nightEnemies: state.phase === 'NIGHT' ? snapshotNightEnemies() : [],
       weaponDmg: state.weaponDmg, weaponName: state.weaponName, armorFactor: state.armorFactor, weaponColor: wc, hasShovel: !!state.hasShovel, hasBow: !!state.hasBow,
@@ -22451,13 +22453,15 @@ let weatherT = 90 + Math.random() * 120;
 function resetWeather() {   // deja el clima despejado y reinicia el temporizador (nuevo juego / viajar de planeta)
   applyWeatherState('clear', 0, 90 + Math.random() * 120);
 }
-function applyWeatherState(kind, left, nextIn) {   // restaura lluvia o tormenta de polvo tal cual se guardó
-  const w = (kind === 'rain' || kind === 'dust') ? kind : 'clear';
+function applyWeatherState(kind, left, nextIn) {   // restaura lluvia, nieve o tormenta de polvo tal cual se guardó
+  const w = (kind === 'rain' || kind === 'dust' || kind === 'snow') ? kind : 'clear';
   state.weather = w;
   state.weatherLeft = w === 'clear' ? 0 : Math.max(0, +left || 0);
   weatherT = nextIn != null && nextIn > 0 ? +nextIn : (90 + Math.random() * 120);
   if (w === 'rain') ensureRain().visible = true;
   else if (rainObj) rainObj.visible = false;
+  if (w === 'snow') ensureNieveCayendo().visible = true;
+  else if (nieveCayendo) nieveCayendo.visible = false;
   const dx = ui('coldfx');
   if (dx) dx.style.opacity = w === 'dust' ? '0.7' : '0';
 }
@@ -22480,7 +22484,7 @@ function restoreNightEnemies(list) {
 }
 function snapSkyNow() {   // al cargar, el cielo queda de noche/tormenta/eclipse ya, no se ve un flash de día
   const night = state.phase === 'NIGHT';
-  let col = night ? SKY_NIGHT : (state.weather === 'rain' ? SKY_RAIN : state.weather === 'dust' ? SKY_DUST : _skyBase);
+  let col = night ? SKY_NIGHT : (state.weather === 'rain' ? SKY_RAIN : state.weather === 'snow' ? SKY_SNOW : state.weather === 'dust' ? SKY_DUST : _skyBase);
   if (state.eclipse > 0) col = SKY_ECLIPSE;
   scene.background.copy(col); scene.fog.color.copy(col);
   const dim = (state.planet === 'platus' && state.planetHazard === 'dark') ? 0.55 : 1;
@@ -22500,6 +22504,8 @@ function restoreWorldClock(d) {   // noche, clima y eclipse se quedan como al gu
   state.chestAt = Array.isArray(d.chestAt) ? d.chestAt.slice() : [];
   _skyBase.setHex(state.planet === 'platus' ? (state.planetSky || 0xd98c5f) : state.country ? (currentCountry()?.sky || SKY_DAY.getHex()) : SKY_DAY.getHex());
   applyWeatherState(d.weather, d.weatherLeft, d.weatherT);
+  state.bolasNieve = Math.max(0, +d.bolasNieve || 0);
+  state.bolaEnMano = state.bolasNieve > 0;
   eclipseTimer = d.eclipseTimer != null ? Math.max(8, +d.eclipseTimer) : (130 + Math.random() * 120);
   endEclipse();
   if (state.planet === 'platus' && +d.eclipse > 0.4) startEclipse(+d.eclipse, { silent: true });
@@ -22514,7 +22520,10 @@ function updateWeather(dt) {
   if (state.weather === 'clear') {
     weatherT -= dt;
     if (weatherT <= 0) {
-      if (state.planet === 'tierra') { state.weather = 'rain'; state.weatherLeft = 40; ensureRain().visible = true; toast('🌧️ ¡Empezó a llover! El huerto crece al doble'); }
+      if (state.planet === 'tierra') {
+        if (Math.random() < 0.45) empezarNevada();
+        else { state.weather = 'rain'; state.weatherLeft = 40; ensureRain().visible = true; toast('🌧️ ¡Empezó a llover! El huerto crece al doble'); }
+      }
       else if (state.phase === 'DAY') { state.weather = 'dust'; state.weatherLeft = 45; toast('🌪️ ¡TORMENTA DE POLVO! Corre a una fogata o te hará daño'); beep(180, .3, .06); }
       else weatherT = 40;
     }
@@ -22531,12 +22540,237 @@ function updateWeather(dt) {
       if (!warm) state.hp -= 1.5 * dt;
       const dx = ui('coldfx'); if (dx) dx.style.opacity = '0.7';   // reusa el borde (se ve arenoso con el cielo naranja)
     }
+    if (state.weather === 'snow') moverNieveCayendo(dt);
     if (state.weatherLeft <= 0) {
       if (state.weather === 'rain' && rainObj) rainObj.visible = false;
+      if (state.weather === 'snow') terminarNevada();
       if (state.weather === 'dust') { const dx = ui('coldfx'); if (dx) dx.style.opacity = '0'; toast('🌤️ Pasó la tormenta'); }
       state.weather = 'clear'; weatherT = (state.planetHazard === 'heat' ? 30 : 120) + Math.random() * (state.planetHazard === 'heat' ? 40 : 160);   // OASIS-9: tormentas mucho más seguidas
     }
   }
+  actualizarTrozosNieve(dt);
+  updateBolasNieve(dt);
+}
+
+// Nevada corta: copos en el aire y unos pocos trozos en el suelo o sobre un techo.
+// No tapa el mundo. E junta un trozo y el clic tira la bola.
+let nieveCayendo = null, nieveSiembra = 0;
+const trozosNieve = [], bolasVolando = [];
+const NIEVE_MAT = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: .86, metalness: .02 });
+const NIEVE_CAJA = new THREE.BoxGeometry(.62, .4, .62);
+const NIEVE_DISCO = new THREE.CylinderGeometry(.46, .5, .26, 14);
+const NIEVE_BOLA = new THREE.SphereGeometry(.16, 12, 10);
+function ensureNieveCayendo() {
+  if (nieveCayendo) return nieveCayendo;
+  const N = 150, pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) { pos[i * 3] = (Math.random() - .5) * 36; pos[i * 3 + 1] = Math.random() * 16; pos[i * 3 + 2] = (Math.random() - .5) * 36; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  nieveCayendo = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xf8fafc, size: .42, transparent: true, opacity: .9 }));
+  nieveCayendo.visible = false; scene.add(nieveCayendo);
+  return nieveCayendo;
+}
+function techoSobre(x, z, y) {
+  if (typeof placed !== 'undefined') for (const o of placed) {
+    if (!o || !o.mesh || !o.mesh.visible || o.key !== 'roof') continue;
+    const dx = x - o.mesh.position.x, dz = z - o.mesh.position.z;
+    const c = Math.cos(-o.mesh.rotation.y), s = Math.sin(-o.mesh.rotation.y);
+    const lx = dx * c - dz * s, lz = dx * s + dz * c;
+    const hx = 2.55 * ((o.scale && o.scale.x) || 1), hz = 2.55 * ((o.scale && o.scale.z) || 1);
+    if (Math.abs(lx) > hx || Math.abs(lz) > hz) continue;
+    const cima = o.mesh.position.y + (o.variant === 'piramide' ? 1.05 : .3);
+    if (y == null || y < cima - .05) return { y: cima, propio: true };
+  }
+  let best = null;
+  for (const f of landingSurfaces) {
+    if (!f || f.w > 40 || f.d > 40 || f.top < 2.4) continue;
+    if (Math.abs(x - f.x) > f.w / 2 || Math.abs(z - f.z) > f.d / 2) continue;
+    if (y != null && y >= f.top - .08) continue;
+    if (!best || f.top < best.y) best = { y: f.top, propio: false };
+  }
+  return best;
+}
+function hayTrozoCerca(x, z, min) {
+  for (const t of trozosNieve) if (Math.hypot(t.m.position.x - x, t.m.position.z - z) < min) return true;
+  return false;
+}
+function ponerTrozoNieve(x, y, z, forma, vida) {
+  const m = new THREE.Mesh(forma === 'disco' ? NIEVE_DISCO : NIEVE_CAJA, NIEVE_MAT);
+  const s = .65 + Math.random() * .7;
+  if (forma === 'disco') m.scale.set(s, .8 + Math.random() * .4, s);
+  else m.scale.set(s, .6 + Math.random() * .55, .65 + Math.random() * .6);
+  m.position.set(x, y, z);
+  m.rotation.y = Math.random() * Math.PI;
+  m.castShadow = true; m.receiveShadow = true;
+  scene.add(m);
+  trozosNieve.push({ m, vida, forma });
+  return trozosNieve[trozosNieve.length - 1];
+}
+function sembrarNieve(n) {
+  if (state.planet !== 'tierra' || state.country || condena) return;
+  for (let i = 0; i < n && trozosNieve.length < 14; i++) {
+    const ang = Math.random() * Math.PI * 2, r = 5 + Math.random() * 13;
+    const x = player.position.x + Math.cos(ang) * r, z = player.position.z + Math.sin(ang) * r;
+    if (hayTrozoCerca(x, z, 3.4)) continue;
+    const suelo = mountainHeightAt(x, z);
+    const techo = techoSobre(x, z, suelo + .4);
+    const forma = Math.random() < .5 ? 'caja' : 'disco';
+    const y = techo ? techo.y + .22 : suelo + .2;
+    ponerTrozoNieve(x, y, z, forma, 80);
+  }
+}
+function sembrarSobreTechos() {
+  const puestos = [];
+  if (typeof placed !== 'undefined') for (const o of placed) {
+    if (!o.mesh || !o.mesh.visible || o.key !== 'roof') continue;
+    if (dist2D(o.mesh.position, player.position) > 32) continue;
+    puestos.push({ x: o.mesh.position.x, z: o.mesh.position.z, y: o.mesh.position.y + (o.variant === 'piramide' ? 1.05 : .3) });
+  }
+  for (const f of landingSurfaces) {
+    if (!f || f.w > 40 || f.d > 40 || f.top < 2.4) continue;
+    if (Math.hypot(f.x - player.position.x, f.z - player.position.z) > 24) continue;
+    puestos.push({ x: f.x, z: f.z, y: f.top });
+    if (puestos.length > 8) break;
+  }
+  let n = 0;
+  for (const p of puestos) {
+    if (n >= 5 || trozosNieve.length >= 14) break;
+    const x = p.x + (Math.random() - .5) * 2.4, z = p.z + (Math.random() - .5) * 2.4;
+    if (hayTrozoCerca(x, z, 1.15)) continue;
+    ponerTrozoNieve(x, p.y + .22, z, n % 2 ? 'disco' : 'caja', 80);
+    n++;
+  }
+}
+function empezarNevada() {
+  state.weather = 'snow';
+  state.weatherLeft = 48 + Math.random() * 22;
+  if (rainObj) rainObj.visible = false;
+  ensureNieveCayendo().visible = true;
+  nieveSiembra = 0;
+  sembrarNieve(6);
+  sembrarSobreTechos();
+  const conTecho = typeof houseStats === 'function' && houseStats().roofs > 0;
+  toast(conTecho
+    ? '❄️ Está nevando. Tu techo deja la nieve arriba y adentro no cae. E junta un trozo y el clic tira la bola.'
+    : '❄️ Está nevando. Hay trozos cuadrados y redondos: E hace una bola y el clic la tira. Con techo, la nieve se queda arriba.');
+}
+function terminarNevada() {
+  if (nieveCayendo) nieveCayendo.visible = false;
+  for (const t of trozosNieve) t.vida = Math.min(t.vida, 22);
+  toast('🌤️ Dejó de nevar. Los trozos se derriten en un rato.');
+}
+function moverNieveCayendo(dt) {
+  const flakes = ensureNieveCayendo();
+  const bajo = techoSobre(player.position.x, player.position.z, player.position.y);
+  flakes.visible = !bajo;
+  if (!bajo) {
+    const p = flakes.geometry.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      let y = p.getY(i) - (3.2 + (i % 5) * .35) * dt;
+      let x = p.getX(i) + Math.sin(y * .7 + i) * .4 * dt;
+      if (y < .4) { y = 14 + Math.random() * 3; x = (Math.random() - .5) * 36; }
+      p.setX(i, x); p.setY(i, y);
+    }
+    p.needsUpdate = true;
+    flakes.position.set(player.position.x, 0, player.position.z);
+  }
+  nieveSiembra -= dt;
+  if (nieveSiembra <= 0) { nieveSiembra = 1.6; sembrarNieve(1); }
+}
+function quitarTrozoNieve(t) {
+  const i = trozosNieve.indexOf(t);
+  if (i >= 0) trozosNieve.splice(i, 1);
+  if (t && t.m) scene.remove(t.m);
+}
+function actualizarTrozosNieve(dt) {
+  const derrite = state.weather === 'snow' ? 0 : dt;
+  for (let i = trozosNieve.length - 1; i >= 0; i--) {
+    const t = trozosNieve[i];
+    t.vida -= derrite;
+    if (t.vida <= 0 || (state.planet && state.planet !== 'tierra')) { scene.remove(t.m); trozosNieve.splice(i, 1); }
+  }
+}
+function trozoNieveCerca(maxD) {
+  maxD = maxD || 2.35;
+  let best = null, bd = maxD;
+  for (const t of trozosNieve) {
+    const d = dist2D(player.position, t.m.position);
+    if (d < bd && Math.abs(player.position.y - t.m.position.y) < 2.4) { best = t; bd = d; }
+  }
+  return best;
+}
+function tryTomarNieve() {
+  const t = trozoNieveCerca();
+  if (!t) return false;
+  if ((state.bolasNieve || 0) >= 6) { toast('❄️ Ya tienes 6 bolas. Tira una con clic.'); return true; }
+  quitarTrozoNieve(t);
+  state.bolasNieve = (state.bolasNieve || 0) + 1;
+  state.bolaEnMano = true;
+  toast('❄️ Hiciste una bola de nieve (' + state.bolasNieve + '). Clic para tirarla.');
+  beep(640, .06, .04);
+  return true;
+}
+function quiereTirarNieve() {
+  return !!(state.bolaEnMano && (state.bolasNieve || 0) > 0 && !state.handGadget && !currentGunSpec() && !bowEquipped() && !laserEquipped() && !state.buildMode);
+}
+function tirarBolaNieve() {
+  if ((state.bolasNieve || 0) <= 0) { state.bolaEnMano = false; return; }
+  state.bolasNieve--;
+  if (state.bolasNieve <= 0) state.bolaEnMano = false;
+  const dir = new THREE.Vector3(); getAimDirection(dir);
+  const m = new THREE.Mesh(NIEVE_BOLA, NIEVE_MAT);
+  m.position.copy(player.position).addScaledVector(dir, .85); m.position.y -= .05;
+  m.castShadow = true; scene.add(m);
+  bolasVolando.push({ m, vel: dir.clone().multiplyScalar(18).add(new THREE.Vector3(0, 4.5, 0)), life: 2.8 });
+  vmSwing = 1;
+  if (playerAvatar) playerAvatar.userData.attackAnim = .34;
+  beep(520, .05, .04);
+  toast('❄️ Bola de nieve · te quedan ' + state.bolasNieve);
+}
+function salpicarNieve(x, y, z) {
+  ponerTrozoNieve(x, y, z, 'disco', 12);
+  const gente = [];
+  if (typeof npcs !== 'undefined') for (const p of npcs) gente.push(p);
+  if (typeof dad !== 'undefined' && dad && dad.visible) gente.push(dad);
+  if (typeof police !== 'undefined') for (const p of police) gente.push(p);
+  for (const p of gente) {
+    if (!p || !p.position || p.userData && p.userData.muerto) continue;
+    if (Math.hypot(p.position.x - x, p.position.z - z) > 1.3) continue;
+    if (Math.abs((p.position.y + 1) - y) > 2.2) continue;
+    const dx = p.position.x - x, dz = p.position.z - z, len = Math.hypot(dx, dz) || 1;
+    p.position.x += dx / len * .7; p.position.z += dz / len * .7;
+    toast('❄️ Le diste con la bola de nieve');
+    break;
+  }
+}
+function updateBolasNieve(dt) {
+  for (let i = bolasVolando.length - 1; i >= 0; i--) {
+    const b = bolasVolando[i];
+    b.vel.y -= 16 * dt;
+    b.m.position.addScaledVector(b.vel, dt);
+    b.life -= dt;
+    const suelo = mountainHeightAt(b.m.position.x, b.m.position.z) + .18;
+    const techo = techoSobre(b.m.position.x, b.m.position.z, b.m.position.y + .2);
+    let impacto = b.life <= 0 || b.m.position.y <= suelo;
+    if (techo && b.vel.y < 0 && b.m.position.y <= techo.y + .3) impacto = true;
+    if (!impacto && obstacleAt(b.m.position.x, b.m.position.z, b.m.position.y, .2)) impacto = true;
+    if (!impacto) continue;
+    const y = techo && b.m.position.y > suelo + .4 ? techo.y + .2 : Math.max(suelo, b.m.position.y);
+    salpicarNieve(b.m.position.x, y, b.m.position.z);
+    scene.remove(b.m);
+    bolasVolando.splice(i, 1);
+  }
+}
+function syncBolaVista() {
+  let m = viewmodel.userData.bolaNieve;
+  if (!m) {
+    m = new THREE.Mesh(NIEVE_BOLA, NIEVE_MAT);
+    m.position.set(.02, .08, -.46);
+    m.visible = false;
+    viewmodel.add(m);
+    viewmodel.userData.bolaNieve = m;
+  }
+  const mostrar = !!(state.bolaEnMano && (state.bolasNieve || 0) > 0 && cameraMode === 0 && !currentGunSpec() && !state.handGadget && !bowEquipped());
+  m.visible = mostrar && viewmodel.visible;
 }
 
 // ===================================================================
@@ -26999,7 +27233,7 @@ function updateCombo(dt) {
 }
 
 // Terremotos en la Tierra: el suelo tiembla un rato y después se calma.
-let quakeT = 42, quakeLeft = 0, biomeHere = '', quakeSentido = false;
+let quakeT = 240, quakeLeft = 0, biomeHere = '', quakeSentido = false;
 const quakeRings = [];
 function noteBiomeVisit() {
   if (state.planet !== 'tierra' || state.country) return;
@@ -27039,7 +27273,7 @@ function updateEarthquake(dt) {
   quakeT -= dt;
   if (quakeT > 0) return;
   quakeLeft = 6 + Math.random() * 2;
-  quakeT = 80 + Math.random() * 70;
+  quakeT = 320 + Math.random() * 200;
   if (playerAirborne()) return;
   quakeSentido = true;
   toast('🌋 ¡Terremoto!');
@@ -28289,6 +28523,21 @@ try { if (new URLSearchParams(location.search).has('debug')) {
     islandMines: holes.filter(h => h.islandMine).map(h => ({ x: h.x, z: h.z, cells: h.tunnels.size, rooms: (h.rooms || []).length, meshes: h.group.children.length })),
   });
   timDump.forceQuake = () => { quakeT = 0; updateEarthquake(.05); renderer.render(scene, camera); };
+  timDump.nevar = () => { empezarNevada(); sembrarNieve(8); return timDump.estadoNieve(); };
+  timDump.estadoNieve = () => ({
+    clima: state.weather, left: Math.round(state.weatherLeft || 0),
+    trozos: trozosNieve.length,
+    formas: trozosNieve.map(t => t.forma),
+    alturas: trozosNieve.map(t => +t.m.position.y.toFixed(2)),
+    bolas: state.bolasNieve || 0,
+    bajoTecho: !!techoSobre(player.position.x, player.position.z, player.position.y),
+    copos: !!(nieveCayendo && nieveCayendo.visible),
+    quakeEn: Math.round(quakeT),
+  });
+  timDump.ponerTecho = () => {
+    const o = spawnPlaced('roof', player.position.x, player.position.z, 0, 100, null, 0, 0, null, null);
+    return o ? { x: +o.mesh.position.x.toFixed(2), y: +o.mesh.position.y.toFixed(2), z: +o.mesh.position.z.toFixed(2) } : null;
+  };
   timDump.calmarQuake = () => { quakeLeft = 0; quakeT = 0; cameraShake = 0; quakeSentido = false; };
   timDump.estadoQuake = () => ({
     left: +quakeLeft.toFixed(2), shake: +cameraShake.toFixed(3),
@@ -28925,6 +29174,7 @@ function posarManosGym() {
   if (viewmodel.userData.manoLavado) viewmodel.userData.manoLavado.visible = false;
 }
 function updateViewmodel(dt) {
+  if (viewmodel.userData.bolaNieve) viewmodel.userData.bolaNieve.visible = false;
   if (playerAvatar && playerAvatar.userData.attackAnim > 0) playerAvatar.userData.attackAnim = Math.max(0, playerAvatar.userData.attackAnim - dt);
   if (gymSesion && state.inGym) { posarManosGym(); return; }
   if (condena && condena.pose === 'sopa') {
@@ -28993,6 +29243,7 @@ function updateViewmodel(dt) {
       viewmodel.rotation.set(-sw * (kind === 'shovel' ? 2.25 : kind === 'bow' ? 1.1 : kind === 'gun' ? .45 : 1.8), 0, sw * (kind === 'sword' ? -.42 : kind === 'bow' ? -.28 : -.16));
     }
   }
+  syncBolaVista();
 }
 function solapaCaja(x, z, o, r) {
   return x > o.minX - r && x < o.maxX + r && z > o.minZ - r && z < o.maxZ + r;
@@ -29180,6 +29431,7 @@ function updateSky(dt) {
   _skyBase.setHex(state.planet === 'platus' ? (state.planetSky || 0xd98c5f) : state.country ? (currentCountry()?.sky || SKY_DAY.getHex()) : SKY_DAY.getHex());
   let base = _skyBase;
   if (state.weather === 'rain') base = SKY_RAIN;
+  else if (state.weather === 'snow') base = SKY_SNOW;
   else if (state.weather === 'dust') base = SKY_DUST;
   const target = night ? SKY_NIGHT : base;
   scene.background.lerp(target, 0.04); scene.fog.color.copy(scene.background);
@@ -29249,6 +29501,7 @@ function updateContextPrompt() {
       else action = { key: 'E · F5', touch: '🎬', text: 'E asiento = peli · pasillo hasta la puerta 👨‍✈️ · F5 ves las alas' };
     }
     else if (nearestDoor()) { const d = nearestDoor(); action = { key: 'E', touch: '🚪', text: d.open ? 'Cerrar la puerta' : 'Abrir la puerta' }; }
+    else if (trozoNieveCerca()) action = { key: 'E', touch: '❄️', text: 'Tomar nieve y hacer una bola' + ((state.bolasNieve || 0) ? ' · llevas ' + state.bolasNieve : '') };
     else if (job && jobDog && job.id === 'dog' && !job.calm && dist2D(player.position, jobDog.position) < 3) action = { key: 'E', touch: '🐕', text: 'Calmar al perro perdido' };
     else if (job && jobCrate && job.id === 'crates' && dist2D(player.position, jobCrate.position) < 3) action = { key: 'E', touch: '📦', text: 'Abrir el cajón de Tito' };
     else {
@@ -29361,6 +29614,7 @@ function updateContextPrompt() {
     }
   }
   if (!action && currentGunSpec()) action = { key: 'E', touch: '🔭', text: state.aiming ? 'Bajar la mira · CLIC dispara' : 'E pone la MIRA · CLIC dispara' };
+  if (!action && quiereTirarNieve()) action = { key: 'CLIC', touch: '❄️', text: 'Tirar la bola de nieve · te quedan ' + state.bolasNieve };
   if (caidaChoque) action = null;
   ctxWantsE = !!(action && String(action.key).includes('E') && (!currentGunSpec() || action.force));   // hay algo del mundo que usa la E; el hacker del banco también, aunque lleves pistola
   box.classList.toggle('visible', !!action);
