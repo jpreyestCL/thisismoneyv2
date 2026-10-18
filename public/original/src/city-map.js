@@ -220,6 +220,199 @@ export function enCalle(x, z, margen = 0) {
   return false;
 }
 
+// Cruce de dos avenidas, o punta de un ramal: ahí puede doblar el patrulla.
+let grafoCallesCache = null;
+function grafoCalles() {
+  if (grafoCallesCache) return grafoCallesCache;
+  const nodos = new Map();
+  const idDe = (x, z) => Math.round(x) + ',' + Math.round(z);
+  const agregar = (x, z) => {
+    const id = idDe(x, z);
+    if (!nodos.has(id)) nodos.set(id, { id, x: Math.round(x), z: Math.round(z) });
+    return nodos.get(id);
+  };
+  const sobreAvenida = (av, x, z) => av.eje === 'v'
+    ? Math.abs(x - av.at) < 0.6 && z >= av.desde - 0.6 && z <= av.hasta + 0.6
+    : Math.abs(z - av.at) < 0.6 && x >= av.desde - 0.6 && x <= av.hasta + 0.6;
+  for (let i = 0; i < AVENIDAS.length; i++) {
+    for (let j = i + 1; j < AVENIDAS.length; j++) {
+      const a = AVENIDAS[i], b = AVENIDAS[j];
+      if (a.eje === b.eje) continue;
+      const x = a.eje === 'v' ? a.at : b.at;
+      const z = a.eje === 'h' ? a.at : b.at;
+      if (sobreAvenida(a, x, z) && sobreAvenida(b, x, z)) agregar(x, z);
+    }
+  }
+  for (const av of AVENIDAS) {
+    if (!av.ramal) continue;
+    if (av.eje === 'v') { agregar(av.at, av.desde); agregar(av.at, av.hasta); }
+    else { agregar(av.desde, av.at); agregar(av.hasta, av.at); }
+  }
+  const aristas = new Map();
+  for (const n of nodos.values()) aristas.set(n.id, []);
+  for (const av of AVENIDAS) {
+    const lista = [];
+    for (const n of nodos.values()) if (sobreAvenida(av, n.x, n.z)) lista.push(n);
+    lista.sort((p, q) => av.eje === 'v' ? p.z - q.z || p.x - q.x : p.x - q.x || p.z - q.z);
+    for (let i = 0; i < lista.length - 1; i++) {
+      const a = lista[i], b = lista[i + 1];
+      const d = Math.hypot(b.x - a.x, b.z - a.z);
+      if (d < 0.5) continue;
+      const ea = aristas.get(a.id), eb = aristas.get(b.id);
+      if (!ea.some(s => s.id === b.id)) ea.push({ id: b.id, d });
+      if (!eb.some(s => s.id === a.id)) eb.push({ id: a.id, d });
+    }
+  }
+  grafoCallesCache = { nodos, aristas };
+  return grafoCallesCache;
+}
+
+function proyectarEnAvenida(av, x, z) {
+  if (av.eje === 'v') return { x: av.at, z: Math.max(av.desde, Math.min(av.hasta, z)) };
+  return { x: Math.max(av.desde, Math.min(av.hasta, x)), z: av.at };
+}
+
+// El punto de calzada más cercano. Si hay empate, se queda el que mira hacia el destino.
+function puntoEnCalzada(x, z, haciaX, haciaZ) {
+  let best = null, bestD = Infinity, bestH = Infinity;
+  for (const av of AVENIDAS) {
+    const p = proyectarEnAvenida(av, x, z);
+    const d = (p.x - x) ** 2 + (p.z - z) ** 2;
+    const h = (p.x - haciaX) ** 2 + (p.z - haciaZ) ** 2;
+    if (d < bestD - 0.01 || (Math.abs(d - bestD) <= 0.01 && h < bestH)) {
+      bestD = d; bestH = h; best = p;
+    }
+  }
+  return best;
+}
+
+export function segmentoSobreCalle(a, b) {
+  const dx = b.x - a.x, dz = b.z - a.z;
+  if (Math.hypot(dx, dz) < 0.4) return true;
+  if (Math.abs(dx) > 1.2 && Math.abs(dz) > 1.2) return false;
+  const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x);
+  const z0 = Math.min(a.z, b.z), z1 = Math.max(a.z, b.z);
+  return AVENIDAS.some(av => {
+    if (av.eje === 'v' && Math.abs(dx) <= 1.2) {
+      return Math.abs(a.x - av.at) <= 1.2 && Math.abs(b.x - av.at) <= 1.2 && z0 >= av.desde - 1 && z1 <= av.hasta + 1;
+    }
+    if (av.eje === 'h' && Math.abs(dz) <= 1.2) {
+      return Math.abs(a.z - av.at) <= 1.2 && Math.abs(b.z - av.at) <= 1.2 && x0 >= av.desde - 1 && x1 <= av.hasta + 1;
+    }
+    return false;
+  });
+}
+
+function vecinosDe(punto, nodos) {
+  const vistos = new Set();
+  const out = [];
+  const meter = (n) => { if (!n || vistos.has(n.id)) return; vistos.add(n.id); out.push(n); };
+  for (const av of AVENIDAS) {
+    const sobreP = av.eje === 'v'
+      ? Math.abs(punto.x - av.at) < 0.8 && punto.z >= av.desde - 0.8 && punto.z <= av.hasta + 0.8
+      : Math.abs(punto.z - av.at) < 0.8 && punto.x >= av.desde - 0.8 && punto.x <= av.hasta + 0.8;
+    if (!sobreP) continue;
+    const lista = [];
+    for (const n of nodos.values()) {
+      const sobreN = av.eje === 'v'
+        ? Math.abs(n.x - av.at) < 0.8 && n.z >= av.desde - 0.8 && n.z <= av.hasta + 0.8
+        : Math.abs(n.z - av.at) < 0.8 && n.x >= av.desde - 0.8 && n.x <= av.hasta + 0.8;
+      if (sobreN) lista.push(n);
+    }
+    lista.sort((p, q) => av.eje === 'v' ? p.z - q.z : p.x - q.x);
+    const pc = av.eje === 'v' ? punto.z : punto.x;
+    let antes = null, despues = null;
+    for (const n of lista) {
+      const c = av.eje === 'v' ? n.z : n.x;
+      if (c <= pc + 0.8) antes = n;
+      if (c >= pc - 0.8 && !despues) despues = n;
+    }
+    meter(antes);
+    meter(despues);
+  }
+  return out;
+}
+
+function caminoMasCorto(nodos, aristas, desdeId, hastaId) {
+  if (desdeId === hastaId) return [nodos.get(desdeId)];
+  const dist = new Map([[desdeId, 0]]);
+  const prev = new Map();
+  const usados = new Set();
+  while (usados.size < nodos.size) {
+    let id = null, mejor = Infinity;
+    for (const [k, v] of dist) {
+      if (usados.has(k) || v >= mejor) continue;
+      mejor = v; id = k;
+    }
+    if (id == null || id === hastaId) break;
+    usados.add(id);
+    for (const s of aristas.get(id) || []) {
+      const nd = dist.get(id) + s.d;
+      if (nd < (dist.get(s.id) ?? Infinity)) {
+        dist.set(s.id, nd);
+        prev.set(s.id, id);
+      }
+    }
+  }
+  if (!prev.has(hastaId)) return null;
+  const out = [];
+  let c = hastaId;
+  while (c) {
+    out.push(nodos.get(c));
+    if (c === desdeId) break;
+    c = prev.get(c);
+  }
+  out.reverse();
+  return out[0] && out[0].id === desdeId ? out : null;
+}
+
+function largoDe(camino) {
+  let s = 0;
+  for (let i = 1; i < camino.length; i++) s += Math.hypot(camino[i].x - camino[i - 1].x, camino[i].z - camino[i - 1].z);
+  return s;
+}
+
+// Waypoints por la calzada desde donde te esposan hasta la cárcel.
+// El patrulla no atraviesa manzanas: entra a la calle más cercana y dobla en los cruces.
+export function rutaDePatrulla(x, z, metaX, metaZ) {
+  const salida = puntoEnCalzada(x, z, metaX, metaZ);
+  const frente = puntoEnCalzada(metaX, metaZ, metaX, metaZ);
+  const pts = [];
+  const meter = (p) => {
+    if (!p) return;
+    const u = pts[pts.length - 1];
+    if (u && Math.hypot(u.x - p.x, u.z - p.z) < 1.2) return;
+    pts.push({ x: p.x, z: p.z });
+  };
+  const conMeta = () => {
+    if (Math.hypot(frente.x - metaX, frente.z - metaZ) > 2.5) meter({ x: metaX, z: metaZ });
+    return pts;
+  };
+  if (!salida || !frente) return [{ x: metaX, z: metaZ }];
+  if (segmentoSobreCalle(salida, frente)) {
+    meter(salida);
+    meter(frente);
+    return conMeta();
+  }
+  const { nodos, aristas } = grafoCalles();
+  const inicios = vecinosDe(salida, nodos);
+  const fines = vecinosDe(frente, nodos);
+  let mejor = null;
+  for (const ini of inicios) {
+    for (const fin of fines) {
+      const camino = caminoMasCorto(nodos, aristas, ini.id, fin.id);
+      if (!camino) continue;
+      const ultimo = camino[camino.length - 1];
+      const costo = Math.hypot(salida.x - ini.x, salida.z - ini.z) + largoDe(camino) + Math.hypot(ultimo.x - frente.x, ultimo.z - frente.z);
+      if (!mejor || costo < mejor.costo - 0.01) mejor = { camino, costo };
+    }
+  }
+  meter(salida);
+  if (mejor) for (const n of mejor.camino) meter(n);
+  meter(frente);
+  return conMeta();
+}
+
 // Formato que consume el juego para dibujar y para el tráfico.
 export function callesDelMapa() {
   return AVENIDAS.map(av => ({

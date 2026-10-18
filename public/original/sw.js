@@ -1,10 +1,10 @@
 // Service worker de This is Money: el juego funciona OFFLINE una vez visitado.
 // - index.html: red primero (para recibir las actualizaciones del deploy), caché de respaldo
 // - assets y CDN de three.js: caché primero (no cambian casi nunca)
-const VERSION = 'tim-v57';   // bump al cambiar CORE (fuerza recachear e ignora cachés viejas)
+const VERSION = 'tim-v58';   // bump al cambiar CORE (fuerza recachear e ignora cachés viejas)
 const CORE = ['./', './index.html', './manifest.json', './icon.svg',
   './assets/icon-192.png', './assets/icon-512.png',
-  './src/game-config.js', './src/chat.js?v=4', './src/park-business.js?v=1', './src/city-map.js?v=4', './assets/img_58.png', './assets/edificio.glb', './assets/tienda.glb', './assets/papa_anim.glb'];
+  './src/game-config.js', './src/chat.js?v=4', './src/park-business.js?v=1', './src/city-map.js?v=5', './assets/img_58.png', './assets/edificio.glb', './assets/tienda.glb', './assets/papa_anim.glb'];
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
