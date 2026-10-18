@@ -3650,7 +3650,10 @@ function addWallMesh(cx, cz, w, d, h, color, addColl) {
 
 // DOS supermercados con productos distintos.
 // value = dinero al construirlo · dmg = daño del arma · factor = daño que recibes con la armadura
-const STORE_A = [   // SÚPER 1: construcción y comida
+const STORE_A = [   // SÚPER 1: construcción y comida. Dinamita y cohetes van primero: son lo primero del menú Y.
+  { key: 'dinamita', name: 'Dinamita (x5)', price: 4000, color: 0xdc2626, gadget: 'dinamita', pack: 5 },
+  { key: 'lanzacohetes', name: 'Lanzacohetes', price: 10000, color: 0xb91c1c },
+  { key: 'misil', name: 'Misil', price: 1000, color: 0xf97316, rocketAmmo: 1 },
   { key: 'mayordomo', name: 'Contratar mayordomo', price: 500, color: 0x111827 },
   { key: 'wallWood', name: 'Pared madera', price: 60,  value: 25,  color: 0x8b5a2b, build: true },
   { key: 'wallRock', name: 'Pared roca',   price: 120, value: 55,  color: 0x6b7280, build: true },
@@ -3680,7 +3683,6 @@ const STORE_A = [   // SÚPER 1: construcción y comida
   { key: 'bm_naranjo', name: 'Traje naranjo de ladrón', price: 1200, color: 0xf97316, icon: '🟠', thief: 'naranjo' },
   { key: 'bm_gorro', name: 'Gorro con hoyos', price: 700, color: 0x111827, icon: '🎭', thief: 'gorro' },
   { key: 'bm_hacker', name: 'Sistema hacker', price: 2200, color: 0x22d3ee, icon: '💻', thief: 'hacker' },
-  { key: 'dinamita', name: 'Dinamita (x5)', price: 4000, color: 0xdc2626, gadget: 'dinamita', pack: 5 },
 ];
 
 // Mayordomo: recibe órdenes con Espacio ×3, hace las compras con la plata del jugador
@@ -3852,8 +3854,6 @@ const STORE_B = [   // SÚPER 2 (ARMERÍA): armas y armaduras por niveles
   { key: 'armadura_obsidiana', name: 'Armadura obsidiana', price: 1200, color: 0x6d28d9, factor: 0.3 },
   { key: 'ballesta', name: 'Ballesta', price: 500,  value: 40, color: 0x8b5a2b, build: true, defense: true },
   { key: 'torreta',  name: 'Torreta',  price: 1000, value: 80, color: 0x334155, build: true, defense: true },
-  { key: 'lanzacohetes', name: 'Lanzacohetes', price: 10000, color: 0xb91c1c },
-  { key: 'misil', name: 'Misil', price: 1000, color: 0xf97316, rocketAmmo: 1 },
 ];
 // Muebles / decoración / auto / ventana: se COMPRAN escribiéndole al vendedor (Y).
 // Los muebles y la ventana son colocables (build); el auto se conduce; la ventana es transparente.
@@ -4163,6 +4163,28 @@ function makeStore(cx, cz, items, title, roofColor) {
 }
 const SUPER_B_POS = makeStore(LUGARES.armeria.x, LUGARES.armeria.z, STORE_B, 'ARMERIA', 0x6d28d9);
 makeStore(LUGARES.super.x, LUGARES.super.z, STORE_A, 'SUPER', 0xdc2626);
+// Al entrar al súper, la dinamita, el lanzacohetes y los misiles están en la puerta.
+{
+  const cx = LUGARES.super.x, cz = LUGARES.super.z, zFila = cz + 9.55;
+  const fila = [
+    { key: 'dinamita', x: cx - 3.2 },
+    { key: 'lanzacohetes', x: cx },
+    { key: 'misil', x: cx + 3.2 },
+  ];
+  for (const s of fila) {
+    const item = STORE_A.find(it => it.key === s.key);
+    if (!item || !item.stand || !item.pos) continue;
+    item.pos.set(s.x, 0, zFila);
+    item.stand.position.set(s.x, 0, zFila);
+    if (item.obs) {
+      item.obs.minX = s.x - .525; item.obs.maxX = s.x + .525;
+      item.obs.minZ = zFila - .525; item.obs.maxZ = zFila + .525;
+    }
+  }
+  const aviso = makeSign('DINAMITA · LANZACOHETES · MISILES', 0xfacc15);
+  aviso.position.set(cx, 3.35, cz + 10.55);
+  scene.add(aviso);
+}
 // Esquina de la Plaza Central: la bomba da a la avenida, con la manzana libre alrededor.
 const GAS_STATION_POS = new THREE.Vector3(LUGARES.gasolinera.x, 0, LUGARES.gasolinera.z);
 // Manzana del arcade, al sureste de la ciudad.
@@ -4985,6 +5007,9 @@ const BLACK_MARKET = [
   { key: 'bm_naranjo', name: 'Traje naranjo de ladrón', price: 1200, color: 0xf97316, icon: '🟠', thief: 'naranjo', blurb: 'Uniforme naranja de la cárcel. Con el gorro puesto, el cartel del banco es una cámara desde arriba y no muestra tu cara.' },
   { key: 'bm_gorro', name: 'Gorro con hoyos', price: 700, color: 0x111827, icon: '🎭', thief: 'gorro', blurb: 'Gorro negro con hoyos para los ojos. Si robas el banco sin este gorro, el cartel de buscado lleva el dibujo de tu skin.' },
   { key: 'bm_hacker', name: 'Sistema hacker', price: 2200, color: 0x22d3ee, icon: '💻', thief: 'hacker', blurb: 'Abre la puerta de la bóveda del Banco Central en 10 segundos. Ahí las cajas se ponen doradas: cada una tiene $1000 y se abre con el puntito del centro.' },
+  { key: 'dinamita', name: 'Dinamita (x5)', price: 3900, color: 0xdc2626, gadget: 'dinamita', pack: 5, icon: '🧨', blurb: 'Un poquito más barata que en el súper ($4000). En la cárcel, tírala a las rejas: hace un hoyo y sales corriendo.' },
+  { key: 'lanzacohetes', name: 'Lanzacohetes', price: 9700, color: 0xb91c1c, icon: '🚀', blurb: 'Un poquito más barato que en el súper ($10000). Trae 3 misiles. Un impacto destruye un tanque. E abre la mira.' },
+  { key: 'misil', name: 'Misil', price: 970, color: 0xf97316, rocketAmmo: 1, icon: '💥', blurb: 'Un poquito más barato que en el súper ($1000). Munición del lanzacohetes.' },
 ];
 // Armas de fuego de verdad (las del mercado negro). Cargador de 20 balas, 5 s de recarga.
 const GUN_CLIP = 20, GUN_RELOAD = 5;
@@ -5400,7 +5425,7 @@ function renderBlackMarket() {
     const puesto = it.thief && state.thief && state.thief[it.thief] && (it.thief === 'hacker' || state.thief[it.thief === 'naranjo' ? 'wearNaranjo' : 'wearGorro']);
     const have = (it.thief && state.thief && state.thief[it.thief]) || (it.gadget && !GADGET_HAND[it.gadget] && state.gadgets && state.gadgets[it.gadget]) || (GUN_SPECS[it.key] && state.guns && state.guns[it.key]) || (!GUN_SPECS[it.key] && it.dmg && state.weaponName === it.name);
     const ya = !have ? '' : it.thief === 'hacker' ? ' · ya lo tienes' : it.thief ? (puesto ? ' · puesto (toca para sacártelo)' : ' · toca para ponértelo') : GUN_SPECS[it.key] ? ' · ya la tienes (toca para llevarla en la mano)' : ' · ya lo tienes';
-    return '<button type="button" data-bm="' + it.key + '" style="pointer-events:all; cursor:pointer; text-align:left; background:rgba(127,29,29,.2); border:1px solid #7f1d1d; color:#fecaca; border-radius:9px; padding:8px 10px;"><b style="color:#fecaca">' + it.icon + ' ' + it.name + '</b> · $' + it.price + ya + (it.ammo ? ' · llevas ' + (state.ammo || 0) + ' balas' : '') + (GADGET_HAND[it.gadget] ? ' · tienes ' + ((state.gadgetCharges || {})[it.gadget] || 0) : '') + '<br><span style="opacity:.75; font-size:11px">' + it.blurb + (GUN_SPECS[it.key] ? '<br>💥 daño ' + GUN_SPECS[it.key].dmg + ' · 🎯 cabeza x' + GUN_SPECS[it.key].head + ' (' + Math.round(GUN_SPECS[it.key].dmg * GUN_SPECS[it.key].head) + ') · 📏 ' + GUN_SPECS[it.key].range + ' m · ⏱️ ' + GUN_SPECS[it.key].rate + ' s' : '') + '</span></button>';
+    return '<button type="button" data-bm="' + it.key + '" style="pointer-events:all; cursor:pointer; text-align:left; background:rgba(127,29,29,.2); border:1px solid #7f1d1d; color:#fecaca; border-radius:9px; padding:8px 10px;"><b style="color:#fecaca">' + it.icon + ' ' + it.name + '</b> · $' + it.price + ya + (it.ammo ? ' · llevas ' + (state.ammo || 0) + ' balas' : '') + (it.rocketAmmo ? ' · llevas ' + (state.rocketAmmo || 0) + ' misiles' : '') + (GADGET_HAND[it.gadget] ? ' · tienes ' + ((state.gadgetCharges || {})[it.gadget] || 0) : '') + '<br><span style="opacity:.75; font-size:11px">' + it.blurb + (GUN_SPECS[it.key] ? '<br>💥 daño ' + GUN_SPECS[it.key].dmg + ' · 🎯 cabeza x' + GUN_SPECS[it.key].head + ' (' + Math.round(GUN_SPECS[it.key].dmg * GUN_SPECS[it.key].head) + ') · 📏 ' + GUN_SPECS[it.key].range + ' m · ⏱️ ' + GUN_SPECS[it.key].rate + ' s' : '') + '</span></button>';
   }).join('');
 }
 function applyBlackMarketGadget(item) {
@@ -7638,7 +7663,7 @@ function updatePolice(dt) {
     if (state.policeDelay > 0) { state.policeDelay -= dt; syncMusicaPersecucion(); return; }   // aún no llegan: aprovecha para huir
     const driving = state.driving;              // si conduces, la policía te persigue EN AUTO
     const lvl = Math.max(1, state.wantedLevel || 1);
-    const desired = Math.min(6, lvl + (driving ? 1 : 0));
+    const desired = state.fugaDinamita ? 10 : Math.min(6, lvl + (driving ? 1 : 0));
     state.policeRefuerzo = Math.max(0, (state.policeRefuerzo || 0) - dt);
     const vivos = police.filter(p => !p.userData.muerto);
     while (vivos.length < desired && state.policeRefuerzo <= 0) { spawnPolice(1); vivos.push(police[police.length - 1]); }
@@ -20147,6 +20172,7 @@ function shopIcon(item) {
   if (item.car) return '🚗'; if (item.paint) return '🎨';
   if (item.eat) return '🍖'; if (item.bow || item.key === 'arco') return '🏹'; if (item.dmg) return item.key && item.key.includes('pala') ? '🪏' : '⚔️';
   if (item.factor) return '🛡️'; if (item.seedType) return item.seedType === 'carrot' ? '🥕' : item.seedType === 'wheat' ? '🌾' : item.seedType === 'tomato' ? '🍅' : '🌱';
+  if (item.key === 'dinamita') return '🧨'; if (item.key === 'lanzacohetes') return '🚀'; if (item.key === 'misil') return '💥';
   if (item.key === 'dadgun') return '🔫'; if (item.key === 'dadarmor') return '🛡️'; if (item.key === 'rocket') return '🚀'; if (item.key === 'traje') return '🧑‍🚀';
   if (item.key === 'hijoarma') return '⚔️'; if (item.key === 'hijoarmadura') return '🛡️';
   if (item.key === 'perro') return '🐶'; if (item.key === 'laser') return '🔆'; if (item.key === 'piso2') return '🏠';
@@ -24318,7 +24344,7 @@ function buyItem(item) {
     applyBlackMarketGadget(item); saveGame(); return;
   }
   if (item.rocketAmmo) {
-    if (!state.guns || !state.guns.lanzacohetes) { toast('🚀 Primero el lanzacohetes, en la armería, por $10000'); return; }
+    if (!state.guns || !state.guns.lanzacohetes) { toast('🚀 Primero el lanzacohetes: $10000 en el súper, o $9700 en el Mercado Negro'); return; }
     if (!state.creative && state.money < item.price) { toast('💸 Te falta plata'); return; }
     if (!state.creative) state.money -= item.price;
     state.rocketAmmo = (state.rocketAmmo || 0) + item.rocketAmmo;
@@ -24335,9 +24361,9 @@ function buyItem(item) {
     const magNueva = cargadorDe(item.key);
     magNueva.clip = GUN_CLIP; magNueva.reloadUntil = 0; state.clip = GUN_CLIP;   // cada arma trae su propio cargador
     equipHandItem({ t: 'gun', key: item.key });
-    if (item.key === 'lanzacohetes') state.rocketAmmo = (state.rocketAmmo || 0) + 1;
+    if (item.key === 'lanzacohetes') state.rocketAmmo = (state.rocketAmmo || 0) + 3;
     toast(item.key === 'lanzacohetes'
-      ? '🚀 Lanzacohetes con mira (pulsa E) · trae 1 misil · los siguientes cuestan $1000 · un impacto tumba un tanque'
+      ? '🚀 Lanzacohetes con mira (pulsa E) · trae 3 misiles (llevas ' + state.rocketAmmo + ') · los de más cuestan $1000 en el súper y $970 en el Mercado Negro · un impacto destruye un tanque'
       : g.icon + ' ' + g.name + ' · ' + g.dmg + ' de daño' + (g.scope ? ' · con MIRA: en la cabeza x' + g.head : ' · en la cabeza x' + g.head) + ' · ' + gunAmmoText());
     if (String(item.key || '').indexOf('bm_') === 0) storyProgress('alley', 5);
     saveGame(); return;
@@ -25217,7 +25243,7 @@ function empezarFugaDinamita() {
   state.bankChase = false;
   state.jailPorBanco = false;
   if (typeof quitarCarteles === 'function') quitarCarteles();
-  toast('🧨 Las rejas saltaron. Corre: diez minutos de tanques y patrullas.');
+  toast('🧨 Las rejas tienen un hoyo. Sal corriendo: diez minutos de tanques y patrullas.');
 }
 function detonarDinamita(x, y, z) {
   let rompio = false;
@@ -25225,7 +25251,11 @@ function detonarDinamita(x, y, z) {
     const rz = c.rejaZ != null ? c.rejaZ : (c.maxZ || 0);
     const cercaReja = Math.hypot(x - c.ex, z - rz) < 7;
     const adentro = x > c.minX - 1.2 && x < c.maxX + 1.2 && z > c.minZ - 1.2 && z < rz + 1.2;
-    if (c.barras && (cercaReja || adentro)) {
+    const presoAqui = condena && condena.celda === c
+      && player.position.x > c.minX - .4 && player.position.x < c.maxX + .4
+      && player.position.z > c.minZ - .4 && player.position.z < (c.maxZ || rz) + .4;
+    const cercaDelPreso = presoAqui && Math.hypot(x - player.position.x, z - player.position.z) < 14;
+    if (c.barras && (cercaReja || adentro || cercaDelPreso)) {
       romperGrupo(c.barras);
       if (c.reja) c.reja.top = -8;
       rompio = true;
@@ -25637,7 +25667,7 @@ function updateMisiles(dt) {
 }
 function fireRocket(spec) {
   if (gunCd > 0) return true;
-  if ((state.rocketAmmo || 0) <= 0) { toast('🚀 Sin misiles · en la armería cada uno cuesta $1000'); beep(110, .1, .05); return true; }
+  if ((state.rocketAmmo || 0) <= 0) { toast('🚀 Sin misiles · en el súper cada uno cuesta $1000 · en el Mercado Negro $970'); beep(110, .1, .05); return true; }
   state.rocketAmmo--;
   gunCd = spec.rate || 1.1;
   vmSwing = .85; cameraShake = Math.max(cameraShake, .32);
@@ -26513,11 +26543,15 @@ function entrarACelda(n) {
   condena = nuevaCondena(celda, segundos, segundos >= 540);
   player.position.set(celda.ex, PLAYER_EYE, (celda.minZ + celda.maxZ) / 2);
   yaw = Math.PI; pitch = 0; vy = 0; grounded = true;
+  const cargasDinamita = ((state.gadgetCharges || {}).dinamita) || 0;
+  const pistaDinamita = cargasDinamita > 0 ? ' Tienes dinamita: pulsa 1 hasta tenerla en la mano y tírala a las rejas. Hace un hoyo y sales.' : '';
   toast(segundos >= 540
     ? (state.thiefMode
-      ? '🚔 Celda ' + celda.n + ' · nueve minutos. A los cinco hay sopa verde. Si te mueres de hambre no puedes salir.'
-      : '🚔 Celda ' + celda.n + ' · nueve minutos. Si te mueres de hambre no puedes salir. Al terminar, la policía no te sigue.')
-    : '🚔 Celda ' + celda.n + ' · te quedas un minuto. E en el lavamanos o en la cama.');
+      ? '🚔 Celda ' + celda.n + ' · nueve minutos. A los cinco hay sopa verde. Si te mueres de hambre no puedes salir.' + pistaDinamita
+      : '🚔 Celda ' + celda.n + ' · nueve minutos. Si te mueres de hambre no puedes salir. Al terminar, la policía no te sigue.' + pistaDinamita)
+    : (cargasDinamita > 0
+      ? '🚔 Celda ' + celda.n + ' · te quedas un minuto.' + pistaDinamita
+      : '🚔 Celda ' + celda.n + ' · te quedas un minuto. E en el lavamanos o en la cama.'));
   return true;
 }
 function frenarCondena(dt) {
