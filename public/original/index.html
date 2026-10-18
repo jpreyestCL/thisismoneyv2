@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <title>This is Money</title>
@@ -685,6 +685,7 @@
         <button class="bankBtn" id="pauseCloud" style="grid-column:1 / span 2;">☁️ Guardar en la nube</button>
         <button class="bankBtn" id="pauseAccount" style="grid-column:1 / span 2;">👤 Mi cuenta</button>
         <button class="bankBtn" id="pauseWatch" style="grid-column:1 / span 2;">⌚ Modo reloj</button>
+        <button class="bankBtn" id="pauseInstall" style="grid-column:1 / span 2;">📲 Instalar app</button>
       </div>
       <div id="pauseCreativeRow" style="display:none; align-items:center; justify-content:center; gap:8px; margin-top:12px; padding:8px; background:rgba(168,85,247,.18); border-radius:10px;">
         <button class="bankBtn" id="pauseStageDown" style="width:44px;">➖</button>
@@ -7126,19 +7127,18 @@ function fugarDeLaCarcel() {
   quitarCarteles();
   toast('🏃 Saliste por el ducto. La policía te persigue cinco minutos. Si aguantas, quedas libre.');
 }
-const TIEMPO_TORNILLO = 0.2;
-function avanzarTornillo(dt) {
-  const tiene = !!(keys['KeyE'] || touch.useHeld);
-  if (tiene) condena.tornillo += dt;
-  else condena.tornillo = Math.max(0, condena.tornillo - dt * .35);
-  if (condena.tornillo < TIEMPO_TORNILLO) return;
-  condena.tornillo = TIEMPO_TORNILLO;
+function abrirDuctoConCuchara() {
+  if (!condena || condena.rejaAbierta) return;
   condena.atornillando = false;
+  condena.tornillo = 0;
   condena.rejaAbierta = true;
   soltarCuchara();
   abrirDuctoVisual();
   toast('🔧 El ducto quedó abierto.');
   beep(180, .08, .04);
+}
+function avanzarTornillo() {
+  abrirDuctoConCuchara();
 }
 
 // Policías: aparecen cuando estás "buscado" y te persiguen
@@ -21678,32 +21678,34 @@ if (ui('pauseWatch')) ui('pauseWatch').onclick = () => setWatchMode(!document.bo
 // PWA: el juego se puede INSTALAR en el teléfono (ícono propio) y funciona OFFLINE
 try { if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js'); } catch (e) {}
 let installPrompt = null;
+function botonesInstalar() {
+  return [ui('installAppBtn'), ui('pauseInstall')].filter(Boolean);
+}
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   installPrompt = e;
-  const b = ui('installAppBtn');
-  if (b) b.style.display = '';
+  botonesInstalar().forEach(b => { b.style.display = ''; });
 });
 window.addEventListener('appinstalled', () => {
   installPrompt = null;
-  const b = ui('installAppBtn');
-  if (b) b.style.display = 'none';
+  botonesInstalar().forEach(b => { b.style.display = 'none'; });
   toast('📲 This is Money quedó instalada como una app.');
 });
+async function pedirInstalarApp() {
+  if (!installPrompt) {
+    toast('📲 Para instalarla: en el celular, menú del navegador → Agregar a inicio. En el computador, el ícono de instalar de la barra de direcciones.');
+    return;
+  }
+  installPrompt.prompt();
+  try { await installPrompt.userChoice; } catch (e) {}
+  installPrompt = null;
+}
 (function prepararInstalarApp() {
-  const b = ui('installAppBtn');
-  if (!b) return;
   const ya = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  if (ya) { b.style.display = 'none'; return; }
-  b.onclick = async () => {
-    if (!installPrompt) {
-      toast('📲 Para instalarla: en el celular, menú del navegador → Agregar a inicio. En el computador, el ícono de instalar de la barra de direcciones.');
-      return;
-    }
-    installPrompt.prompt();
-    try { await installPrompt.userChoice; } catch (e) {}
-    installPrompt = null;
-  };
+  const botones = botonesInstalar();
+  if (!botones.length) return;
+  if (ya) { botones.forEach(b => { b.style.display = 'none'; }); return; }
+  botones.forEach(b => { b.onclick = pedirInstalarApp; });
 })();
 function togglePause(force) {
   const show = force !== undefined ? force : !state.paused;
@@ -25949,8 +25951,7 @@ function tryCelda() {
   if (condena.atornillando) return true;
   if (rutinaDeLadron() && condena.rejaAbierta && cercaDeLaRejaDucto()) { entrarAlDucto(); return true; }
   if (rutinaDeLadron() && condena.almuerzo === 'listo' && condena.cuchara && !condena.rejaAbierta && cercaDeLaRejaDucto()) {
-    condena.atornillando = true;
-    condena.tornillo = 0;
+    abrirDuctoConCuchara();
     return true;
   }
   if (rutinaDeLadron() && condena.almuerzo === 'listo' && !condena.cuchara && cercaDeLaRejaDucto()) {
