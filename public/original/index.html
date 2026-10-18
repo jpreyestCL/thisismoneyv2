@@ -8253,10 +8253,20 @@ function carrilDePatrulla(desde, hasta) {
   return { x: hasta.x, z: hasta.z };
 }
 function colocarPatrulla(car, nx, nz) {
-  if (!obstacleAt(nx, nz, 0, 1.05, true)) { car.position.x = nx; car.position.z = nz; return true; }
-  if (!obstacleAt(nx, car.position.z, 0, 1.05, true)) { car.position.x = nx; return true; }
-  if (!obstacleAt(car.position.x, nz, 0, 1.05, true)) { car.position.z = nz; return true; }
-  return false;
+  const ox = car.position.x, oz = car.position.z;
+  const bloquea = (x, z) => {
+    const o = obstacleAt(x, z, 0, 1.05, true);
+    if (!o) return false;
+    const w = o.maxX - o.minX, d = o.maxZ - o.minZ;
+    return !(Math.min(w, d) < 1.2 && enCalle(x, z));
+  };
+  const probar = (x, z) => {
+    if (Math.hypot(x - ox, z - oz) < 0.02) return false;
+    if (bloquea(x, z)) return false;
+    car.position.x = x; car.position.z = z;
+    return true;
+  };
+  return probar(nx, nz) || probar(nx, oz) || probar(ox, nz);
 }
 function terminarTraslado() {
   const tr = trasladoPolicial;
@@ -8289,17 +8299,14 @@ function updateTraslado(dt) {
   const car = tr.car;
   if (!car) return;
   if (tr.luz) tr.luz.material.color.setHex((Math.floor(performance.now() / 180) % 2) ? 0xef4444 : 0x3b82f6);
-  if (!tr.ruta || !tr.ruta.length || tr.rutaI >= tr.ruta.length || tr.t > 90) { terminarTraslado(); return; }
+  if (!tr.ruta || !tr.ruta.length || tr.t > 90) { terminarTraslado(); return; }
+  while (tr.rutaI < tr.ruta.length && Math.hypot(tr.ruta[tr.rutaI].x - car.position.x, tr.ruta[tr.rutaI].z - car.position.z) < 3.2) tr.rutaI++;
+  if (tr.rutaI >= tr.ruta.length) { terminarTraslado(); return; }
   const meta = tr.ruta[tr.rutaI];
   const desde = tr.rutaI > 0 ? tr.ruta[tr.rutaI - 1] : { x: car.position.x, z: car.position.z };
   const aim = carrilDePatrulla(desde, meta);
   const dx = aim.x - car.position.x, dz = aim.z - car.position.z;
   const dist = Math.hypot(dx, dz) || 0.0001;
-  if (dist < 1.5) {
-    tr.rutaI++; tr.atasco = 0;
-    if (tr.rutaI >= tr.ruta.length) terminarTraslado();
-    return;
-  }
   const siguiente = tr.ruta[tr.rutaI + 1];
   const rectoAhora = Math.abs(aim.x - car.position.x) >= Math.abs(aim.z - car.position.z);
   const rectoDespues = siguiente ? Math.abs(siguiente.x - meta.x) >= Math.abs(siguiente.z - meta.z) : rectoAhora;
