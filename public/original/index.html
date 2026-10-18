@@ -3377,7 +3377,7 @@ function updatePlayerCamera(dt) {
       ponerJunta(l.legR, .45, -.1);
     }
     if (cameraMode === 0) {
-      camera.position.copy(player.position);
+      camera.position.set(player.position.x, player.position.y - .18, player.position.z);
       camera.rotation.set(pitch, yaw, 0);
     } else {
       const side = cameraMode === 1 ? 1 : -1;
@@ -6707,22 +6707,50 @@ function tunelDeAire(a, b, ancho, alto) {
   const mx = (a.x + b.x) / 2, my = ((a.y || 0) + (b.y || 0)) / 2, mz = (a.z + b.z) / 2;
   g.position.set(mx, my, mz);
   g.lookAt(mx + dx, my + dy, mz + dz);
-  const dentro = new THREE.MeshStandardMaterial({ color: 0x6b7c90, roughness: .48, metalness: .35, emissive: 0x243044, emissiveIntensity: .7, side: THREE.BackSide });
-  const caja = new THREE.Mesh(new THREE.BoxGeometry(ancho, alto, len + .08), dentro);
-  g.add(caja);
-  const fuera = new THREE.Mesh(new THREE.BoxGeometry(ancho + .14, alto + .14, len), mat(0x334155));
+  const metal = new THREE.MeshStandardMaterial({ color: 0x9aa8b8, roughness: .38, metalness: .72, side: THREE.DoubleSide });
+  const oscuro = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: .9, metalness: .15, side: THREE.DoubleSide });
+  const costilla = new THREE.MeshStandardMaterial({ color: 0xe8eef5, roughness: .28, metalness: .8, side: THREE.DoubleSide });
+  const luzMat = new THREE.MeshStandardMaterial({ color: 0xfff7d6, emissive: 0xfff1b8, emissiveIntensity: 1.6 });
+  const grueso = .055;
+  const piso = new THREE.Mesh(new THREE.BoxGeometry(ancho * .94, grueso, len), metal);
+  piso.position.y = -alto / 2 + grueso / 2; g.add(piso);
+  const techo = piso.clone(); techo.position.y = alto / 2 - grueso / 2; g.add(techo);
+  const paredI = new THREE.Mesh(new THREE.BoxGeometry(grueso, alto * .9, len), metal);
+  paredI.position.x = -ancho / 2 + grueso / 2; g.add(paredI);
+  const paredD = paredI.clone(); paredD.position.x = ancho / 2 - grueso / 2; g.add(paredD);
+  const fuera = new THREE.Mesh(new THREE.BoxGeometry(ancho + .18, alto + .18, len), new THREE.MeshStandardMaterial({ color: 0x334155, roughness: .5, metalness: .5 }));
   g.add(fuera);
-  const piso = new THREE.Mesh(new THREE.BoxGeometry(ancho * .86, .04, len * .98), new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: .92, metalness: .05, side: THREE.DoubleSide }));
-  piso.position.y = -alto * .42;
-  g.add(piso);
-  const tira = new THREE.Mesh(new THREE.BoxGeometry(.07, .04, len * .96), new THREE.MeshStandardMaterial({ color: 0xf8fafc, emissive: 0xffffff, emissiveIntensity: 1.2 }));
-  tira.position.y = alto * .4;
-  g.add(tira);
-  const n = Math.max(3, Math.round(len / 1.35));
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+    const esq = new THREE.Mesh(new THREE.BoxGeometry(.07, .07, len), oscuro);
+    esq.position.set(sx * (ancho / 2 - .03), sy * (alto / 2 - .03), 0);
+    g.add(esq);
+  }
+  const costura = new THREE.Mesh(new THREE.BoxGeometry(.04, .018, len * .98), oscuro);
+  costura.position.y = -alto / 2 + .08; g.add(costura);
+  for (const sx of [-1, 1]) {
+    const linea = new THREE.Mesh(new THREE.BoxGeometry(.025, .016, len * .98), oscuro);
+    linea.position.set(sx * ancho * .24, -alto / 2 + .08, 0); g.add(linea);
+  }
+  const n = Math.max(3, Math.round(len / 1.15));
+  const t = .05;
   for (let i = 1; i < n; i++) {
-    const aro = new THREE.Mesh(new THREE.TorusGeometry(Math.min(ancho, alto) * .47, .045, 8, 16), mat(0xf8fafc));
-    aro.position.z = -len / 2 + (len * i) / n;
-    g.add(aro);
+    const z = -len / 2 + (len * i) / n;
+    for (const [w, h, d, x, y] of [
+      [ancho * .98, t, .07, 0, alto / 2 - t / 2],
+      [ancho * .98, t, .07, 0, -alto / 2 + t / 2],
+      [t, alto * .98, .07, -ancho / 2 + t / 2, 0],
+      [t, alto * .98, .07, ancho / 2 - t / 2, 0],
+    ]) {
+      const barra = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), costilla);
+      barra.position.set(x, y, z); g.add(barra);
+    }
+    const junta = new THREE.Mesh(new THREE.BoxGeometry(ancho * .86, .02, .035), oscuro);
+    junta.position.set(0, -alto / 2 + .09, z); g.add(junta);
+  }
+  for (let i = 0; i < n; i++) {
+    const z = -len / 2 + len * (i + .5) / n;
+    const bombilla = new THREE.Mesh(new THREE.BoxGeometry(.09, .03, Math.min(.42, len / n * .4)), luzMat);
+    bombilla.position.set(0, alto / 2 - .09, z); g.add(bombilla);
   }
   scene.add(g);
   return g;
@@ -6746,9 +6774,15 @@ function armarTunelesDucto(ducto, cz) {
   tunelDeAire({ x: ducto.este, z: ducto.z, y: ducto.y }, junta, 1.45, 1.12);
   tunelDeAire(junta, boca, 1.45, 1.12);
   tunelDeAire(boca, salida, 1.45, 1.12);
-  const camara = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.45, 2.5), new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: .5, metalness: .35, emissive: 0x1e293b, emissiveIntensity: .55, side: THREE.BackSide }));
+  const camara = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.45, 2.5), new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: .45, metalness: .55, side: THREE.BackSide }));
   camara.position.set(junta.x, junta.y, junta.z);
   scene.add(camara);
+  const pisoJunta = new THREE.Mesh(new THREE.BoxGeometry(2.2, .06, 2.2), new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: .9, metalness: .2 }));
+  pisoJunta.position.set(junta.x, junta.y - .62, junta.z);
+  scene.add(pisoJunta);
+  const luzJunta = new THREE.Mesh(new THREE.BoxGeometry(.12, .04, .7), new THREE.MeshStandardMaterial({ color: 0xfff7d6, emissive: 0xfff1b8, emissiveIntensity: 1.5 }));
+  luzJunta.position.set(junta.x, junta.y + .62, junta.z);
+  scene.add(luzJunta);
   const mala = CELDAS_PRESO.find(c => c.n === 404) || CELDAS_PRESO[0];
   const otra = CELDAS_PRESO.find(c => c.n === 405) || CELDAS_PRESO[1] || mala;
   if (mala) tunelDeAire(junta, { x: mala.ex, z: (mala.minZ + mala.maxZ) / 2, y: ducto.y }, 1.2, 1.02);
@@ -7330,10 +7364,10 @@ function entrarAlDucto() {
   ];
   player.position.set(THREE.MathUtils.clamp(condena.celda.ex, d.oeste, d.este), d.y, d.z);
   yaw = Math.atan2(-(d.junta.x - player.position.x), -(d.junta.z - player.position.z));
-  pitch = .08;
+  pitch = -.22;
   vy = 0;
   grounded = true;
-  if (d.luz) d.luz.intensity = 1.8;
+  if (d.luz) { d.luz.intensity = .35; d.luz.distance = 7; }
   toast('🌬️ Estás dentro del conducto de metal. Sigue recto hasta los dos caminos.');
 }
 function alturaEnTramo(seg, t) {
@@ -7344,7 +7378,7 @@ function alturaEnTramo(seg, t) {
 function moverEnDucto(dt) {
   mirarConFlechas(dt);
   const d = rutinaCarcel.ducto;
-  if (d.luz) { d.luz.intensity = 1.8; d.luz.position.copy(player.position); }
+  if (d.luz) { d.luz.intensity = .35; d.luz.distance = 7; d.luz.position.copy(player.position); }
   let ax = 0, az = 0;
   if (keys['KeyW']) az += 1;
   if (keys['KeyS']) az -= 1;
