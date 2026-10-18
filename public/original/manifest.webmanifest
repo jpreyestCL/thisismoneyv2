@@ -1,16 +1,20 @@
 {
+  "id": "./",
   "name": "This is Money",
-  "short_name": "ThisIsMoney",
-  "description": "Sobrevive, construye tu casa y gana plata. ¡Juego 3D para el navegador!",
-  "start_url": ".",
-  "display": "fullscreen",
+  "short_name": "This is Money",
+  "description": "Sobrevive, construye tu casa y gana plata. Juego 3D instalable.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "fullscreen"],
   "orientation": "landscape",
   "background_color": "#020617",
   "theme_color": "#0f172a",
   "lang": "es",
+  "categories": ["games"],
   "icons": [
-    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "icon.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "maskable" },
-    { "src": "assets/img_58.png", "sizes": "848x1264", "type": "image/png", "purpose": "any" }
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

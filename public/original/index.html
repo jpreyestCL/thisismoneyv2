@@ -7,8 +7,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="assets/img_58.png">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <title>This is Money</title>
 <style>
@@ -416,6 +416,13 @@
   .btn:hover { transform: translateY(-2px); background: oklch(83% .19 132); }
   .btn:active { transform: translateY(3px); box-shadow: 0 2px 0 oklch(42% .11 132); }
   .btn.secondary { background: var(--panel-soft) !important; color: var(--ink); border-color: var(--line); box-shadow: 0 4px 0 oklch(10% .02 235 / .7); }
+  #thiefModeBtn, #thiefModeBtn:hover, #thiefModeBtn:active {
+    background: #dc2626 !important; color: #fff !important; border-color: #fecaca !important;
+    box-shadow: 0 5px 0 #7f1d1d !important;
+  }
+  #thiefModeBtn.on, #thiefModeBtn.on:hover, #thiefModeBtn.on:active {
+    background: #ef4444 !important; box-shadow: 0 5px 0 #991b1b !important;
+  }
   .screen h1 { color: var(--ink); background: none; -webkit-text-fill-color: currentColor; }
 
   #start { align-items: stretch; justify-content: center; text-align: left; padding: clamp(18px, 4vw, 56px); }
@@ -678,6 +685,7 @@
         <button class="bankBtn" id="pauseCloud" style="grid-column:1 / span 2;">☁️ Guardar en la nube</button>
         <button class="bankBtn" id="pauseAccount" style="grid-column:1 / span 2;">👤 Mi cuenta</button>
         <button class="bankBtn" id="pauseWatch" style="grid-column:1 / span 2;">⌚ Modo reloj</button>
+        <button class="bankBtn" id="pauseInstall" style="grid-column:1 / span 2;">📲 Instalar app</button>
       </div>
       <div id="pauseCreativeRow" style="display:none; align-items:center; justify-content:center; gap:8px; margin-top:12px; padding:8px; background:rgba(168,85,247,.18); border-radius:10px;">
         <button class="bankBtn" id="pauseStageDown" style="width:44px;">➖</button>
@@ -839,6 +847,7 @@
         <button class="btn" id="startBtn">NUEVA PARTIDA</button>
         <button class="btn secondary" id="creativeBtn">MODO CREATIVO</button>
         <button class="btn secondary" id="thiefModeBtn">MODO LADRÓN: NO</button>
+        <button class="btn secondary" id="installAppBtn">📲 INSTALAR APP</button>
         <button class="btn secondary" id="skinModeBtn">✏️ PERSONALIZAR SKIN</button>
         <button class="btn secondary" id="startGuideBtn">VER GUÍA</button>
         <button class="btn secondary" id="startRankingBtn">🌎 RANKING MUNDIAL</button>
@@ -2375,10 +2384,7 @@ scene.add(playerAvatar);
 playerAvatar.traverse(o => { if (o.isMesh) o.userData.cuerpoBase = true; });
 const SKIN_KEY = 'tim_player_skin';
 const SKIN_ALTO = 2.16;
-const EJE_Z_PIEL = new THREE.Vector3(0, 0, 1);
-const pielQ1 = new THREE.Quaternion();
-const pielQ2 = new THREE.Quaternion();
-let playerSkinOn = false, playerSkinRig = null;
+let playerSkinOn = false, playerSkinRig = null, playerSkinFuente = null;
 function medirDibujo(data, w, h) {
   const opaco = (x, y) => data[(y * w + x) * 4 + 3] > 28;
   let minX = w, minY = h, maxX = -1, maxY = -1, n = 0;
@@ -2607,11 +2613,14 @@ function recortarPiel(canvas, pred) {
 }
 function ocultarCuerpoPorSkin() {
   if (!playerSkinOn) return;
-  playerAvatar.traverse(o => { if (o.isMesh && !o.userData.piezaSkin) o.visible = false; });
+  playerAvatar.traverse(o => {
+    if (!o.isMesh || o.userData.piezaSkin || o.userData.sobreCuerpo || o.userData.armaEquipada) return;
+    o.visible = false;
+  });
   const manga = viewmodel.children[0], puno = viewmodel.children[1];
   if (manga) manga.visible = false;
   if (puno) puno.visible = false;
-  if (viewmodel.userData.bracer) viewmodel.userData.bracer.visible = false;
+  acomodarArmaEnLaPiel();
 }
 function mostrarAvatarOriginal() {
   playerAvatar.traverse(o => { if (o.isMesh && !o.userData.piezaSkin) o.visible = true; });
@@ -2622,8 +2631,18 @@ function mostrarAvatarOriginal() {
   soltarManosPiel();
   if (typeof applyThiefLook === 'function') applyThiefLook();
 }
+function despegarEquipoDeLaPiel() {
+  if (!playerSkinRig) return;
+  const salvar = [];
+  for (const obj of playerSkinRig.partes) {
+    obj.traverse(o => { if (o.userData && o.userData.sobreCuerpo) salvar.push(o); });
+  }
+  for (const o of salvar) if (o.userData.padre) o.userData.padre.add(o); else playerAvatar.add(o);
+}
 function tirarPiel() {
   soltarManosPiel();
+  soltarArmaDeLaPiel();
+  despegarEquipoDeLaPiel();
   if (!playerSkinRig) return;
   for (const obj of playerSkinRig.partes) {
     if (obj.parent) obj.parent.remove(obj);
@@ -2636,11 +2655,6 @@ function tirarPiel() {
     });
   }
   playerSkinRig = null;
-}
-function girarPiezaPiel(grupo, eje, anguloX, anguloZ) {
-  pielQ1.setFromAxisAngle(eje, anguloX);
-  pielQ2.setFromAxisAngle(EJE_Z_PIEL, anguloZ);
-  grupo.quaternion.copy(pielQ2).multiply(pielQ1);
 }
 function montarPiel(canvas, corte) {
   tirarPiel();
@@ -2682,6 +2696,7 @@ function montarPiel(canvas, corte) {
     if (id === 5 && !seMonta(corte.partes.legR)) return true;
     return false;
   };
+  const medidas = { torso: null, cabeza: null, miembros: {} };
   const torso = recortarPiel(canvas, predTorso);
   if (torso) {
     const centro = corte.aMundo((torso.minX + torso.maxX + 1) / 2, (torso.minY + torso.maxY + 1) / 2);
@@ -2693,6 +2708,11 @@ function montarPiel(canvas, corte) {
     atras.position.set(centro.x, centro.y, 0.1);
     atras.material.side = THREE.BackSide;
     partesRig.push(frente, atras);
+    medidas.torso = {
+      x: centro.x, y: centro.y,
+      ancho: torso.canvas.width * corte.esc,
+      alto: torso.canvas.height * corte.esc
+    };
   }
   const miembro = (nombre, z) => {
     const p = corte.partes[nombre];
@@ -2702,27 +2722,61 @@ function montarPiel(canvas, corte) {
     const punta = corte.aMundo(p.punta.x, p.punta.y);
     const dx = punta.x - piv.x, dy = punta.y - piv.y;
     const largo = Math.hypot(dx, dy);
+    const origen = p.pivote, destino = p.punta;
+    const largoPix = Math.hypot(destino.x - origen.x, destino.y - origen.y) || 1;
+    const ux = (destino.x - origen.x) / largoPix, uy = (destino.y - origen.y) / largoPix;
+    const tDe = (x, y) => (x + 0.5 - origen.x) * ux + (y + 0.5 - origen.y) * uy;
+    const codo = largoPix * 0.5, munecaT = largoPix * 0.78;
+    const pega = Math.max(4, largoPix * 0.1);
     const g = new THREE.Group();
     g.position.set(piv.x, piv.y, 0);
-    g.userData.eje = new THREE.Vector3(-dy / largo, dx / largo, 0);
+    const junta = new THREE.Group();
+    const jointAv = corte.aMundo(origen.x + ux * codo, origen.y + uy * codo);
+    junta.position.set(jointAv.x - piv.x, jointAv.y - piv.y, 0);
+    const extremo = new THREE.Group();
+    const wristAv = corte.aMundo(origen.x + ux * munecaT, origen.y + uy * munecaT);
+    extremo.position.set(wristAv.x - jointAv.x, wristAv.y - jointAv.y, 0);
+    junta.add(extremo);
+    g.add(junta);
+    g.userData.junta = junta;
+    g.userData.extremo = extremo;
+    const pixW = (p.maxX - p.minX + 1) * corte.esc, pixH = (p.maxY - p.minY + 1) * corte.esc;
+    medidas.miembros[nombre] = {
+      largo,
+      grosor: Math.max(0.1, Math.min(pixW, pixH) * 0.9),
+      dir: new THREE.Vector3(dx / largo, dy / largo, 0)
+    };
     playerAvatar.add(g);
     partesRig.push(g);
     huesos[nombre] = g;
     const solapa = (x, y) => {
       if (corte.marca[y * corte.w + x] !== 1) return false;
-      if (nombre === 'armL') return y >= p.minY && y <= p.maxY && x > p.maxX && x <= p.maxX + 5;
-      if (nombre === 'armR') return y >= p.minY && y <= p.maxY && x < p.minX && x >= p.minX - 5;
-      return y < p.minY && y >= p.minY - 5 && x >= p.minX && x <= p.maxX;
+      if (nombre === 'armL') return y >= p.minY && y <= p.maxY && x > p.maxX && x <= p.maxX + 8;
+      if (nombre === 'armR') return y >= p.minY && y <= p.maxY && x < p.minX && x >= p.minX - 8;
+      return y < p.minY && y >= p.minY - 8 && x >= p.minX && x <= p.maxX;
     };
-    const pieza = recortarPiel(canvas, (x, y) => corte.marca[y * corte.w + x] === id || solapa(x, y));
-    if (pieza) poner(pieza, g, piv, z, 3, false);
+    const esDel = (x, y) => corte.marca[y * corte.w + x] === id || solapa(x, y);
+    const partir = largoPix >= 12;
+    const superior = partir ? recortarPiel(canvas, (x, y) => esDel(x, y) && tDe(x, y) <= codo + pega) : null;
+    const mano = partir ? recortarPiel(canvas, (x, y) => esDel(x, y) && tDe(x, y) >= munecaT - pega) : null;
+    const inferior = partir ? recortarPiel(canvas, (x, y) => esDel(x, y) && tDe(x, y) >= codo - pega && (mano ? tDe(x, y) <= munecaT + pega : true)) : null;
+    if (superior) poner(superior, g, piv, z, 3, false);
+    if (inferior) poner(inferior, junta, jointAv, z + 0.02, 4, false);
+    if (mano) poner(mano, extremo, wristAv, z + 0.04, 5, false);
+    g.userData.dobla = !!(inferior || mano);
+    if (!superior && !inferior && !mano) {
+      const pieza = recortarPiel(canvas, esDel);
+      if (pieza) poner(pieza, g, piv, z, 3, false);
+    }
   };
   miembro('armL', 0.2);
   miembro('armR', 0.2);
   miembro('legL', 0.18);
   miembro('legR', 0.18);
-  playerSkinRig = { mallas, partes: partesRig, huesos, extremos };
+  medidas.cabeza = medirCabezaPiel(canvas, corte);
+  playerSkinRig = { mallas, partes: partesRig, huesos, extremos, medidas };
   montarManosPiel(huesos);
+  acomodarArmaduraJugador();
 }
 function espaldaSinCara(src) {
   const w = src.width, h = src.height;
@@ -2752,45 +2806,58 @@ function espaldaSinCara(src) {
 }
 function asegurarManosPiel() {
   if (viewmodel.userData.manosPiel) return viewmodel.userData.manosPiel;
-  const grupo = new THREE.Group();
-  const plano = (x, z) => {
+  const plano = (poso) => {
     const m = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.28, 0.72),
+      new THREE.PlaneGeometry(1, 1),
       new THREE.MeshBasicMaterial({ transparent: true, alphaTest: 0.08, side: THREE.FrontSide, depthWrite: false })
     );
-    m.position.set(x, -0.02, z);
     m.visible = false;
     m.userData.piezaSkin = true;
-    grupo.add(m);
+    m.userData.poso = poso;
+    m.renderOrder = 12;
+    m.position.set(poso.x, poso.y, poso.z);
+    m.rotation.set(poso.rx, poso.ry, poso.rz);
     return m;
   };
-  const der = plano(0.02, -0.22);
-  const izq = plano(-0.86, -0.16);
-  viewmodel.add(grupo);
-  viewmodel.userData.manosPiel = { grupo, der, izq };
+  // Vista normal: una a cada lado, delante del pecho. La muñeca apunta hacia abajo,
+  // como si el brazo saliera de ti, y el dibujo se ve entero de frente.
+  const der = plano({ x: -0.16, y: 0.32, z: 0.2, rx: -0.28, ry: -0.42, rz: 0.95 });
+  const izq = plano({ x: -0.32, y: -0.22, z: -0.7, rx: -0.28, ry: 0.42, rz: -0.95 });
+  viewmodel.add(der);
+  camera.add(izq);
+  viewmodel.userData.manosPiel = { der, izq };
   return viewmodel.userData.manosPiel;
 }
 function texturaDelHueso(hueso) {
-  let tex = null;
   if (!hueso) return null;
-  hueso.traverse(o => { if (o.isMesh && o.material && o.material.map) tex = o.material.map; });
-  return tex;
+  const sacar = (nodo) => {
+    let tex = null;
+    if (!nodo) return null;
+    nodo.traverse(o => { if (o.isMesh && o.material && o.material.map) tex = o.material.map; });
+    return tex;
+  };
+  return sacar(hueso.userData.extremo) || sacar(hueso.userData.junta) || sacar(hueso);
 }
 function montarManosPiel(huesos) {
   const manos = asegurarManosPiel();
   const poner = (mesh, tex) => {
     mesh.material.map = tex || null;
     mesh.material.needsUpdate = true;
-    mesh.visible = !!tex;
+    mesh.visible = false;
+    const img = tex && tex.image;
+    const w = Math.max(1, img && img.width || 1), h = Math.max(1, img && img.height || 1);
+    const aspecto = w / h;
+    let alto = 0.26, ancho = alto * aspecto;
+    if (ancho > 0.3) { ancho = 0.3; alto = ancho / aspecto; }
+    if (alto > 0.3) { alto = 0.3; ancho = alto * aspecto; }
+    mesh.scale.set(ancho, alto, 1);
   };
   poner(manos.der, texturaDelHueso(huesos.armR));
   poner(manos.izq, texturaDelHueso(huesos.armL));
-  manos.grupo.visible = false;
 }
 function soltarManosPiel() {
   const manos = viewmodel.userData.manosPiel;
   if (!manos) return;
-  manos.grupo.visible = false;
   manos.der.material.map = null;
   manos.izq.material.map = null;
   manos.der.visible = false;
@@ -2804,8 +2871,11 @@ function pielEnElAire() {
 function aplicarSkinDibujada(dataUrl) {
   if (!dataUrl) {
     playerSkinOn = false;
+    playerSkinFuente = null;
     tirarPiel();
     mostrarAvatarOriginal();
+    applyPlayerArmor();
+    refrescarCartelDeCara();
     return;
   }
   playerSkinOn = true;
@@ -2818,8 +2888,10 @@ function aplicarSkinDibujada(dataUrl) {
     g.drawImage(img, 0, 0);
     const corte = clasificarPiel(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height);
     if (!corte) { aplicarSkinDibujada(null); return; }
+    playerSkinFuente = c;
     montarPiel(c, corte);
     ocultarCuerpoPorSkin();
+    refrescarCartelDeCara();
   };
   img.src = dataUrl;
 }
@@ -2827,19 +2899,22 @@ function colocarSkinDibujada() {
   if (playerSkinOn) ocultarCuerpoPorSkin();
   const manos = viewmodel.userData.manosPiel;
   if (manos) {
-    const verManos = !!(playerSkinOn && cameraMode === 0 && (manos.der.visible || manos.izq.visible));
-    manos.grupo.visible = verManos;
-    if (verManos && condena && (condena.pose === 'sopa' || condena.almuerzo === 'plato')) manos.grupo.visible = false;
-    else if (verManos) {
-      const aire = pielEnElAire();
-      const fase = playerAvatar.userData.walkPhase || 0;
-      const paso = aire ? 0 : Math.sin(fase) * 0.14;
-      const alza = aire ? 0.07 : 0;
-      manos.der.rotation.z = -0.18 + paso;
-      manos.izq.rotation.z = 0.18 - paso;
-      manos.der.position.y = -0.02 + alza;
-      manos.izq.position.y = -0.02 + alza;
-    }
+    const tapadas = !!(condena && (condena.pose === 'sopa' || condena.almuerzo === 'plato'));
+    const verManos = !!(playerSkinOn && cameraMode === 0 && viewmodel.visible && !tapadas);
+    const apoyar = (mesh, paso, alza) => {
+      const p = mesh.userData.poso;
+      if (!p) return;
+      mesh.visible = !!(verManos && mesh.material && mesh.material.map);
+      mesh.position.set(p.x, p.y + alza + paso, p.z);
+      mesh.rotation.set(p.rx, p.ry, p.rz);
+    };
+    const aire = pielEnElAire();
+    const fase = playerAvatar.userData.walkPhase || 0;
+    const paso = aire ? 0 : Math.sin(fase) * 0.025;
+    const alza = aire ? 0.05 : 0;
+    apoyar(manos.der, paso, alza);
+    apoyar(manos.izq, -paso, alza);
+    if (verManos && viewmodel.userData.bracer && viewmodel.userData.bracer.visible) acomodarBrazalete(true);
   }
   if (!playerSkinRig) return;
   const mostrar = !!(playerSkinOn && playerAvatar.visible);
@@ -2848,12 +2923,20 @@ function colocarSkinDibujada() {
   const l = playerAvatar.userData.limbs;
   if (!l) return;
   const aire = pielEnElAire();
-  const salto = { armL: -0.32, armR: -0.32, legL: -0.4, legR: -0.4 };
+  const salto = { armL: -0.95, armR: -0.95, legL: -0.4, legR: -0.4 };
+  const flexSalto = { armL: -1.15, armR: -1.15, legL: 0.9, legR: 0.9 };
   for (const nombre of ['armL', 'armR', 'legL', 'legR']) {
     const h = l[nombre], g = playerSkinRig.huesos[nombre];
-    if (!h || !g || !g.userData.eje) continue;
-    if (aire) girarPiezaPiel(g, g.userData.eje, salto[nombre], 0);
-    else girarPiezaPiel(g, g.userData.eje, h.rotation.x, h.rotation.z);
+    if (!h || !g) continue;
+    if (aire) {
+      g.rotation.set(salto[nombre], 0, nombre.indexOf('L') >= 0 ? -0.08 : 0.08);
+      if (g.userData.junta) g.userData.junta.rotation.set(g.userData.dobla ? flexSalto[nombre] : 0, 0, 0);
+      if (g.userData.extremo) g.userData.extremo.rotation.set(0, 0, 0);
+    } else {
+      g.rotation.set(h.rotation.x, h.rotation.y, h.rotation.z);
+      if (g.userData.junta) g.userData.junta.rotation.copy(h.userData.junta ? h.userData.junta.rotation : g.userData.junta.rotation);
+      if (g.userData.extremo) g.userData.extremo.rotation.copy(h.userData.extremo ? h.userData.extremo.rotation : g.userData.extremo.rotation);
+    }
   }
 }
 try { const guardada = localStorage.getItem(SKIN_KEY); if (guardada) aplicarSkinDibujada(guardada); } catch (e) {}
@@ -2882,23 +2965,219 @@ function applyMinecraftArmor(person, tier, scale) {
   person.userData.mcArmorTier = tier || null;
   if (!tier || !ARMOR_TIERS[tier]) return;
   const T = ARMOR_TIERS[tier], k = scale || 1, parts = [];
-  const piece = (parent, w, h, d, x, y, z, col) => {
+  const marcar = (m, parent, rol, lado) => {
+    m.userData.sobreCuerpo = true;
+    m.userData.rol = rol;
+    m.userData.lado = lado || '';
+    m.userData.padre = parent;
+    m.userData.base = m.position.clone();
+    m.renderOrder = 6;
+    if (tier === 'obsidiana' && m.material) {
+      m.material.emissive.setHex(0x6d28d9);
+      m.material.emissiveIntensity = 0.55;
+      m.material.metalness = 0.42;
+      m.material.roughness = 0.28;
+    } else if (tier === 'metal' && m.material) {
+      m.material.metalness = 0.72;
+      m.material.roughness = 0.22;
+    }
+    parts.push(m);
+    return m;
+  };
+  const piece = (parent, w, h, d, x, y, z, col, rol, lado) => {
     const m = new THREE.Mesh(smoothBox(w * k, h * k, d * k), mat(col));
-    m.position.set(x * k, y * k, z * k); m.castShadow = true; parent.add(m); parts.push(m); return m;
+    m.position.set(x * k, y * k, z * k); m.castShadow = true; parent.add(m);
+    return marcar(m, parent, rol, lado);
   };
   const limbs = person.userData.limbs || {};
   const helm = new THREE.Mesh(new THREE.SphereGeometry(0.32 * k, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62), mat(T.color));
-  helm.position.set(0, 2.0 * k, -0.02 * k); helm.castShadow = true; person.add(helm); parts.push(helm);
-  piece(person, .5, .58, .46, 0, 1.38, 0.03, T.color);       // peto
-  piece(person, .48, .1, .3, 0, 1.04, 0.05, T.trim);         // cinturón
-  piece(person, .28, .08, .28, 0, 1.72, 0.04, T.trim);       // cuello
-  if (limbs.armL) piece(limbs.armL, .24, .22, .24, 0, -.08, 0, T.color);
-  if (limbs.armR) piece(limbs.armR, .24, .22, .24, 0, -.08, 0, T.color);
-  for (const leg of [limbs.legL, limbs.legR]) if (leg) {
-    piece(leg, .26, .32, .26, 0, -.18, 0, T.color);          // greba
-    piece(leg.userData.extremo || leg, .22, .1, .3, 0, 0, .05, T.trim); // bota, sigue al pie
+  helm.position.set(0, 2.0 * k, -0.02 * k); helm.castShadow = true; person.add(helm);
+  marcar(helm, person, 'casco');
+  piece(person, .5, .58, .46, 0, 1.38, 0.03, T.color, 'peto');
+  piece(person, .48, .1, .3, 0, 1.04, 0.05, T.trim, 'cinturon');
+  piece(person, .28, .08, .28, 0, 1.72, 0.04, T.trim, 'cuello');
+  if (limbs.armL) piece(limbs.armL, .24, .22, .24, 0, -.08, 0, T.color, 'hombrera', 'armL');
+  if (limbs.armR) piece(limbs.armR, .24, .22, .24, 0, -.08, 0, T.color, 'hombrera', 'armR');
+  const piernas = [['legL', limbs.legL], ['legR', limbs.legR]];
+  for (const [lado, leg] of piernas) if (leg) {
+    piece(leg, .26, .32, .26, 0, -.18, 0, T.color, 'greba', lado);
+    piece(leg.userData.extremo || leg, .22, .1, .3, 0, 0, .05, T.trim, 'bota', lado);
   }
   person.userData.mcArmor = parts;
+}
+const EJE_MIEMBRO_ABAJO = new THREE.Vector3(0, -1, 0);
+function medirCabezaPiel(canvas, corte) {
+  const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+  const yFin = Math.floor(corte.minY + Math.max(4, corte.bh * 0.3));
+  let minX = 1e9, minY = 1e9, maxX = -1, maxY = -1, n = 0;
+  const x0 = Math.max(0, Math.floor(corte.L)), x1 = Math.min(canvas.width - 1, Math.ceil(corte.R));
+  for (let y = corte.minY; y <= yFin && y < canvas.height; y++) {
+    for (let x = x0; x <= x1; x++) {
+      if (data[(y * canvas.width + x) * 4 + 3] <= 28) continue;
+      n++;
+      if (x < minX) minX = x; if (y < minY) minY = y;
+      if (x > maxX) maxX = x; if (y > maxY) maxY = y;
+    }
+  }
+  if (n < 6) return null;
+  const c = corte.aMundo((minX + maxX + 1) / 2, (minY + maxY + 1) / 2);
+  return { x: c.x, y: c.y, ancho: (maxX - minX + 1) * corte.esc, alto: (maxY - minY + 1) * corte.esc };
+}
+function restaurarTrajeBase() {
+  const r = playerAvatar.userData.rayasNaranjas;
+  if (r) { r.position.set(0, 0, 0); r.scale.set(1, 1, 1); }
+  const g = playerAvatar.userData.gorroHoyos;
+  if (g) { g.position.set(0, 0, 0); g.scale.set(1, 1, 1); }
+}
+function devolverPiezaAlCuerpo(m, extra, cascoAlto) {
+  const padre = m.userData.padre || playerAvatar;
+  if (m.parent !== padre) padre.add(m);
+  const base = m.userData.base;
+  if (base) m.position.copy(base);
+  m.quaternion.identity();
+  const s = extra * (m.userData.rol === 'casco' && cascoAlto ? 1.28 : 1);
+  m.scale.setScalar(s);
+  if (m.userData.rol === 'casco' && cascoAlto) m.position.y += 0.1;
+  m.visible = true;
+}
+function ponerPiezaEnMiembro(mesh, nombre, rol, extra) {
+  const g = playerSkinRig.huesos[nombre];
+  const info = playerSkinRig.medidas.miembros[nombre];
+  if (!g || !info || info.largo < 0.05) return false;
+  const dobla = !!(g.userData.dobla && g.userData.junta);
+  let padre = g, dist = info.largo * 0.18, alto = info.largo * 0.3, z = 0.1;
+  if (rol === 'greba' && dobla) { padre = g.userData.junta; dist = info.largo * 0.14; alto = info.largo * 0.3; z = 0.12; }
+  else if (rol === 'greba') { dist = info.largo * 0.32; alto = info.largo * 0.38; }
+  else if (rol === 'bota' && dobla && g.userData.extremo) { padre = g.userData.extremo; dist = info.largo * 0.1; alto = Math.max(0.08, info.largo * 0.18); z = 0.14; }
+  else if (rol === 'bota' && dobla) { padre = g.userData.junta; dist = info.largo * 0.34; alto = Math.max(0.08, info.largo * 0.18); z = 0.12; }
+  else if (rol === 'bota') { dist = info.largo * 0.8; alto = Math.max(0.08, info.largo * 0.22); z = 0.12; }
+  padre.add(mesh);
+  const d = info.dir;
+  const grosor = Math.max(0.12, info.grosor) * extra;
+  mesh.position.set(d.x * dist, d.y * dist, 0.02);
+  mesh.quaternion.setFromUnitVectors(EJE_MIEMBRO_ABAJO, d);
+  if (rol === 'hombrera') mesh.scale.set(grosor / 0.24, alto / 0.22, (grosor * 1.8) / 0.24);
+  else if (rol === 'greba') mesh.scale.set(grosor / 0.26, alto / 0.32, (grosor * 1.8) / 0.26);
+  else mesh.scale.set((grosor * 1.15) / 0.22, alto / 0.1, (grosor * 2.2) / 0.3);
+  mesh.visible = true;
+  return true;
+}
+function acomodarBrazalete(conPiel) {
+  const b = viewmodel.userData.bracer;
+  if (!b) return;
+  const manos = viewmodel.userData.manosPiel;
+  const der = manos && manos.der;
+  if (conPiel && der && der.material && der.material.map) {
+    const brazo = playerSkinRig && playerSkinRig.medidas && playerSkinRig.medidas.miembros.armR;
+    const grosor = (brazo && brazo.grosor) || 0.2;
+    b.position.set(der.position.x, der.position.y + 0.22, der.position.z + 0.03);
+    b.scale.set(Math.max(0.75, grosor / 0.2), 0.42, 0.7);
+  } else {
+    b.position.set(0, 0, -0.16);
+    b.scale.set(1, 1, 1);
+  }
+}
+// La armadura, el traje y el gorro siguen la skin dibujada y se ponen unos sobre otros.
+function acomodarArmaduraJugador() {
+  if (!playerAvatar) return;
+  const wearN = !!(state.thief && state.thief.wearNaranjo);
+  const wearG = !!(state.thief && state.thief.wearGorro);
+  const extra = wearN ? 1.12 : 1;
+  const parts = playerAvatar.userData.mcArmor || [];
+  const med = playerSkinOn && playerSkinRig && playerSkinRig.medidas;
+  const t = med && med.torso;
+  const head = med && (med.cabeza || (t && { x: t.x, y: t.y + t.alto * 0.36, ancho: t.ancho * 0.62, alto: t.alto * 0.28 }));
+  if (!med) {
+    restaurarTrajeBase();
+    for (const m of parts) devolverPiezaAlCuerpo(m, extra, wearG);
+  } else {
+    if (t && playerAvatar.userData.rayasNaranjas) {
+      const r = playerAvatar.userData.rayasNaranjas;
+      const sy = Math.max(0.45, t.alto * 0.5 / 0.5);
+      r.scale.set(Math.max(0.35, t.ancho * 0.9 / 0.5), sy, 1);
+      r.position.set(t.x, t.y - 1.3 * sy, 0.18);
+    }
+    if (head && playerAvatar.userData.gorroHoyos) {
+      const g = playerAvatar.userData.gorroHoyos;
+      const s = Math.max(0.65, Math.max(head.ancho, head.alto) / 0.64);
+      g.scale.setScalar(s);
+      g.position.set(head.x, head.y - 1.92 * s, 0.02);
+    }
+    for (const m of parts) {
+      const rol = m.userData.rol;
+      if (rol === 'casco' && head) {
+        const radio = Math.max(0.2, Math.max(head.ancho, head.alto) * 0.68) * (wearG ? 1.34 : 1.12) * extra;
+        playerAvatar.add(m);
+        m.quaternion.identity();
+        m.scale.setScalar(radio / 0.32);
+        m.position.set(head.x, head.y + head.alto * (wearG ? 0.22 : 0.02), -0.06);
+        m.visible = true;
+      } else if (rol === 'peto' && t) {
+        playerAvatar.add(m);
+        m.quaternion.identity();
+        m.scale.set((t.ancho * 1.05 * extra) / 0.5, (t.alto * 0.42 * extra) / 0.58, 1.25 * extra);
+        m.position.set(t.x, t.y, 0.02);
+        m.visible = true;
+      } else if (rol === 'cinturon' && t) {
+        playerAvatar.add(m);
+        m.quaternion.identity();
+        m.scale.set((t.ancho * 0.95 * extra) / 0.48, Math.max(0.85, (t.alto * 0.1 * extra) / 0.1), 1.35 * extra);
+        m.position.set(t.x, t.y - t.alto * 0.28, 0.02);
+        m.visible = true;
+      } else if (rol === 'cuello' && head) {
+        playerAvatar.add(m);
+        m.quaternion.identity();
+        m.scale.set((head.ancho * 0.85 * extra) / 0.28, 0.9 * extra, 1.35 * extra);
+        m.position.set(head.x, head.y - head.alto * 0.55, 0.02);
+        m.visible = true;
+      } else if (rol === 'hombrera' || rol === 'greba' || rol === 'bota') {
+        m.visible = ponerPiezaEnMiembro(m, m.userData.lado, rol, extra);
+      } else devolverPiezaAlCuerpo(m, extra, wearG);
+    }
+  }
+  const tier = armorTierFor(state.armorFactor);
+  if (viewmodel.userData.bracer) {
+  viewmodel.userData.bracer.visible = !!tier;
+  if (tier) {
+    viewmodel.userData.bracer.material = mat(ARMOR_TIERS[tier].color);
+    if (tier === 'obsidiana') {
+      viewmodel.userData.bracer.material.emissive.setHex(0x6d28d9);
+      viewmodel.userData.bracer.material.emissiveIntensity = 0.45;
+    }
+  }
+  acomodarBrazalete(!!(tier && med));
+  }
+}
+const EJE_ESPADA = new THREE.Vector3(0, 1, 0);
+const dirEspada = new THREE.Vector3();
+function soltarArmaDeLaPiel() {
+  const arm = playerAvatar && playerAvatar.userData.limbs && playerAvatar.userData.limbs.armR;
+  const mount = arm && arm.userData.toolMount;
+  if (!arm || !mount || mount.parent === arm) return;
+  arm.add(mount);
+  mount.position.set(0, -.72, .08);
+  mount.rotation.set(-.25, 0, -.18);
+  mount.scale.setScalar(1);
+}
+function acomodarArmaEnLaPiel() {
+  const arm = playerAvatar && playerAvatar.userData.limbs && playerAvatar.userData.limbs.armR;
+  const mount = arm && arm.userData.toolMount;
+  if (!mount) return;
+  mount.traverse(o => { if (o.isMesh) { o.userData.armaEquipada = true; o.visible = true; } });
+  const piel = playerSkinOn && playerSkinRig && playerSkinRig.huesos && playerSkinRig.huesos.armR;
+  const info = piel && playerSkinRig.medidas && playerSkinRig.medidas.miembros.armR;
+  if (!(piel && info && info.largo > 0.05)) { soltarArmaDeLaPiel(); return; }
+  const mano = piel.userData.extremo || piel.userData.junta || piel;
+  if (mount.parent !== mano) mano.add(mount);
+  const resto = mano === piel.userData.extremo ? info.largo * 0.14 : info.largo * 0.72;
+  const d = info.dir;
+  mount.position.set(d.x * resto + 0.1, d.y * resto, 0.08);
+  dirEspada.copy(d);
+  if (dirEspada.lengthSq() < 1e-6) dirEspada.set(0, -1, 0);
+  dirEspada.normalize().negate();
+  mount.quaternion.setFromUnitVectors(EJE_ESPADA, dirEspada);
+  mount.scale.setScalar(Math.max(0.85, Math.min(1.25, info.largo / 0.75)));
+  mount.visible = true;
 }
 // El jugador: se ve en las cámaras de 3ª persona y en la manga del viewmodel
 function applyPlayerArmor() {
@@ -2930,8 +3209,9 @@ function syncHeldTool(forceKind) {
   const arm = playerAvatar.userData.limbs && playerAvatar.userData.limbs.armR;
   if (arm) {
     if (!arm.userData.toolMount) { const mount = new THREE.Group(); mount.position.set(0, -.72, .08); mount.rotation.set(-.25, 0, -.18); arm.add(mount); arm.userData.toolMount = mount; }
-    replaceToolInMount(arm.userData.toolMount, kind, color, .52, true);
+    replaceToolInMount(arm.userData.toolMount, kind, color, .62, true);
   }
+  acomodarArmaEnLaPiel();
 }
 const cameraAim = new THREE.Vector3(), cameraDesired = new THREE.Vector3(), cameraOffset = new THREE.Vector3();
 const reduceGameMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -2977,8 +3257,12 @@ function updatePlayerCamera(dt) {
     if (l) {
       l.armL.rotation.set(-.7, .15, .2);
       l.armR.rotation.set(-.7, -.15, -.2);
-      l.legL.rotation.set(1.05, 0, .05);
-      l.legR.rotation.set(1.05, 0, -.05);
+      l.legL.rotation.set(.55, 0, .08);
+      l.legR.rotation.set(.85, 0, -.08);
+      ponerJunta(l.armL, -.65, .1);
+      ponerJunta(l.armR, -.7, .1);
+      ponerJunta(l.legL, .7, -.15);
+      ponerJunta(l.legR, .45, -.1);
     }
     if (cameraMode === 0) {
       camera.position.copy(player.position);
@@ -3624,6 +3908,8 @@ function insideStoreFloor(x, z, margen = 1.5) {
   for (const f of storeFloors) if (Math.abs(x - f.x) <= f.hw + margen && Math.abs(z - f.z) <= f.hd + margen) return true;
   return false;
 }
+let totusCaja = null;
+let totusRoboCd = 0;
 function makeStore(cx, cz, items, title, roofColor) {
   const wallC = 0xe2e8f0, H = 5, T = 0.5, hw = 11, hd = 11;
   storeFloors.push({ x: cx, z: cz, hw, hd });
@@ -3688,6 +3974,13 @@ function makeStore(cx, cz, items, title, roofColor) {
   }
   const caja = new THREE.Mesh(smoothBox(3.4, 1.05, 1.1), mat(0xe2e8f0));   // mostrador de la caja
   caja.position.set(cx + hw - 3, .52, cz + hd - 2.4); caja.castShadow = true; scene.add(caja);
+  if (title === 'SUPER') {
+    totusCaja = { x: cx + hw - 3, z: cz + hd - 2.4 };
+    const avisoCaja = makeSign('CAJA TOTUS · E', 0xf87171);
+    avisoCaja.scale.set(.42, .42, .42);
+    avisoCaja.position.set(cx + hw - 3, 2.2, cz + hd - 2.05);
+    scene.add(avisoCaja);
+  }
   const registradora = new THREE.Mesh(smoothBox(.8, .5, .6), mat(0x334155));
   registradora.position.set(cx + hw - 3, 1.3, cz + hd - 2.4); scene.add(registradora);
   const pantallita = new THREE.Mesh(smoothBox(.5, .3, .05), new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x16a34a, emissiveIntensity: .7 }));
@@ -3887,7 +4180,59 @@ function buildTotuCine() {
     const lobbyLuz = new THREE.PointLight(0xffedd5, .55, 16, 1.8);
     lobbyLuz.position.set(cx, alto - 1.1, -25); scene.add(lobbyLuz);
   }
+  ponerSnacksCine();
   for (let i = 0; i < 3; i++) armarSala(i);
+}
+const CINE_SNACKS = [
+  { id: 'palomitas', name: 'Palomitas', price: 30, hunger: 42, hp: 16, x: 31.2, z: -12.6 },
+  { id: 'dulces', name: 'Dulces', price: 5, hunger: 14, hp: 8, x: 35.6, z: -12.6 },
+];
+function ponerSnacksCine() {
+  const barra = new THREE.Mesh(smoothBox(6.4, 1.05, 1.15), mat(0x44403c));
+  barra.position.set(33.4, .52, -12.6); barra.castShadow = true; scene.add(barra);
+  addObstacle(33.4, -12.6, 6.4, 1.15, 1.1, 'totu');
+  const letrero = makeSign('DULCES Y PALOMITAS', 0xfbbf24);
+  letrero.scale.set(.38, .38, .38); letrero.position.set(33.4, 2.2, -12.6); scene.add(letrero);
+  const palo = CINE_SNACKS[0], dulce = CINE_SNACKS[1];
+  const balde = new THREE.Mesh(new THREE.CylinderGeometry(.22, .16, .38, 10), mat(0xef4444));
+  balde.position.set(palo.x, 1.22, palo.z); scene.add(balde);
+  const maiz = new THREE.Mesh(new THREE.SphereGeometry(.2, 10, 8), mat(0xfef3c7));
+  maiz.position.set(palo.x, 1.42, palo.z); scene.add(maiz);
+  const sp = makeSign('PALOMITAS $30', 0xfde68a);
+  sp.scale.set(.28, .28, .28); sp.position.set(palo.x, 1.95, palo.z); scene.add(sp);
+  for (let i = 0; i < 3; i++) {
+    const c = new THREE.Mesh(smoothBox(.22, .28, .12), mat([0xec4899, 0x22c55e, 0x38bdf8][i]));
+    c.position.set(dulce.x + (i - 1) * .28, 1.22, dulce.z); scene.add(c);
+  }
+  const sd = makeSign('DULCES $5', 0xf9a8d4);
+  sd.scale.set(.28, .28, .28); sd.position.set(dulce.x, 1.95, dulce.z); scene.add(sd);
+}
+function snackCineCerca() {
+  let best = null, bd = 2.35;
+  for (const s of CINE_SNACKS) {
+    const d = Math.hypot(player.position.x - s.x, player.position.z - s.z);
+    if (d < bd) { bd = d; best = s; }
+  }
+  return best;
+}
+function comprarSnackCine(s) {
+  if (state.hunger >= 100 && state.hp >= 100) {
+    toast(s.id === 'palomitas' ? '🍿 No tienes hambre y ya tienes toda la vida' : '🍬 No tienes hambre y ya tienes toda la vida');
+    return true;
+  }
+  const precio = state.creative ? 0 : s.price;
+  if (state.money < precio) { toast('💸 ' + s.name + ' cuesta $' + s.price); return true; }
+  if (precio) addMoney(-precio);
+  const hambreAntes = state.hunger, vidaAntes = state.hp;
+  if (state.hunger < 100) state.hunger = Math.min(100, state.hunger + s.hunger);
+  if (state.hp < 100) state.hp = Math.min(100, state.hp + s.hp);
+  const partes = [];
+  const dh = Math.round(state.hunger - hambreAntes), dv = Math.round(state.hp - vidaAntes);
+  if (dh > 0) partes.push('+' + dh + ' hambre');
+  if (dv > 0) partes.push('+' + dv + ' vida');
+  toast((s.id === 'palomitas' ? '🍿 ' : '🍬 ') + s.name + (partes.length ? ' · ' + partes.join(' · ') : ''));
+  beep(520, .07, .04);
+  return true;
 }
 function armarSala(i) {
   const scx = centroSala(i);
@@ -4093,6 +4438,8 @@ function tryCine() {
   if (state.planet !== 'tierra' || state.country) return false;
   if (sitOn && sitOn.movieSeat) return standUp(false);
   if (sitOn || state.driving || state.buildMode) return false;
+  const snack = snackCineCerca();
+  if (snack) return comprarSnackCine(snack);
   if (dist2D(player.position, TOTU.senora) < 3.2) { openCineBox(); return true; }
   const puerta = salaDePuertaCerca();
   if (puerta) return usarPuertaCine(puerta);
@@ -4102,6 +4449,8 @@ function tryCine() {
 }
 function cinePrompt() {
   if (state.planet !== 'tierra' || state.country || state.driving || state.buildMode || (sitOn && sitOn.movieSeat)) return null;
+  const snack = snackCineCerca();
+  if (snack) return { key: 'E', touch: snack.id === 'palomitas' ? '🍿' : '🍬', text: snack.name + ' · $' + snack.price + ' · hambre y vida' };
   if (dist2D(player.position, TOTU.senora) < 3.2) return { key: 'E', touch: '🎟️', text: cineBoleto ? 'Tu boleto: ' + cineBoleto.titulo : 'Comprar boleto · hay varias películas' };
   const puerta = salaDePuertaCerca();
   if (puerta) {
@@ -4114,6 +4463,7 @@ function cinePrompt() {
   return null;
 }
 function updateCine(dt) {
+  if (totusRoboCd > 0) totusRoboCd = Math.max(0, totusRoboCd - dt);
   const sentado = !!(sitOn && sitOn.movieSeat);
   cineOscuridad += ((sentado ? 1 : 0) - cineOscuridad) * Math.min(1, dt * 1.1);
   if (!sentado && !dentroDeTotu(player.position.x, player.position.z, 8)) return;
@@ -4497,7 +4847,7 @@ const BLACK_MARKET = [
   { key: 'bm_confeti', name: 'Granada de confeti', price: 240, color: 0xec4899, gadget: 'confeti', icon: '🎉', blurb: 'Una nube de papelitos. Aturde a los monstruos cerca.' },
   { key: 'bm_radio', name: 'Radio chatarra', price: 380, color: 0x334155, gadget: 'radio', icon: '📻', blurb: 'Pitido cuando se acerca un patrullero.' },
   { key: 'bm_naranjo', name: 'Traje naranjo de ladrón', price: 1200, color: 0xf97316, icon: '🟠', thief: 'naranjo', blurb: 'Uniforme naranja de la cárcel. Con el gorro puesto, el cartel del banco es una cámara desde arriba y no muestra tu cara.' },
-  { key: 'bm_gorro', name: 'Gorro con hoyos', price: 700, color: 0x111827, icon: '🎭', thief: 'gorro', blurb: 'Gorro negro con hoyos para los ojos. Si robas el banco sin este gorro, el cartel de buscado lleva tu cara.' },
+  { key: 'bm_gorro', name: 'Gorro con hoyos', price: 700, color: 0x111827, icon: '🎭', thief: 'gorro', blurb: 'Gorro negro con hoyos para los ojos. Si robas el banco sin este gorro, el cartel de buscado lleva el dibujo de tu skin.' },
   { key: 'bm_hacker', name: 'Sistema hacker', price: 2200, color: 0x22d3ee, icon: '💻', thief: 'hacker', blurb: 'Abre la puerta de la bóveda del Banco Central en 10 segundos. Ahí las cajas se ponen doradas: cada una tiene $1000 y se abre con el puntito del centro.' },
 ];
 // Armas de fuego de verdad (las del mercado negro). Cargador de 20 balas, 5 s de recarga.
@@ -5161,7 +5511,7 @@ function updateNPCs(dt) {
     }
     if (state.phase === 'NIGHT' && dist2D(n.position, b.home) < 1.2) n.visible = false;
     if (!state.country) n.position.y = sueloReal(n.position.x, n.position.z);
-    if (moved) swingLimbs(n, dt); else swingLimbs(n, 0);
+    swingLimbs(n, dt);
     n.userData.activity = b.activity;
   }
 }
@@ -5294,12 +5644,7 @@ function makeStadium(cx, cz, fieldColor, name) {
     const v = makePerson([0x9333ea, 0x0891b2, 0xca8a04, 0xdc2626, 0x16a34a, 0xf97316][victims.length % 6], 0xf1c27d);
     v.position.set(px, py - .9, pz);                       // la cadera queda a la altura del asiento
     v.rotation.y = Math.atan2(cx - px, cz - pz);           // la cara (eje +Z) apunta al centro de la cancha
-    const l = v.userData.limbs;
-    if (l) {
-      l.legL.rotation.x = -Math.PI / 2; l.legR.rotation.x = -Math.PI / 2;   // muslos hacia adelante: sentado
-      l.armL.rotation.x = -.45; l.armR.rotation.x = -.45;                   // manos sobre las piernas
-      v.userData.seated = true;                             // que swingLimbs no lo haga "caminar"
-    }
+    posarSentado(v);
     v.userData.victim = true; v.userData.robbed = false;
     scene.add(v); victims.push(v);
   };
@@ -5697,12 +6042,7 @@ function edifRejas(x, y, z, ancho, alto, n, color, horizontal) {
 // Persona sentada mirando hacia `haciaY` (la cajera del banco, los presos del patio…)
 function sentarPersona(p, x, y, z, haciaY) {
   p.position.set(x, y - .9, z); p.rotation.y = haciaY;
-  const l = p.userData.limbs;
-  if (l) {
-    l.legL.rotation.x = -Math.PI / 2; l.legR.rotation.x = -Math.PI / 2;
-    l.armL.rotation.x = -.5; l.armR.rotation.x = -.5;
-    p.userData.seated = true;   // que swingLimbs no lo haga caminar
-  }
+  posarSentado(p);
   return p;
 }
 
@@ -6326,8 +6666,10 @@ function updateComidaCarcel() {
     if (!p.userData.come) continue;
     const l = p.userData.limbs;
     if (l) {
-      l.legL.rotation.x = -Math.PI / 2;
-      l.legR.rotation.x = -Math.PI / 2;
+      l.legL.rotation.set(-1.2, 0.02, -0.08);
+      l.legR.rotation.set(-1.2, -0.02, 0.08);
+      ponerJunta(l.legL, 1.35, -0.1);
+      ponerJunta(l.legR, 1.35, -0.1);
     }
     animarBocado(p, p.userData.faseBocado || 0);
   }
@@ -6335,6 +6677,8 @@ function updateComidaCarcel() {
   if (senora && senora.userData.limbs) {
     const k = kBocado(1.4);
     senora.userData.limbs.armR.rotation.set(-.35 - k * .9, -.2, -.25);
+    ponerJunta(senora.userData.limbs.armR, -.35 - k * .7, .1);
+    ponerJunta(senora.userData.limbs.armL, -.4, .05);
     if (senora.userData.cucharon) senora.userData.cucharon.rotation.x = .8 + k * .7;
   }
 }
@@ -6387,8 +6731,10 @@ function posarPlatoEnManos() {
   mostrarArmaEnMano(false);
   const l = playerAvatar.userData.limbs;
   if (l) {
-    l.armL.rotation.set(-1.15, .35, .55);
-    l.armR.rotation.set(-1.15, -.25, -.55);
+    l.armL.rotation.set(-.85, .3, .4);
+    l.armR.rotation.set(-.7, -.2, -.35);
+    ponerJunta(l.armL, -.75, .12);
+    ponerJunta(l.armR, -.9, .08);
   }
   if (playerAvatar.userData.platoMano) playerAvatar.userData.platoMano.visible = cameraMode !== 0;
   if (playerAvatar.userData.tenedorMano) playerAvatar.userData.tenedorMano.visible = false;
@@ -6469,7 +6815,8 @@ function posarAtornillado() {
   if (!l) return;
   l.armR.rotation.set(-1.55, -.35, -.85);
   l.armL.rotation.set(-.35, .2, .35);
-  if (l.armR.userData.junta) l.armR.userData.junta.rotation.x = Math.sin(giro) * .4;
+  ponerJunta(l.armR, Math.sin(giro) * .4, 0);
+  ponerJunta(l.armL, -.45, 0);
 }
 function abrirDuctoVisual() {
   for (const g of rutinaCarcel.rejas) {
@@ -6780,18 +7127,18 @@ function fugarDeLaCarcel() {
   quitarCarteles();
   toast('🏃 Saliste por el ducto. La policía te persigue cinco minutos. Si aguantas, quedas libre.');
 }
-function avanzarTornillo(dt) {
-  const tiene = !!(keys['KeyE'] || touch.useHeld);
-  if (tiene) condena.tornillo += dt;
-  else condena.tornillo = Math.max(0, condena.tornillo - dt * .35);
-  if (condena.tornillo < 3) return;
-  condena.tornillo = 3;
+function abrirDuctoConCuchara() {
+  if (!condena || condena.rejaAbierta) return;
   condena.atornillando = false;
+  condena.tornillo = 0;
   condena.rejaAbierta = true;
   soltarCuchara();
   abrirDuctoVisual();
   toast('🔧 El ducto quedó abierto.');
   beep(180, .08, .04);
+}
+function avanzarTornillo() {
+  abrirDuctoConCuchara();
 }
 
 // Policías: aparecen cuando estás "buscado" y te persiguen
@@ -6887,6 +7234,7 @@ function becomeWanted(sec, stars) {
 }
 function updatePolice(dt) {
   if (state.planet === 'platus') { if (police.length) clearPolice(); state.wanted = 0; state.wantedLevel = 0; return; }   // en Platus NO hay policía
+  if (trasladoPolicial) return;   // el agarre y el patrulla los mueve el traslado, sin quitarte el control antes de tiempo
   if (state.wanted > 0) {
     state.wanted -= dt * (state.gadgets && state.gadgets.capa && !state.fugaCarcel ? 1.8 : 1);
     if (state.policeDelay > 0) { state.policeDelay -= dt; return; }   // aún no llegan: aprovecha para huir
@@ -6954,7 +7302,7 @@ function updatePolice(dt) {
     updateTanque(dt);
     if (agarrando) {
       state.arrestoT = (state.arrestoT || 0) + dt;
-      if (state.arrestoT >= 2) { empezarTraslado(); return; }
+      if (state.arrestoT >= 1.15) { empezarTraslado(); return; }
     } else state.arrestoT = 0;
   } else if (police.length || state.wantedLevel || state.tanque) {
     const libre = !!state.fugaCarcel;
@@ -7101,68 +7449,226 @@ function verEsposas(on) {
   const aros = asegurarEsposas();
   if (aros) aros.forEach(a => { a.visible = !!on; });
 }
-function apartarPoliciaCercano() {
-  let cop = null, best = 1e9, idx = -1;
-  for (let i = 0; i < police.length; i++) {
-    const p = police[i];
-    if (p.userData.muerto || p.userData.car) continue;
-    const d = dist2D(p.position, player.position);
-    if (d < best) { best = d; cop = p; idx = i; }
+let manosEsposas = null;
+function asegurarManosEsposadas() {
+  if (manosEsposas) return manosEsposas;
+  const g = new THREE.Group();
+  const piel = mat(0xe0ac69), manga = mat(0x3f6212);
+  const metal = new THREE.MeshStandardMaterial({ color: 0xe7e5e4, metalness: .85, roughness: .25 });
+  for (const side of [-1, 1]) {
+    const brazo = new THREE.Group();
+    brazo.position.set(side * .22, -.32, -.55);
+    const m = new THREE.Mesh(new THREE.CapsuleGeometry(.06, .28, 4, 8), manga);
+    m.rotation.x = 1.2; brazo.add(m);
+    const mano = new THREE.Mesh(new THREE.SphereGeometry(.07, 8, 6), piel);
+    mano.position.set(0, -.02, -.22); brazo.add(mano);
+    const aro = new THREE.Mesh(new THREE.TorusGeometry(.075, .016, 6, 10), metal);
+    aro.name = 'aro'; aro.position.set(side * .02, -.02, -.12); aro.rotation.y = Math.PI / 2; brazo.add(aro);
+    g.add(brazo);
   }
-  if (idx >= 0) police.splice(idx, 1);
-  clearPolice();
-  if (!cop) {
-    cop = makePerson(0x1e3a8a, 0xf1c27d);
-    cop.position.set(player.position.x + 1.1, 0, player.position.z);
-    scene.add(cop);
+  const cadena = new THREE.Mesh(smoothBox(.28, .02, .02), metal);
+  cadena.position.set(0, -.34, -.62); g.add(cadena);
+  g.visible = false;
+  camera.add(g);
+  manosEsposas = g;
+  return g;
+}
+function colocarManosEsposadas(tr, bajo) {
+  const g = asegurarManosEsposadas();
+  g.visible = true;
+  const cierre = Math.min(1, (tr.t || 0) / 1.1);
+  g.position.set(0, bajo ? -.08 : 0, 0);
+  g.rotation.set(bajo ? .45 : .12, 0, 0);
+  for (const brazo of g.children) {
+    const aro = brazo.children && brazo.children.find(c => c.name === 'aro');
+    if (aro) aro.scale.setScalar(1.4 - cierre * .4);
   }
-  cop.visible = true;
-  return cop;
+}
+function ocultarManosEsposadas() { if (manosEsposas) manosEsposas.visible = false; }
+function asegurarBate(p) {
+  if (!p || p.userData.bate) return p && p.userData.bate;
+  const mano = p.userData.limbs && p.userData.limbs.armR && p.userData.limbs.armR.userData.extremo;
+  if (!mano) return null;
+  const bate = new THREE.Mesh(new THREE.CylinderGeometry(.04, .07, .9, 6), mat(0x92400e));
+  bate.position.set(0, .38, .04); bate.rotation.x = .35; mano.add(bate);
+  p.userData.bate = bate;
+  return bate;
+}
+function bajarDelAutoPropio() {
+  state.driving = false;
+  creativeFlying = false;
 }
 function empezarTraslado() {
   if (trasladoPolicial || condena) return;
-  const banco = !!state.bankChase || !!state.fugaCarcel || !!state.thiefMode;
-  state.jailPorBanco = banco;
-  state.fugaCarcel = false;
-  state.bankChase = false;
+  let cops = police.filter(p => !p.userData.muerto);
+  for (const p of cops) {
+    if (p.userData.car) { scene.remove(p.userData.car); p.userData.car = null; p.visible = true; }
+  }
+  if (!cops.length) {
+    const cop = makePerson(0x1e3a8a, 0xf1c27d);
+    cop.position.set(player.position.x + 1.1, 0, player.position.z);
+    scene.add(cop); police.push(cop); cops = [cop];
+  }
+  bajarDelAutoPropio();
   state.fuegoPolicial = false;
-  state.heridaPolicia = false;
-  state.wanted = 0;
-  state.wantedLevel = 0;
-  state.driving = false;
-  state.arrestoT = 0;
   if (state.hp < 30) state.hp = 40;
-  quitarCarteles();
-  if (state.tanque) { scene.remove(state.tanque); state.tanque = null; }
-  const cop = apartarPoliciaCercano();
-  trasladoPolicial = { t: 0, fase: 'esposas', cop, banco };
-  verEsposas(true);
-  toast(banco ? '🚔 Te esposan. Vas en el asiento de atrás. Nueve minutos en la celda.' : '🚔 Te esposan. Vas en el asiento de atrás del patrulla.');
+  const suelo = Math.random() < .45;
+  trasladoPolicial = { t: 0, fase: 'esposas', suelo, cops, zafando: 0, bateCd: 0, conBates: false, banco: !!state.bankChase || !!state.fugaCarcel || !!state.thiefMode };
+  verEsposas(false);
+  toast(suelo
+    ? '🚔 Te tiran al suelo para esposarte. Muévete para zafarte. Si disparas y son hartos, sacan los bates.'
+    : '🚔 Varios te van a esposar. Se ven las esposas. Muévete para zafarte.');
+}
+function cancelarEsposas() {
+  const tr = trasladoPolicial;
+  trasladoPolicial = null;
+  state.arrestoT = 0;
+  verEsposas(false);
+  ocultarManosEsposadas();
+  if (!tr) return;
+  for (const p of tr.cops) {
+    if (!p || p.userData.muerto) continue;
+    p.rotation.set(0, p.rotation.y, 0);
+    p.position.x += Math.sin(yaw) * 2.5;
+    p.position.z += Math.cos(yaw) * 2.5;
+    p.position.y = mountainHeightAt(p.position.x, p.position.z);
+    if (p.userData.bate) p.userData.bate.visible = false;
+  }
+  toast('Te moviste y te zafaste. Sigues pudiendo correr.');
+}
+function colocarPoliciasEsposando(tr) {
+  const vivos = tr.cops.filter(p => p && !p.userData.muerto);
+  const n = Math.max(1, vivos.length);
+  vivos.forEach((p, i) => {
+    p.visible = true;
+    const ang = yaw + Math.PI + (i - (n - 1) / 2) * .75;
+    const radio = tr.suelo ? .9 : 1.2;
+    const x = player.position.x + Math.sin(ang) * radio;
+    const z = player.position.z + Math.cos(ang) * radio;
+    p.position.set(x, mountainHeightAt(x, z), z);
+    p.rotation.set(tr.suelo ? .7 : .2, Math.atan2(player.position.x - x, player.position.z - z), 0);
+    const l = p.userData.limbs;
+    if (l && !tr.conBates) {
+      const swing = Math.sin(tr.t * 5 + i) * .2;
+      l.armL.rotation.set(-1.05, .4, .42 + swing);
+      l.armR.rotation.set(-1.15, -.42, -.48 - swing);
+      l.legL.rotation.set(.16, 0, -.06);
+      l.legR.rotation.set(.1, 0, .06);
+      ponerJunta(l.armL, -.8, .08);
+      ponerJunta(l.armR, -.95, .06);
+      ponerJunta(l.legL, .28, -.08);
+      ponerJunta(l.legR, .22, -.06);
+    }
+    if (p.userData.bate) p.userData.bate.visible = !!tr.conBates;
+  });
+}
+function pegarConBates(tr, dt) {
+  const vivos = tr.cops.filter(p => p && !p.userData.muerto);
+  if (vivos.length < 3 || !state.thiefMode) return;
+  if (!tr.conBates) {
+    tr.conBates = true;
+    vivos.forEach(asegurarBate);
+    toast('🏏 Son hartos. Te resististe a las esposas y te pegan con bates.');
+  }
+  vivos.forEach((p, i) => {
+    const l = p.userData.limbs;
+    if (l) {
+      const golpe = Math.sin(tr.t * 9 + i);
+      l.armR.rotation.set(-.35 + golpe * .9, -.15, -.35);
+      l.armL.rotation.set(-.4, .1, .2);
+      ponerJunta(l.armR, -.35 - Math.max(0, golpe) * .9, .05);
+      ponerJunta(l.armL, -.4, 0);
+    }
+  });
+  tr.bateCd -= dt;
+  if (tr.bateCd > 0) return;
+  tr.bateCd = .8;
+  state.heridaPolicia = true;
+  damagePlayer(8, player.position);
+  if (state.hp < 18) state.hp = 18;
+  cameraShake = Math.max(cameraShake, .2);
+  beep(90, .08, .05);
+}
+function updateEsposas(dt) {
+  const tr = trasladoPolicial;
+  if (!tr || tr.fase !== 'esposas') return;
+  const moviendo = !!(keys['KeyW'] || keys['KeyA'] || keys['KeyS'] || keys['KeyD'] || Math.abs(touch.moveX) + Math.abs(touch.moveY) > .2);
+  tr.zafando = moviendo ? (tr.zafando || 0) + dt : Math.max(0, (tr.zafando || 0) - dt * .35);
+  if (tr.zafando > .8) { cancelarEsposas(); return; }
+  tr.t += dt;
+  colocarPoliciasEsposando(tr);
+  if (tr.t > .45) verEsposas(true);
+  if (state.fuegoPolicial) pegarConBates(tr, dt);
+  if (tr.t > 2.15) subirAlPatrulla();
+}
+function makePatrullaAbierta(naranjo) {
+  const g = new THREE.Group();
+  const pintura = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: .45, metalness: .2, side: THREE.DoubleSide });
+  const cuero = new THREE.MeshStandardMaterial({ color: naranjo ? 0xf97316 : 0x475569, roughness: .7, side: THREE.DoubleSide });
+  const cueroOsc = new THREE.MeshStandardMaterial({ color: naranjo ? 0xc2410c : 0x1e293b, roughness: .8, side: THREE.DoubleSide });
+  const vidrio = new THREE.MeshStandardMaterial({ color: 0xdbeafe, roughness: .05, transparent: true, opacity: .16, side: THREE.DoubleSide, depthWrite: false });
+  const caja = (w, h, d, x, y, z, m) => { const o = new THREE.Mesh(smoothBox(w, h, d), m); o.position.set(x, y, z); g.add(o); return o; };
+  caja(1.9, .08, 3.5, 0, .4, .1, pintura);
+  caja(1.9, .08, 2.3, 0, 1.92, .05, pintura);
+  for (const [x, z] of [[-.92, 1.05], [.92, 1.05], [-.92, -.75], [.92, -.75]]) caja(.07, 1.35, .07, x, 1.18, z, pintura);
+  caja(1.7, .62, .04, 0, 1.28, 1.32, vidrio);
+  for (const x of [-.94, .94]) caja(.04, .5, 1.2, x, 1.28, .1, vidrio);
+  for (const x of [-.42, .42]) {
+    caja(.64, .14, .52, x, .56, .7, cueroOsc);
+    caja(.64, .36, .08, x, .74, .46, cueroOsc);
+  }
+  const almohadon = caja(1.58, .22, .82, 0, .62, -.22, cuero);
+  almohadon.name = 'almohadon';
+  caja(1.58, .48, .1, 0, .9, -.68, cueroOsc);
+  const volante = new THREE.Mesh(new THREE.TorusGeometry(.16, .022, 6, 14), mat(0x111827));
+  volante.position.set(-.42, .98, 1.02); volante.rotation.x = .95; g.add(volante);
+  const luz = new THREE.Mesh(smoothBox(.5, .12, .28), new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 1 }));
+  luz.position.set(0, 1.98, .05); g.add(luz); g.userData.luz = luz;
+  g.userData.almohadon = almohadon;
+  return g;
 }
 function subirAlPatrulla() {
   const tr = trasladoPolicial;
   if (!tr || tr.car) return;
-  const car = makeCar(0x1e3a8a);
-  const light = new THREE.Mesh(smoothBox(.5, .2, .5), new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 1 }));
-  light.position.set(0, 1.95, 0); car.add(light);
+  const car = makePatrullaAbierta(!!tr.banco);
   const x = player.position.x, z = player.position.z;
   car.position.set(x, mountainHeightAt(x, z), z);
   car.rotation.y = Math.atan2(JAIL_GATE.x - x, JAIL_GATE.z - z);
   scene.add(car);
-  if (tr.cop) {
-    car.add(tr.cop);
-    tr.cop.position.set(.32, .15, .4);
-    tr.cop.rotation.set(0, 0, 0);
-    posarSentado(tr.cop);
+  const vivos = tr.cops.filter(p => p && !p.userData.muerto);
+  const sentar = (p, lx) => {
+    if (!p) return;
+    car.add(p); p.visible = true;
+    p.position.set(lx, -.42, .78); p.rotation.set(0, 0, 0); posarSentado(p);
+    if (p.userData.bate) p.userData.bate.visible = false;
+  };
+  sentar(vivos[0], -.38);
+  sentar(vivos[1], .38);
+  tr.conductor = vivos[0] || null;
+  tr.copiloto = vivos[1] || null;
+  if (tr.conductor) posarManejando(tr.conductor, 0);
+  for (const p of police) {
+    if (p !== vivos[0] && p !== vivos[1]) { if (p.userData.car) scene.remove(p.userData.car); scene.remove(p); }
   }
-  tr.car = car;
-  tr.luz = light;
-  tr.fase = 'auto';
-  tr.t = 0;
+  police.length = 0;
+  tr.car = car; tr.luz = car.userData.luz; tr.fase = 'auto'; tr.t = 0;
+  state.jailPorBanco = !!tr.banco;
+  state.fugaCarcel = false; state.bankChase = false; state.fuegoPolicial = false; state.heridaPolicia = false;
+  state.wanted = 0; state.wantedLevel = 0; state.driving = false; state.arrestoT = 0;
+  quitarCarteles();
+  if (state.tanque) { scene.remove(state.tanque); state.tanque = null; }
+  yaw = car.rotation.y + Math.PI; pitch = -.32; tr.yawAlEntrar = yaw;
+  if (camera.near > .06) { camera.near = .05; camera.updateProjectionMatrix(); }
+  verEsposas(true);
+  toast(tr.banco
+    ? '🚔 Primera persona, en el almohadón naranja. Mira abajo el asiento y al frente a quien maneja.'
+    : '🚔 Primera persona, asiento de atrás. Mira el almohadón y a quien maneja.');
 }
 function terminarTraslado() {
   const tr = trasladoPolicial;
   trasladoPolicial = null;
+  ocultarManosEsposadas();
+  if (camera.near < .1) { camera.near = .2; camera.updateProjectionMatrix(); }
   if (tr && tr.car) scene.remove(tr.car);
   verEsposas(false);
   if (playerAvatar) { playerAvatar.rotation.set(0, 0, 0); posarDePie(playerAvatar); }
@@ -7170,77 +7676,101 @@ function terminarTraslado() {
 }
 function updateTraslado(dt) {
   const tr = trasladoPolicial;
-  if (!tr) return;
+  if (!tr || tr.fase !== 'auto') return;
   tr.t += dt;
   vy = 0; grounded = true;
   state.driving = false;
   creativeFlying = false;
-  if (tr.fase === 'esposas') {
-    if (tr.t > 1.7) subirAlPatrulla();
-    return;
-  }
+  const lookSpeed = 1.8 * dt;
+  if (keys['ArrowLeft']) yaw += lookSpeed;
+  if (keys['ArrowRight']) yaw -= lookSpeed;
+  if (keys['ArrowUp']) pitch += lookSpeed;
+  if (keys['ArrowDown']) pitch -= lookSpeed;
+  pitch = Math.max(-.9, Math.min(.85, pitch));
   const car = tr.car;
   if (!car) return;
   if (tr.luz) tr.luz.material.color.setHex((Math.floor(performance.now() / 180) % 2) ? 0xef4444 : 0x3b82f6);
   const dx = JAIL_GATE.x - car.position.x, dz = JAIL_GATE.z - car.position.z;
-  const dist = Math.hypot(dx, dz);
-  if (dist < 8 || tr.t > 26) { terminarTraslado(); return; }
+  const dist = Math.hypot(dx, dz) || 1;
+  if (tr.t > 8 && (dist < 7 || tr.t > 20)) { terminarTraslado(); return; }
   const paso = Math.min(dist, 18 * dt);
   let nx = car.position.x + dx / dist * paso, nz = car.position.z + dz / dist * paso;
   if (obstacleAt(nx, nz, 0, 1.3, true)) { nx = car.position.x - dz / dist * paso; nz = car.position.z + dx / dist * paso; }
-  car.position.x = nx;
-  car.position.z = nz;
+  car.position.x = nx; car.position.z = nz;
   car.position.y = mountainHeightAt(nx, nz);
   car.rotation.y = Math.atan2(dx, dz);
   car.updateMatrixWorld(true);
+  if (tr.conductor) posarManejando(tr.conductor, tr.t);
+  if (tr.copiloto) posarSentado(tr.copiloto);
 }
 function encuadrarTraslado() {
   const tr = trasladoPolicial;
   if (!tr) return;
   viewmodel.visible = false;
-  playerAvatar.visible = true;
-  verEsposas(true);
-  const l = playerAvatar.userData.limbs;
+  playerAvatar.visible = false;
   if (tr.fase === 'esposas') {
-    player.position.y = PLAYER_EYE;
-    playerAvatar.position.set(player.position.x, 0, player.position.z);
-    playerAvatar.rotation.set(0, yaw + Math.PI, 0);
-    if (l) {
-      l.armL.rotation.set(-1.2, .5, .85);
-      l.armR.rotation.set(-1.2, -.5, -.85);
-      l.legL.rotation.set(0, 0, 0);
-      l.legR.rotation.set(0, 0, 0);
-    }
-    if (tr.cop) {
-      tr.cop.visible = true;
-      tr.cop.position.set(player.position.x - Math.sin(yaw) * 1.15, 0, player.position.z - Math.cos(yaw) * 1.15);
-      tr.cop.rotation.set(0, yaw, 0);
-    }
-    camera.position.set(player.position.x + Math.sin(yaw) * 3.3, 1.75, player.position.z + Math.cos(yaw) * 3.3);
-    camera.lookAt(player.position.x, 1.15, player.position.z);
+    const bajo = !!(tr.suelo && (tr.zafando || 0) < .2);
+    camera.position.set(player.position.x, bajo ? .46 : player.position.y, player.position.z);
+    camera.rotation.order = 'YXZ';
+    camera.rotation.set(pitch + (bajo ? .4 : 0), yaw, bajo ? Math.sin(tr.t * 5) * .12 : 0);
+    if (tr.t > .35) colocarManosEsposadas(tr, bajo); else ocultarManosEsposadas();
     return;
   }
   const car = tr.car;
   if (!car) return;
   car.updateMatrixWorld(true);
-  const asiento = new THREE.Vector3(-.2, .2, -.78).applyMatrix4(car.matrixWorld);
-  player.position.set(asiento.x, asiento.y + .9, asiento.z);
-  playerAvatar.position.set(asiento.x, asiento.y - .72, asiento.z);
-  playerAvatar.rotation.set(.12, car.rotation.y, 0);
-  posarSentado(playerAvatar);
-  if (l) {
-    l.armL.rotation.set(-.9, .45, .7);
-    l.armR.rotation.set(-.9, -.45, -.7);
-  }
-  const cam = new THREE.Vector3(1.9, 1.65, -3.15).applyMatrix4(car.matrixWorld);
-  camera.position.copy(cam);
-  camera.lookAt(asiento.x, asiento.y + .35, asiento.z);
+  const ojo = new THREE.Vector3(.28, 1.05, -.58).applyMatrix4(car.matrixWorld);
+  player.position.set(ojo.x, ojo.y, ojo.z);
+  camera.position.copy(ojo);
+  camera.rotation.order = 'YXZ';
+  const extra = yaw - (tr.yawAlEntrar == null ? yaw : tr.yawAlEntrar);
+  camera.rotation.set(pitch, car.rotation.y + Math.PI + extra, 0);
+  colocarManosEsposadas(tr, false);
+  if (manosEsposas) manosEsposas.position.set(.05, -.46, .08);
+  verEsposas(true);
 }
 function policeCatch() { empezarTraslado(); }
 
 // Robo del Banco Central que ya existe: traje naranjo, gorro, hacker, cajones y carteles.
 function disfrazDeBanco() {
   return !!(state.thief && state.thief.wearNaranjo && state.thief.wearGorro);
+}
+function cartelLlevaSkin() {
+  return !!(state.thiefMode && playerSkinOn && playerSkinFuente);
+}
+function recorteOpaco(img) {
+  const w = img.width, h = img.height;
+  if (!w || !h || !img.getContext) return null;
+  const src = img.getContext('2d');
+  if (!src) return null;
+  let data;
+  try { data = src.getImageData(0, 0, w, h).data; } catch (e) { return null; }
+  let minX = w, minY = h, maxX = -1, maxY = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (data[(y * w + x) * 4 + 3] <= 28) continue;
+    if (x < minX) minX = x; if (y < minY) minY = y;
+    if (x > maxX) maxX = x; if (y > maxY) maxY = y;
+  }
+  if (maxX < minX) return null;
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+function dibujarSkinEnCartel(g, img, x, y, w, h) {
+  const rec = recorteOpaco(img);
+  if (!rec) return false;
+  g.fillStyle = '#0b1220';
+  g.fillRect(x, y, w, h);
+  const margen = 10;
+  const escala = Math.min((w - margen * 2) / rec.w, (h - margen * 2) / rec.h);
+  const dw = rec.w * escala, dh = rec.h * escala;
+  g.imageSmoothingEnabled = true;
+  g.drawImage(img, rec.x, rec.y, rec.w, rec.h, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  return true;
+}
+function refrescarCartelDeCara() {
+  try {
+    if (!state.bankChase || state.bankPoster !== 'cara') return;
+  } catch (e) { return; }
+  mostrarCartelesBuscado('cara');
 }
 function texturaCartel(kind) {
   const c = document.createElement('canvas');
@@ -7265,6 +7795,10 @@ function texturaCartel(kind) {
     g.fillStyle = '#334155'; g.font = 'bold 15px sans-serif';
     g.fillText('CÁMARA · TRAJE NARANJA', 128, 308);
     g.font = '13px sans-serif'; g.fillText('Sin rostro', 128, 332);
+  } else if (cartelLlevaSkin() && dibujarSkinEnCartel(g, playerSkinFuente, 28, 70, 200, 220)) {
+    g.strokeStyle = '#7f1d1d'; g.lineWidth = 4; g.strokeRect(28, 70, 200, 220);
+    g.fillStyle = '#7f1d1d'; g.font = 'bold 16px sans-serif';
+    g.fillText('SE BUSCA · TU SKIN', 128, 312);
   } else {
     g.fillStyle = '#e0ac69';
     g.beginPath(); g.arc(128, 178, 72, 0, Math.PI * 2); g.fill();
@@ -7344,7 +7878,9 @@ function iniciarPersecucionBanco() {
   state.bankGrace = BANK.boveda.gracia;
   toast(camara
     ? '🚨 Alarma. La policía sale desde el banco y te persigue 2 minutos. Con el traje y el gorro, el cartel es una cámara, sin tu cara.'
-    : '🚨 Alarma. La policía sale desde el banco y te persigue 2 minutos. Sin el traje y el gorro, el cartel lleva tu cara.');
+    : cartelLlevaSkin()
+      ? '🚨 Alarma. La policía sale desde el banco y te persigue 2 minutos. El cartel lleva el dibujo de tu skin.'
+      : '🚨 Alarma. La policía sale desde el banco y te persigue 2 minutos. Sin el traje y el gorro, el cartel lleva tu cara.');
 }
 function despacharPoliciaBanco(alSalir) {
   if (state.bankDispatched) return;
@@ -7627,7 +8163,8 @@ function matarEmpleadoBanco(person) {
   person.userData.dead = true;
   person.userData.seated = false;
   const l = person.userData.limbs;
-  if (l) { l.legL.rotation.x = 0; l.legR.rotation.x = 0; l.armL.rotation.x = 0; l.armR.rotation.x = 0; }
+  if (l) { l.legL.rotation.set(0, 0, 0); l.legR.rotation.set(0, 0, 0); l.armL.rotation.set(0, 0, 0); l.armR.rotation.set(0, 0, 0); }
+  soltarJuntas(person);
   person.rotation.x = -Math.PI / 2;
   person.position.y = 0.35;
   voxelImpact(person.position.clone().setY(1.1), 0xb91c1c, 10);
@@ -7754,14 +8291,7 @@ function resetRoboBanco() {
     p.rotation.x = 0;
     p.position.y = 0;
     if (p.userData.home) p.position.copy(p.userData.home);
-    if (p.userData.wasSeated) {
-      const l = p.userData.limbs;
-      if (l) {
-        l.legL.rotation.x = -Math.PI / 2; l.legR.rotation.x = -Math.PI / 2;
-        l.armL.rotation.x = -.5; l.armR.rotation.x = -.5;
-      }
-      p.userData.seated = true;
-    }
+    if (p.userData.wasSeated) posarSentado(p);
   }
   applyThiefLook();
 }
@@ -7803,7 +8333,6 @@ function applyThiefLook() {
   pintarCapsulas(limbs.armR, wearN ? naranjo : verde);
   pintarCapsulas(limbs.legL, wearN ? naranjo : pantalon);
   pintarCapsulas(limbs.legR, wearN ? naranjo : pantalon);
-  if (playerAvatar.userData.mcArmor) for (const m of playerAvatar.userData.mcArmor) m.visible = !wearN;
   if (!playerAvatar.userData.rayasNaranjas) {
     const g = new THREE.Group();
     const blanco = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.7 });
@@ -7814,6 +8343,7 @@ function applyThiefLook() {
     playerAvatar.add(g);
     playerAvatar.userData.rayasNaranjas = g;
   }
+  playerAvatar.userData.rayasNaranjas.traverse(o => { if (o.isMesh) o.userData.sobreCuerpo = true; });
   playerAvatar.userData.rayasNaranjas.visible = wearN;
   if (!playerAvatar.userData.gorroHoyos) {
     const g = new THREE.Group();
@@ -7831,13 +8361,14 @@ function applyThiefLook() {
     playerAvatar.add(g);
     playerAvatar.userData.gorroHoyos = g;
   }
+  playerAvatar.userData.gorroHoyos.traverse(o => { if (o.isMesh) o.userData.sobreCuerpo = true; });
   playerAvatar.userData.gorroHoyos.visible = wearG;
   const manga = viewmodel.children[0];
   if (manga && manga.material && manga.material.color) {
     const tier = armorTierFor(state.armorFactor);
     manga.material.color.setHex(wearN ? naranjo : (tier ? ARMOR_TIERS[tier].color : verde));
   }
-  if (viewmodel.userData.bracer) viewmodel.userData.bracer.visible = !wearN && !!armorTierFor(state.armorFactor);
+  acomodarArmaduraJugador();
   if (playerSkinOn) ocultarCuerpoPorSkin();
 }
 
@@ -7920,6 +8451,24 @@ function tryDoor() {
   return true;
 }
 // Robar a la gente del estadio (con E cerca). Riesgo: que te persiga la policía
+function cercaCajaTotus() {
+  return !!(totusCaja && state.planet === 'tierra' && !state.country && dist2D(player.position, totusCaja) < 2.4);
+}
+function tryRobTotus() {
+  if (!cercaCajaTotus()) return false;
+  if (!state.thiefMode) {
+    toast('🛒 Caja del Totus. Con el modo ladrón en rojo puedes robarla.');
+    return true;
+  }
+  if (totusRoboCd > 0) { toast('La caja del Totus está vacía. Vuelve en un rato.'); return true; }
+  const loot = 180 + Math.floor(Math.random() * 220);
+  addMoney(loot);
+  totusRoboCd = 45;
+  becomeWanted(40, 2);
+  toast('🚨 Robaste $' + loot + ' de la caja del Totus. La policía viene.');
+  beep(180, .1, .05);
+  return true;
+}
 function tryRob() {
   if (state.planet === 'platus') return false;   // en Platus no hay estadios ni gente
   for (const v of victims) {
@@ -10181,28 +10730,56 @@ const skiPasajeros = [];
 const arrastreGente = [];
 let playerChair = null;
 let caidaAndarivelAviso = 0;
+function ponerJunta(pivot, flexion, muneca) {
+  if (!pivot) return;
+  if (pivot.userData.junta) pivot.userData.junta.rotation.set(flexion || 0, 0, 0);
+  if (pivot.userData.extremo) pivot.userData.extremo.rotation.set(muneca || 0, 0, 0);
+}
 function soltarJuntas(n) {
   const l = n && n.userData.limbs;
   if (!l) return;
-  for (const k of ['armL', 'armR', 'legL', 'legR']) {
-    const junta = l[k] && l[k].userData.junta;
-    if (junta) junta.rotation.set(0, 0, 0);
-  }
+  for (const k of ['armL', 'armR', 'legL', 'legR']) ponerJunta(l[k], 0, 0);
 }
 function posarSentado(n) {
   if (!n) return;
   n.userData.seated = true;
+  n.userData.manejando = false;
   const l = n.userData.limbs;
   if (!l) return;
-  l.legL.rotation.set(-1.5, 0, 0.08);
-  l.legR.rotation.set(-1.5, 0, -0.08);
-  l.armL.rotation.set(-0.85, 0, 0.22);
-  l.armR.rotation.set(-0.85, 0, -0.22);
-  soltarJuntas(n);
+  const t = performance.now() * 0.0016 + (n.id || 0) * 0.37;
+  const resp = Math.sin(t) * 0.04;
+  const pierna = Math.sin(t * 0.41) * 0.05;
+  l.legL.rotation.set(-1.22 + pierna, 0.02, -0.1);
+  l.legR.rotation.set(-1.22 - pierna, -0.02, 0.1);
+  l.armL.rotation.set(-0.48 + resp, 0.08, 0.24);
+  l.armR.rotation.set(-0.48 + resp, -0.08, -0.24);
+  ponerJunta(l.legL, 1.38 + pierna * 0.25, -0.12);
+  ponerJunta(l.legR, 1.38 - pierna * 0.25, -0.12);
+  ponerJunta(l.armL, -0.5 + resp, 0.08);
+  ponerJunta(l.armR, -0.5 + resp, 0.08);
+}
+function posarManejando(n, tiempo) {
+  if (!n) return;
+  n.userData.seated = true;
+  n.userData.manejando = true;
+  const l = n.userData.limbs;
+  if (!l) return;
+  const t = tiempo || 0;
+  const giro = Math.sin(t * 1.35) * 0.1;
+  const resp = Math.sin(t * 1.7) * 0.025;
+  l.legL.rotation.set(-0.58, 0.04, -0.08);
+  l.legR.rotation.set(-0.52, -0.04, 0.08);
+  ponerJunta(l.legL, -1.9, 0.12);
+  ponerJunta(l.legR, -1.82, 0.1);
+  l.armL.rotation.set(0.32 + resp, 0.22 + giro, 0.16);
+  l.armR.rotation.set(0.28 + resp, -0.34 + giro, -0.1);
+  ponerJunta(l.armL, -1.9, 0.12);
+  ponerJunta(l.armR, -1.85 - giro * 0.2, 0.1);
 }
 function posarDePie(n) {
   if (!n) return;
   n.userData.seated = false;
+  n.userData.manejando = false;
   const l = n.userData.limbs;
   if (!l) return;
   l.legL.rotation.set(0, 0, 0);
@@ -10386,11 +10963,15 @@ function marcarVisible(obj) {
 function posarEsquiando(n, fase) {
   if (!n || !n.userData.limbs) return;
   const l = n.userData.limbs;
-  const s = Math.sin(fase) * 0.38;
-  l.legL.rotation.set(0.5 + s, 0, 0.1);
-  l.legR.rotation.set(0.5 - s, 0, -0.1);
-  l.armL.rotation.set(-0.7, 0, 0.62);
-  l.armR.rotation.set(-0.42, 0, -0.28);
+  const s = Math.sin(fase) * 0.28;
+  l.legL.rotation.set(-0.32 + s, 0, -0.08);
+  l.legR.rotation.set(-0.32 - s, 0, 0.08);
+  l.armL.rotation.set(-0.5, 0.08, 0.5);
+  l.armR.rotation.set(-0.38, -0.05, -0.28);
+  ponerJunta(l.legL, 0.7 - s * 0.35, -0.18);
+  ponerJunta(l.legR, 0.7 + s * 0.35, -0.18);
+  ponerJunta(l.armL, -0.65, 0.08);
+  ponerJunta(l.armR, -0.5, 0.06);
 }
 function asegurarEsquis(n) {
   if (!n || n.userData.esquisListos) return;
@@ -13414,6 +13995,7 @@ function doblarMiembro(pivot, ty, tz, rodillaArriba) {
   }
   pivot.rotation.set(best.hx, 0, 0);
   junta.rotation.set(best.kx, 0, 0);
+  if (extremo) extremo.rotation.set(0, 0, 0);
 }
 function apuntarA(pivot, world, rodillaArriba) {
   playerAvatar.updateMatrixWorld(true);
@@ -16173,9 +16755,14 @@ function makeKnight() {   // comandante de los toros: sentado en el trono, espad
   helmet.position.y = 2.02; helmet.castShadow = true; g.add(helmet);
   const limbs = g.userData.limbs;
   if (limbs) {
-    limbs.legL.rotation.x = -1.2; limbs.legR.rotation.x = -1.2;
-    limbs.armL.rotation.x = -.35;
-    limbs.armR.rotation.x = -1.55;
+    limbs.legL.rotation.set(-1.2, 0.02, -0.08);
+    limbs.legR.rotation.set(-1.2, -0.02, 0.08);
+    limbs.armL.rotation.set(-.4, .08, .22);
+    limbs.armR.rotation.set(-1.45, -.15, -.2);
+    ponerJunta(limbs.legL, 1.32, -.1);
+    ponerJunta(limbs.legR, 1.32, -.1);
+    ponerJunta(limbs.armL, -.5, .06);
+    ponerJunta(limbs.armR, -.25, 0);
     const sword = makeVoxelSword(0xe2e8f0, .46);
     sostenerEspada(sword, 0, -.92, .08, 'y');
     limbs.armR.add(sword);
@@ -18559,7 +19146,8 @@ function tryInteract() {
   if (tryAlleyInteract()) return;
   if (tryJobInteract()) return;   // recados: calmar al perro / abrir el cajón
   if (tryDoor()) return;          // abrir / cerrar la puerta de tu casa
-  if (tryCine()) return;          // boleto, puerta de la sala o butaca
+  if (tryRobTotus()) return;      // caja del Totus, en el mall
+  if (tryCine()) return;          // boleto, palomitas, dulces, puerta o butaca
   if (tryBuyPlot()) return;       // comprar el terreno del condominio
   if (!tryRefuelCar() && !trySkiResort() && !tryWorldSites() && !tryArcadeRewards() && !tryArcadeZone() && !tryHarvestMiner() && !toggleBoat() && !tryIslandTempleChest() && !tryFocusedFurniture() && !tryLeaderboard() && !tryAirport() && !countryHello() && !tryParkFood() && !tryParkRide() && !tryRepairBuilding() && !tryHarvest() && !cocinarComida() && !tryDiscoverSecret() && !tryWorldEvent() && !tryMount() && !toggleCar() && !tryShelter() && !tryRuins() && !tryCastle() && !tryColiseum() && !tryRocket() && !tryBankHeist() && !tryBank() && !trySitGrada() && !trySportInteract() && !tryBusiness() && !tryFamilyOrCitizenInteract() && !tryVendorHere() && !tryHelperHere()) { if (!tryCollectGolden() && !tryRob() && !sellHouse()) tryGardenHere(); }
 }
@@ -19187,6 +19775,7 @@ function pintarBotonLadron() {
   const b = ui('thiefModeBtn');
   if (!b) return;
   b.textContent = menuThiefMode ? 'MODO LADRÓN: SÍ' : 'MODO LADRÓN: NO';
+  b.classList.toggle('on', !!menuThiefMode);
 }
 function aplicarModoLadronDelMenu() {
   state.thiefMode = !!menuThiefMode;
@@ -21088,6 +21677,36 @@ applyWatchMode(watchForced === true);
 if (ui('pauseWatch')) ui('pauseWatch').onclick = () => setWatchMode(!document.body.classList.contains('watch'));
 // PWA: el juego se puede INSTALAR en el teléfono (ícono propio) y funciona OFFLINE
 try { if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js'); } catch (e) {}
+let installPrompt = null;
+function botonesInstalar() {
+  return [ui('installAppBtn'), ui('pauseInstall')].filter(Boolean);
+}
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  botonesInstalar().forEach(b => { b.style.display = ''; });
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  botonesInstalar().forEach(b => { b.style.display = 'none'; });
+  toast('📲 This is Money quedó instalada como una app.');
+});
+async function pedirInstalarApp() {
+  if (!installPrompt) {
+    toast('📲 Para instalarla: en el celular, menú del navegador → Agregar a inicio. En el computador, el ícono de instalar de la barra de direcciones.');
+    return;
+  }
+  installPrompt.prompt();
+  try { await installPrompt.userChoice; } catch (e) {}
+  installPrompt = null;
+}
+(function prepararInstalarApp() {
+  const ya = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  const botones = botonesInstalar();
+  if (!botones.length) return;
+  if (ya) { botones.forEach(b => { b.style.display = 'none'; }); return; }
+  botones.forEach(b => { b.onclick = pedirInstalarApp; });
+})();
 function togglePause(force) {
   const show = force !== undefined ? force : !state.paused;
   state.paused = show;
@@ -24130,6 +24749,7 @@ let aimFov = 72, ctxWantsE = false;
 const CAM_FOV = 72;
 function tryGunShot() {   // el CLIC solo dispara (un tiro por clic)
   const spec = currentGunSpec(); if (!spec) return false;
+  if (trasladoPolicial && trasladoPolicial.fase === 'esposas') state.fuegoPolicial = true;
   fireGun(spec);
   return true;
 }
@@ -25331,8 +25951,7 @@ function tryCelda() {
   if (condena.atornillando) return true;
   if (rutinaDeLadron() && condena.rejaAbierta && cercaDeLaRejaDucto()) { entrarAlDucto(); return true; }
   if (rutinaDeLadron() && condena.almuerzo === 'listo' && condena.cuchara && !condena.rejaAbierta && cercaDeLaRejaDucto()) {
-    condena.atornillando = true;
-    condena.tornillo = 0;
+    abrirDuctoConCuchara();
     return true;
   }
   if (rutinaDeLadron() && condena.almuerzo === 'listo' && !condena.cuchara && cercaDeLaRejaDucto()) {
@@ -25768,6 +26387,7 @@ function loop() {
     updateNet(dt);                         // amigos online: manda tu posición y mueve sus muñecos
     updateMirrors();                       // enciende el espejo más cercano (antes de dibujar tu cuerpo)
     updateMovement(dt);
+    if (trasladoPolicial && trasladoPolicial.fase === 'esposas') updateEsposas(dt);
     actualizarMaquinasGym(dt);
     updateFlight(dt);                  // cabina del avión: pasillo, asientos y película (2 min)
     updateSkiGearHold(dt);
@@ -26048,10 +26668,14 @@ function drawMinimap() {
 function aquietarCuerpoEsqui() {
   const l = playerAvatar.userData.limbs;
   if (!l) return;
-  l.legL.rotation.x = 0.22; l.legR.rotation.x = 0.22;
-  l.legL.rotation.z = 0.06; l.legR.rotation.z = -0.06;
-  l.armL.rotation.x = -0.22; l.armR.rotation.x = -0.22;
-  l.armL.rotation.z = 0.5; l.armR.rotation.z = -0.5;
+  l.legL.rotation.set(-0.3, 0, -0.06);
+  l.legR.rotation.set(-0.3, 0, 0.06);
+  l.armL.rotation.set(-0.32, 0.04, 0.42);
+  l.armR.rotation.set(-0.32, -0.04, -0.42);
+  ponerJunta(l.legL, 0.62, -0.16);
+  ponerJunta(l.legR, 0.62, -0.16);
+  ponerJunta(l.armL, -0.5, 0.06);
+  ponerJunta(l.armR, -0.5, 0.06);
 }
 function flexionarEsquis(gear, dt, steer, speedNow) {
   gear.userData.flexT = (gear.userData.flexT || 0) + dt * (2.4 + Math.min(10, speedNow));
@@ -26381,7 +27005,7 @@ function updateMovement(dt) {
     return;
   }
   if (state.cinematic) return;   // durante la cinemática del cohete el personaje se mueve solo
-  if (trasladoPolicial) { updateTraslado(dt); return; }
+  if (trasladoPolicial && trasladoPolicial.fase === 'auto') { updateTraslado(dt); return; }
   if (frenarCondena(dt)) return;
   if (state.sailing) { camera.rotation.y = yaw; camera.rotation.x = pitch; return; }
   if (typing) clearInput();   // con un menú abierto (vendedor, banco, mates…) no se camina (la gravedad sigue)
@@ -27142,6 +27766,7 @@ try { if (new URLSearchParams(location.search).has('debug')) {
     renderer.render(scene, camera);
   };
   timDump.look = (y, p) => { yaw = y; pitch = p; camera.rotation.set(p, y, 0, 'YXZ'); renderer.render(scene, camera); };
+  timDump.mostrarCarteles = (kind) => mostrarCartelesBuscado(kind || 'cara');
   window.__tim = timDump;
 } } catch (e) {}
 function netAddConn(c) {
@@ -27265,7 +27890,7 @@ function updateNet(dt) {
     p.group.position.lerp(p.target, Math.min(1, dt * 10));
     p.group.rotation.y = p.yaw + Math.PI;
     const moviendo = p.group.position.distanceToSquared(p.target) > 0.01;
-    swingLimbs(p.group, moviendo ? dt : 0);
+    swingLimbs(p.group, dt);
     if (p.pets) for (const q of p.pets) {   // sus mascotas flotan y lo siguen igual que las tuyas
       if (q.userData.netTarget) q.position.lerp(q.userData.netTarget, Math.min(1, dt * 8));
       q.position.y = 0.3 + Math.sin(performance.now() * 0.004 + q.position.x) * 0.12;
@@ -27387,26 +28012,67 @@ function updateDayNight(dt) {
   }
 }
 
+function pasoPierna(fase) {
+  const cadera = Math.sin(fase) * 0.55;
+  const flex = Math.max(0, Math.sin(fase + 2.2));
+  const rodilla = 0.06 + flex * flex * 0.95;
+  const atras = Math.max(0, cadera);
+  const tobillo = -(cadera + rodilla) * 0.45 + atras * 0.35;
+  return { cadera, rodilla, tobillo };
+}
+function pasoBrazo(fase) {
+  const hombro = Math.sin(fase) * 0.42;
+  const atras = Math.max(0, Math.sin(fase));
+  const codo = -0.42 - atras * 0.72;
+  const muneca = 0.06 + atras * 0.12;
+  return { hombro, codo, muneca };
+}
 function swingLimbs(o, dt) {
-  const l = o.userData.limbs; if (!l || !o.visible || o.userData.seated) return;   // el público sentado no mueve las piernas
+  const l = o.userData.limbs; if (!l || !o.visible) return;
+  if (o.userData.seated) {
+    if (!o.userData.come && !o.userData.manejando) posarSentado(o);
+    return;
+  }
   if (!o.userData.prevPos) o.userData.prevPos = o.position.clone();
   const moved = o.position.distanceTo(o.userData.prevPos); o.userData.prevPos.copy(o.position);
   const walking = moved > 0.003;
-  o.userData.walkPhase = (o.userData.walkPhase || 0) + (walking ? dt * 9 : 0);
-  const s = walking ? Math.sin(o.userData.walkPhase) * 0.6 : 0;
+  const blend = o.userData.walkBlend = walking
+    ? Math.min(1, (o.userData.walkBlend || 0) + dt * 7)
+    : Math.max(0, (o.userData.walkBlend || 0) - dt * 5);
+  if (walking) o.userData.walkPhase = (o.userData.walkPhase || 0) + dt * 8.2;
+  const fase = o.userData.walkPhase || 0;
+  const respirar = Math.sin(performance.now() * 0.0022 + (o.id || 0)) * 0.03 * (1 - blend);
+  const aplicarPierna = (pivot, f, lado) => {
+    const p = pasoPierna(f);
+    pivot.rotation.set(p.cadera * blend, 0, lado * (0.04 + blend * 0.02));
+    ponerJunta(pivot, p.rodilla * blend + 0.06 * (1 - blend), p.tobillo * blend);
+  };
+  const aplicarBrazo = (pivot, f, lado) => {
+    const p = pasoBrazo(f);
+    pivot.rotation.set(p.hombro * blend + respirar, 0, lado * (0.07 + blend * 0.03));
+    ponerJunta(pivot, p.codo * blend - 0.42 * (1 - blend), p.muneca * blend);
+  };
   if (o.userData.attackAnim > 0) {
     const strike = Math.sin((1 - o.userData.attackAnim / .34) * Math.PI);
     if (o.userData.weapon) {
       l.armR.rotation.set(-.4 - strike * .3, 0, -.2);
       l.armL.rotation.set(-.15, 0, .08);
+      ponerJunta(l.armR, -.85 - strike * .45, .1);
+      ponerJunta(l.armL, -.4, .05);
     } else {
-      l.armL.rotation.x = -1.15 - strike * 1.05; l.armR.rotation.x = -1.15 - strike * 1.05;
-      l.armL.rotation.z = .18 + strike * .28; l.armR.rotation.z = -.18 - strike * .28;
+      l.armL.rotation.set(-1.15 - strike * 1.05, 0, .18 + strike * .28);
+      l.armR.rotation.set(-1.15 - strike * 1.05, 0, -.18 - strike * .28);
+      ponerJunta(l.armL, -.35 - strike * .85, 0);
+      ponerJunta(l.armR, -.35 - strike * .85, 0);
     }
-    l.legL.rotation.x = s * .35; l.legR.rotation.x = -s * .35; return;
+    aplicarPierna(l.legL, fase, -1);
+    aplicarPierna(l.legR, fase + Math.PI, 1);
+    return;
   }
-  l.armL.rotation.z = 0; l.armR.rotation.z = 0;
-  l.legL.rotation.x = s; l.legR.rotation.x = -s; l.armL.rotation.x = -s; l.armR.rotation.x = s;
+  aplicarPierna(l.legL, fase, -1);
+  aplicarPierna(l.legR, fase + Math.PI, 1);
+  aplicarBrazo(l.armL, fase + Math.PI, -1);
+  aplicarBrazo(l.armR, fase, 1);
 }
 // Balanceo del papá 3D al caminar (el modelo no trae animación de piernas)
 function dadWalkBob(dt) {
@@ -27767,6 +28433,7 @@ function updateContextPrompt() {
       else if (nearSkiGate) action = { key: 'E', touch: '🎫', text: state.skiPass ? (state.skiGear ? 'Empezar / parar esquí · E' : 'Compra equipo en la caseta azul') : 'Comprar tarjeta de esquí · $500' };
       else if (nearSkiGear) action = { key: 'E', touch: '⛷️', text: dist2D(player.position, SKI_RESORT.gear2) < dist2D(player.position, SKI_RESORT.gear) ? 'Comprar snowboard · $200' : 'Comprar esquís · $200' };
       else if (state.skiPass && state.skiGear && inSkiResort() && !state.skiLiftRide) action = { key: 'E', touch: state.skiing ? '🥾' : '⛷️', text: state.skiing ? 'Soltar los esquís' : 'Largar / esquiar ahora' };
+      else if (cercaCajaTotus()) action = { key: 'E', touch: '💰', text: state.thiefMode ? (totusRoboCd > 0 ? 'La caja del Totus está vacía' : 'Robar la caja del Totus') : 'Caja del Totus · modo ladrón para robar' };
       else if (cinePrompt()) action = cinePrompt();
       else if (gymPrompt()) action = gymPrompt();
       else if (worldSitePrompt()) action = worldSitePrompt();
@@ -27982,7 +28649,7 @@ function renderHUD() {
   if (state.thief && state.thief.wearNaranjo) gear.push('🟠 traje naranjo');
   if (state.thief && state.thief.wearGorro) gear.push('🎭 gorro');
   if (state.bankChase && !state.bankDispatched) gear.push('🚨 alarma · sal del banco');
-  else if (state.bankChase && state.wanted > 0) gear.push(state.bankPoster === 'camara' ? '📷 cartel: cámara desde arriba' : '📰 cartel con tu cara');
+  else if (state.bankChase && state.wanted > 0) gear.push(state.bankPoster === 'camara' ? '📷 cartel: cámara desde arriba' : (cartelLlevaSkin() ? '📰 cartel con tu skin' : '📰 cartel con tu cara'));
   if (state.secretsFound > 0) gear.push('🗺️ secretos ' + state.secretsFound + '/' + SECRET_DEFS.length);
   if (state.business) gear.push(BUSINESS_TYPES[state.business.type].icon + ' negocio nv.' + state.business.level + ' · 📦' + state.business.stock);
   const medalCount = Object.keys(state.medals || {}).length; if (medalCount) gear.push('🏅 ' + medalCount + '/3 deportes');

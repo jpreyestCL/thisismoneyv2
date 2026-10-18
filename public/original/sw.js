@@ -1,12 +1,17 @@
 // Service worker de This is Money: el juego funciona OFFLINE una vez visitado.
 // - index.html: red primero (para recibir las actualizaciones del deploy), caché de respaldo
 // - assets y CDN de three.js: caché primero (no cambian casi nunca)
-const VERSION = 'tim-v55';   // bump al cambiar CORE (fuerza recachear e ignora cachés viejas)
-const CORE = ['./', './index.html', './manifest.webmanifest', './icon.svg',
+const VERSION = 'tim-v57';   // bump al cambiar CORE (fuerza recachear e ignora cachés viejas)
+const CORE = ['./', './index.html', './manifest.json', './icon.svg',
+  './assets/icon-192.png', './assets/icon-512.png',
   './src/game-config.js', './src/chat.js?v=4', './src/park-business.js?v=1', './src/city-map.js?v=4', './assets/img_58.png', './assets/edificio.glb', './assets/tienda.glb', './assets/papa_anim.glb'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    const c = await caches.open(VERSION);
+    await Promise.all(CORE.map(url => c.add(url).catch(() => {})));
+    await self.skipWaiting();
+  })());
 });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
