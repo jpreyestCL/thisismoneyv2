@@ -493,6 +493,10 @@
   #scopeMask::before, #scopeMask::after { content:''; position:absolute; background:rgba(15,23,42,.85); }
   #scopeMask::before { left:50%; top:calc(50% - 22vh); width:2px; height:44vh; margin-left:-1px; }
   #scopeMask::after { top:50%; left:calc(50% - 22vh); height:2px; width:44vh; margin-top:-1px; }
+  #parpados { position:fixed; inset:0; z-index:7; pointer-events:none; }
+  #parpadoArriba, #parpadoAbajo { position:absolute; left:0; right:0; height:0; background:#07080c; }
+  #parpadoArriba { top:0; box-shadow:0 22px 36px 12px #07080c; }
+  #parpadoAbajo { bottom:0; box-shadow:0 -22px 36px 12px #07080c; }
   #jobBtn { position:fixed; bottom:124px; left:50%; transform:translateX(-50%); z-index:7; pointer-events:none; cursor:pointer;
     background:rgba(4,14,8,.85); color:#bbf7d0; border:2px solid rgba(74,222,128,.6); border-radius:12px; font-size:14px; font-weight:800;
     min-height:42px; padding:6px 16px; display:none !important; max-width:min(92vw,540px); text-align:center; letter-spacing:.2px; }
@@ -1064,6 +1068,7 @@
 <button id="jobBtn" aria-label="Empezar la misión" type="button">▶️ HACER MISIÓN</button>
 <div id="wheelMenu" role="menu" aria-label="Acciones"><div class="wheel-title">ACCIONES<br><small>clic para elegir · Tab o Esc para cerrar</small></div></div>
 <div id="scopeMask" aria-hidden="true"></div>
+<div id="parpados" aria-hidden="true"><div id="parpadoArriba"></div><div id="parpadoAbajo"></div></div>
 <div id="aimDot" aria-hidden="true"></div>
 <div id="help">
   <div class="guide-shell" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
@@ -2149,6 +2154,14 @@ function makeHandGun(kind = 'pistol', color = 0x4b5563, scale = 1, scope = false
     }
     for (const sx of [-.5, .42]) { const arg = new THREE.Mesh(new THREE.TorusGeometry(.03, .008, 5, 10), steel); arg.position.set(sx, -.1, 0); arg.rotation.y = Math.PI / 2; inner.add(arg); }   // anillas de la correa
     add(smoothBox(.03, .05, .05), dark, .5 + largo * .35, .17, 0);                        // punto de mira alto
+  } else if (kind === 'rocket') {
+    add(smoothBox(.55, .2, .2), dark, -.05, .02, 0);
+    const tubo = add(new THREE.CylinderGeometry(.13, .15, 1.25, 12), steel, .28, .1, 0);
+    tubo.rotation.z = Math.PI / 2;
+    const boca = add(new THREE.CylinderGeometry(.16, .16, .12, 10), dark, .92, .1, 0);
+    boca.rotation.z = Math.PI / 2;
+    add(smoothBox(.14, .32, .12), dark, -.32, -.16, 0, .32);
+    add(smoothBox(.18, .08, .16), steel, .15, -.08, 0);
   } else {
     // ---- PISTOLA: corredera con estrías, ventana de expulsión, cachas cuadriculadas y cargador ----
     add(smoothBox(.5, .15, .12), steel, .08, .1, 0);                                      // corredera
@@ -2178,13 +2191,13 @@ function makeHandGun(kind = 'pistol', color = 0x4b5563, scale = 1, scope = false
   }
   if (scope) {   // mira telescópica: tubo, lente y monturas
     const tubo = new THREE.Mesh(new THREE.CylinderGeometry(.055, .055, .42, 10), dark);
-    tubo.rotation.z = Math.PI / 2; tubo.position.set(kind === 'pistol' ? .1 : .12, kind === 'pistol' ? .27 : .26, 0); inner.add(tubo);
+    tubo.rotation.z = Math.PI / 2; tubo.position.set(kind === 'rocket' ? .15 : kind === 'pistol' ? .1 : .12, kind === 'rocket' ? .42 : kind === 'pistol' ? .27 : .26, 0); inner.add(tubo);
     const lente = new THREE.Mesh(new THREE.CylinderGeometry(.052, .052, .04, 10), glass);
     lente.rotation.z = Math.PI / 2; lente.position.set(tubo.position.x + .22, tubo.position.y, 0); inner.add(lente);
     for (const dx of [-.12, .12]) { const m = new THREE.Mesh(smoothBox(.04, .1, .05), dark); m.position.set(tubo.position.x + dx, tubo.position.y - .1, 0); inner.add(m); }
   }
   const flash = new THREE.Mesh(new THREE.ConeGeometry(.12, .3, 7), new THREE.MeshBasicMaterial({ color: 0xffd166 }));
-  flash.rotation.z = -Math.PI / 2; flash.position.set(kind === 'pistol' ? .58 : 1.05, kind === 'pistol' ? .1 : .08, 0);
+  flash.rotation.z = -Math.PI / 2; flash.position.set(kind === 'pistol' ? .58 : kind === 'rocket' ? 1.05 : 1.05, kind === 'rocket' ? .1 : kind === 'pistol' ? .1 : .08, 0);
   flash.visible = false; inner.add(flash); g.userData.muzzleFlash = flash;
   inner.rotation.y = Math.PI / 2; inner.position.y = .18;   // el cañón queda apuntando al frente (como se sostiene un arma)
   g.userData.muzzle = flash.position.clone();
@@ -2202,6 +2215,17 @@ function makeHandTube(color = 0xec4899, scale = 1) {
   return g;
 }
 // Bomba de mano (humo / confeti) para llevarla en la mano
+function makeHandDynamite(color = 0xdc2626, scale = 1) {
+  const g = new THREE.Group();
+  const palo = new THREE.Mesh(new THREE.CylinderGeometry(.08, .08, .46, 8), mat(color));
+  palo.castShadow = true; g.add(palo);
+  const mecha = new THREE.Mesh(new THREE.CylinderGeometry(.016, .016, .16, 4), mat(0xfacc15));
+  mecha.position.y = .3; g.add(mecha);
+  const chispa = new THREE.Mesh(new THREE.SphereGeometry(.035, 6, 5), new THREE.MeshBasicMaterial({ color: 0xf97316 }));
+  chispa.position.y = .4; g.add(chispa);
+  g.scale.setScalar(scale); g.userData.toolKind = 'gadget'; g.userData.toolColor = color;
+  return g;
+}
 function makeHandBomb(color = 0x64748b, scale = 1) {
   const g = new THREE.Group();
   const cuerpo = new THREE.Mesh(new THREE.SphereGeometry(.2, 10, 8), mat(color)); cuerpo.castShadow = true; g.add(cuerpo);
@@ -2286,15 +2310,15 @@ function makeVoxelBow(color = 0x8b5a2b, scale = 1) {
 }
 function weaponKindFromName(name) {
   const n = String(name || '').toLowerCase();
-  if (n.includes('bomba') || n.includes('granada')) return 'gadget';   // bomba de humo / confeti: se llevan en la mano
+  if (n.includes('bomba') || n.includes('granada') || n.includes('dinamita')) return 'gadget';   // bomba de humo / confeti / dinamita
   return n.includes('pala') ? 'shovel' : n.includes('arco') ? 'bow'
-    : (n.includes('pistola') || n.includes('láser') || n.includes('rifle') || n.includes('escopeta')) ? 'gun'
+    : (n.includes('pistola') || n.includes('láser') || n.includes('rifle') || n.includes('escopeta') || n.includes('lanzacohete')) ? 'gun'
     : n.includes('puño') ? 'fist' : 'sword';
 }
 function firearmEquipped() { return !!(state.gun && GUN_SPECS[state.gun] && weaponKindFromName(state.weaponName) === 'gun'); }
 function currentGunSpec() { return firearmEquipped() ? GUN_SPECS[state.gun] : null; }
 function createVoxelTool(kind, color, scale) {
-  if (kind === 'gadget') return state.handGadget === 'confeti' ? makeHandTube(color, scale * 1.15) : makeHandBomb(color, scale * 1.1);
+  if (kind === 'gadget') return state.handGadget === 'confeti' ? makeHandTube(color, scale * 1.15) : state.handGadget === 'dinamita' ? makeHandDynamite(color, scale * 1.15) : makeHandBomb(color, scale * 1.1);
   if (kind === 'gun') {
     const g = currentGunSpec();
     if (g) return makeHandGun(g.kind, g.color, scale * 1.15, g.scope);   // pistola / escopeta / rifle de verdad
@@ -2914,6 +2938,16 @@ function colocarSkinDibujada() {
     const alza = aire ? 0.05 : 0;
     apoyar(manos.der, paso, alza);
     apoyar(manos.izq, -paso, alza);
+    const golpe = Math.sin(Math.max(0, Math.min(1, vmSwing || 0)) * Math.PI);
+    if (golpe > 0.02 && manos.der.visible) {
+      manos.der.position.z -= golpe * 0.85;
+      manos.der.position.y += golpe * 0.12;
+      manos.der.rotation.x -= golpe * 0.55;
+    }
+    if (golpe > 0.02 && manos.izq.visible) {
+      manos.izq.position.z -= golpe * 0.18;
+      manos.izq.rotation.x -= golpe * 0.45;
+    }
     if (verManos && viewmodel.userData.bracer && viewmodel.userData.bracer.visible) acomodarBrazalete(true);
   }
   if (!playerSkinRig) return;
@@ -3241,8 +3275,86 @@ function getAimDirection(out) {
   return camera.getWorldDirection(out);
 }
 
+function mostrarCuerpoParaCinematica() {
+  if (!playerAvatar) return;
+  playerAvatar.visible = true;
+  playerAvatar.traverse(o => { if (o.isMesh && !o.userData.piezaSkin) o.visible = true; });
+  if (playerSkinRig) for (const m of playerSkinRig.mallas) m.visible = false;
+}
+function encuadrarSubida() {
+  const s = condena && condena.subiendo;
+  const p = (s && s.pies) || { x: player.position.x, y: 0, z: player.position.z };
+  viewmodel.visible = false;
+  mostrarCuerpoParaCinematica();
+  playerAvatar.position.set(p.x, p.y, p.z);
+  playerAvatar.rotation.order = 'YXZ';
+  playerAvatar.rotation.set(s && s.pose === 'entra' ? 1.05 : 0, yaw + Math.PI, 0);
+  const l = playerAvatar.userData.limbs;
+  if (l && s) {
+    if (s.pose === 'salto') {
+      l.armL.rotation.set(-1.35, .25, .45);
+      l.armR.rotation.set(-1.5, -.2, -.5);
+      l.legL.rotation.set(.95, 0, .1);
+      l.legR.rotation.set(-.25, 0, -.08);
+      ponerJunta(l.armL, -1.05, .1);
+      ponerJunta(l.armR, -1.15, .08);
+      ponerJunta(l.legL, 1.15, -.2);
+      ponerJunta(l.legR, .35, -.08);
+    } else if (s.pose === 'trepa') {
+      l.armL.rotation.set(-2.55, .12, .22);
+      l.armR.rotation.set(-2.65, -.12, -.28);
+      l.legL.rotation.set(1.25, 0, .1);
+      l.legR.rotation.set(.55, 0, -.08);
+      ponerJunta(l.armL, -.35, 0);
+      ponerJunta(l.armR, -.3, 0);
+      ponerJunta(l.legL, 1.35, -.12);
+      ponerJunta(l.legR, .85, -.1);
+    } else {
+      l.armL.rotation.set(-.85, .12, .2);
+      l.armR.rotation.set(-.9, -.12, -.22);
+      l.legL.rotation.set(.7, 0, .08);
+      l.legR.rotation.set(.95, 0, -.08);
+      ponerJunta(l.armL, -.75, .05);
+      ponerJunta(l.armR, -.8, .05);
+      ponerJunta(l.legL, .85, -.1);
+      ponerJunta(l.legR, .4, -.08);
+    }
+  }
+  if (typeof dad !== 'undefined' && dad && dad.position) dad.position.set(p.x + 14, 0, p.z + 14);
+  const cel = condena.celda;
+  camera.position.set(
+    THREE.MathUtils.clamp(p.x + 2.35, cel.minX + .45, cel.maxX - .35),
+    p.y + 1.45,
+    THREE.MathUtils.clamp(p.z + 1.65, cel.minZ + .4, cel.maxZ - .3)
+  );
+  camera.lookAt(p.x, p.y + 1.1, p.z);
+}
+function encuadrarCaidaDucto() {
+  const c = caidaDucto;
+  if (!c) return;
+  viewmodel.visible = false;
+  mostrarCuerpoParaCinematica();
+  const pies = player.position.y - PLAYER_EYE;
+  if (c.fase === 'patada' || c.fase === 'vuelo') {
+    camera.position.set(player.position.x + 2.4, player.position.y + .2, player.position.z + 2.1);
+    camera.lookAt(player.position.x, player.position.y - .35, player.position.z);
+    return;
+  }
+  if (c.fase === 'suelo') {
+    camera.position.set(player.position.x + 2.15, pies + 1.42, player.position.z + 1.55);
+    camera.lookAt(player.position.x + .15, pies + .42, player.position.z);
+    return;
+  }
+  const k = Math.min(1, c.t / .7);
+  playerAvatar.visible = k < .92;
+  camera.position.set(player.position.x, THREE.MathUtils.lerp(pies + .7, player.position.y, k), player.position.z + (1 - k) * 1.3);
+  camera.lookAt(player.position.x, player.position.y - .2 * (1 - k), player.position.z - k);
+  camera.rotation.z = 0;
+}
 function updatePlayerCamera(dt) {
   if (trasladoPolicial) { encuadrarTraslado(); return; }
+  if (caidaDucto) { encuadrarCaidaDucto(); applyCameraFeedback(dt); return; }
+  if (condena && condena.subiendo) { encuadrarSubida(); applyCameraFeedback(dt); return; }
   if (gymSesion && state.inGym) { encuadrarGym(); return; }
   if (caidaChoque) {
     encuadrarCaida();
@@ -3568,6 +3680,7 @@ const STORE_A = [   // SÚPER 1: construcción y comida
   { key: 'bm_naranjo', name: 'Traje naranjo de ladrón', price: 1200, color: 0xf97316, icon: '🟠', thief: 'naranjo' },
   { key: 'bm_gorro', name: 'Gorro con hoyos', price: 700, color: 0x111827, icon: '🎭', thief: 'gorro' },
   { key: 'bm_hacker', name: 'Sistema hacker', price: 2200, color: 0x22d3ee, icon: '💻', thief: 'hacker' },
+  { key: 'dinamita', name: 'Dinamita (x5)', price: 4000, color: 0xdc2626, gadget: 'dinamita', pack: 5 },
 ];
 
 // Mayordomo: recibe órdenes con Espacio ×3, hace las compras con la plata del jugador
@@ -3739,6 +3852,8 @@ const STORE_B = [   // SÚPER 2 (ARMERÍA): armas y armaduras por niveles
   { key: 'armadura_obsidiana', name: 'Armadura obsidiana', price: 1200, color: 0x6d28d9, factor: 0.3 },
   { key: 'ballesta', name: 'Ballesta', price: 500,  value: 40, color: 0x8b5a2b, build: true, defense: true },
   { key: 'torreta',  name: 'Torreta',  price: 1000, value: 80, color: 0x334155, build: true, defense: true },
+  { key: 'lanzacohetes', name: 'Lanzacohetes', price: 10000, color: 0xb91c1c },
+  { key: 'misil', name: 'Misil', price: 1000, color: 0xf97316, rocketAmmo: 1 },
 ];
 // Muebles / decoración / auto / ventana: se COMPRAN escribiéndole al vendedor (Y).
 // Los muebles y la ventana son colocables (build); el auto se conduce; la ventana es transparente.
@@ -3892,6 +4007,27 @@ function makeProductMesh(key, color) {
   } else if (key === 'bm_hacker') {
     const caja = new THREE.Mesh(smoothBox(0.55, 0.34, 0.4), mat(0x0f172a)); caja.position.y = 0.4; caja.castShadow = true; g.add(caja);
     const pantalla = new THREE.Mesh(smoothBox(0.4, 0.2, 0.04), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.7 })); pantalla.position.set(0, 0.42, 0.21); g.add(pantalla);
+  } else if (key === 'dinamita') {
+    for (let i = 0; i < 5; i++) {
+      const palo = new THREE.Mesh(new THREE.CylinderGeometry(.07, .07, .62, 8), mat(0xdc2626));
+      const ang = (i / 5) * Math.PI * 2;
+      palo.position.set(Math.cos(ang) * .16, .48, Math.sin(ang) * .16);
+      palo.castShadow = true; g.add(palo);
+      const mecha = new THREE.Mesh(new THREE.CylinderGeometry(.015, .015, .18, 4), mat(0xfacc15));
+      mecha.position.set(palo.position.x, .86, palo.position.z); g.add(mecha);
+    }
+  } else if (key === 'lanzacohetes') {
+    const tubo = new THREE.Mesh(new THREE.CylinderGeometry(.16, .18, 1.05, 10), mat(0x44403c));
+    tubo.rotation.z = Math.PI / 2; tubo.position.set(.1, .55, 0); tubo.castShadow = true; g.add(tubo);
+    const mira = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, .42, 8), mat(0x1f2937));
+    mira.rotation.z = Math.PI / 2; mira.position.set(.12, .82, 0); g.add(mira);
+    const lente = new THREE.Mesh(new THREE.CylinderGeometry(.055, .055, .04, 8), new THREE.MeshStandardMaterial({ color: 0x22d3ee, emissive: 0x0e7490, emissiveIntensity: .8 }));
+    lente.rotation.z = Math.PI / 2; lente.position.set(.34, .82, 0); g.add(lente);
+  } else if (key === 'misil') {
+    const cuerpo = new THREE.Mesh(new THREE.CylinderGeometry(.1, .12, .7, 8), mat(color));
+    cuerpo.position.y = .5; cuerpo.castShadow = true; g.add(cuerpo);
+    const punta = new THREE.Mesh(new THREE.ConeGeometry(.1, .28, 8), mat(0xf8fafc));
+    punta.position.y = .95; g.add(punta);
   }
   return g;
 }
@@ -4857,6 +4993,7 @@ const GUN_SPECS = {
   bm_mira:     { key:'bm_mira',    name:'Pistola con mira',     kind:'pistol',  dmg:14, range:95,  head:3.2, rate:.15, scope:true,  color:0x334155, icon:'🔭' },   // precisa: la reina de los tiros a la cabeza
   bm_escopeta: { key:'bm_escopeta',name:'Escopeta recortada',   kind:'shotgun', dmg:26, range:30,  head:1.8, rate:.32, scope:false, color:0x57534e, icon:'💥' },   // la que más pega, pero la más lenta
   bm_rifle:    { key:'bm_rifle',   name:'Rifle viejo',          kind:'rifle',   dmg:22, range:130, head:3.0, rate:.22, scope:true,  color:0x44403c, icon:'🎯' },   // fuerte y de lejísimos
+  lanzacohetes:{ key:'lanzacohetes', name:'Lanzacohetes',       kind:'rocket',  dmg:200, range:90, head:1, rate:1.1, scope:true, color:0xb91c1c, icon:'🚀' },   // un misil tumba un tanque; E abre la mira
 };
 function gunSpecByName(name) { const n = String(name || '').toLowerCase(); for (const k in GUN_SPECS) if (GUN_SPECS[k].name.toLowerCase() === n) return GUN_SPECS[k]; return null; }
 const STORY_QUESTS = [
@@ -6238,6 +6375,8 @@ function makeGuard() {
 }
 const CELDAS_PRESO = [];
 let condena = null;
+let caidaDucto = null;
+let parpadoK = 0;
 let celdaTurno = 0;
 function hacerLavamanos(x, z) {
   const g = new THREE.Group();
@@ -6327,7 +6466,7 @@ function buildJail() {
     const ex = cx - (pw - pt * 2) / 2 + anchoCelda * (i + .5);
     const numero = 404 + i;
     if (i) edifCaja(ex - anchoCelda / 2, 2.4, celdaZ, .35, 4.8, celdaD, 0xa7aeb8, 'carcel', true);   // tabique entre celdas
-    edifRejas(ex, 2.1, celdaZ + celdaD / 2, anchoCelda - .5, 4.2, 9, 0x3f4854, true);
+    const barras = edifRejas(ex, 2.1, celdaZ + celdaD / 2, anchoCelda - .5, 4.2, 9, 0x3f4854, true);
     edifCaja(ex - anchoCelda / 2 + .6, 2.1, celdaZ + celdaD / 2, .7, 4.2, .3, 0x3f4854, 'carcel', false);   // puerta de la celda
     const reja = addObstacle(ex, celdaZ + celdaD / 2, anchoCelda, .4, 4.2, 'carcel');   // la reja no se atraviesa
     const letrero = makeSign(String(numero), 0xf8fafc);
@@ -6360,6 +6499,8 @@ function buildJail() {
       lavabo: { x: lavabo.position.x, z: lavabo.position.z },
       preso,
       reja,
+      barras,
+      rejaZ: celdaZ + celdaD / 2,
     });
   }
   armarAlmuerzoCarcel({ cx, cz, pFondo, celdaZ, celdaD, anchoCelda, pw, pt });
@@ -6506,6 +6647,102 @@ function animarBocado(p, fase) {
   if (l.armR.userData.junta) l.armR.userData.junta.rotation.x = -k * .85;
   if (p.userData.tenedor) p.userData.tenedor.rotation.x = .55 + k * .5;
 }
+function ponerSillaDeSopa(x, z, haciaY) {
+  const g = new THREE.Group();
+  const madera = mat(0x6b3f24);
+  const asiento = new THREE.Mesh(smoothBox(.5, .08, .46), madera);
+  asiento.position.y = .46; asiento.castShadow = true; g.add(asiento);
+  for (const sx of [-.18, .18]) for (const sz of [-.15, .15]) {
+    const pata = new THREE.Mesh(smoothBox(.06, .46, .06), madera);
+    pata.position.set(sx, .23, sz); pata.castShadow = true; g.add(pata);
+  }
+  for (const sx of [-.18, .18]) {
+    const poste = new THREE.Mesh(smoothBox(.06, .7, .06), madera);
+    poste.position.set(sx, .84, -.18); g.add(poste);
+  }
+  const respaldo = new THREE.Mesh(smoothBox(.5, .16, .06), madera);
+  respaldo.position.set(0, 1.12, -.18); g.add(respaldo);
+  g.position.set(x, 0, z);
+  g.rotation.y = haciaY || 0;
+  scene.add(g);
+  return g;
+}
+function fijarParpados(k) {
+  parpadoK = THREE.MathUtils.clamp(k, 0, 1);
+  const h = (parpadoK * 50) + 'vh';
+  const a = document.getElementById('parpadoArriba');
+  const b = document.getElementById('parpadoAbajo');
+  if (a) a.style.height = h;
+  if (b) b.style.height = h;
+}
+function tunelDeAire(a, b, ancho, alto) {
+  const dx = b.x - a.x, dy = (b.y || 0) - (a.y || 0), dz = b.z - a.z;
+  const len = Math.hypot(dx, dy, dz) || 0.1;
+  const g = new THREE.Group();
+  const mx = (a.x + b.x) / 2, my = ((a.y || 0) + (b.y || 0)) / 2, mz = (a.z + b.z) / 2;
+  g.position.set(mx, my, mz);
+  g.lookAt(mx + dx, my + dy, mz + dz);
+  const dentro = new THREE.MeshStandardMaterial({ color: 0x6b7c90, roughness: .48, metalness: .35, emissive: 0x243044, emissiveIntensity: .7, side: THREE.BackSide });
+  const caja = new THREE.Mesh(new THREE.BoxGeometry(ancho, alto, len + .08), dentro);
+  g.add(caja);
+  const fuera = new THREE.Mesh(new THREE.BoxGeometry(ancho + .14, alto + .14, len), mat(0x334155));
+  g.add(fuera);
+  const piso = new THREE.Mesh(new THREE.BoxGeometry(ancho * .86, .04, len * .98), new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: .92, metalness: .05, side: THREE.DoubleSide }));
+  piso.position.y = -alto * .42;
+  g.add(piso);
+  const tira = new THREE.Mesh(new THREE.BoxGeometry(.07, .04, len * .96), new THREE.MeshStandardMaterial({ color: 0xf8fafc, emissive: 0xffffff, emissiveIntensity: 1.2 }));
+  tira.position.y = alto * .4;
+  g.add(tira);
+  const n = Math.max(3, Math.round(len / 1.35));
+  for (let i = 1; i < n; i++) {
+    const aro = new THREE.Mesh(new THREE.TorusGeometry(Math.min(ancho, alto) * .47, .045, 8, 16), mat(0xf8fafc));
+    aro.position.z = -len / 2 + (len * i) / n;
+    g.add(aro);
+  }
+  scene.add(g);
+  return g;
+}
+function cartelDucto(texto, color, x, y, z) {
+  const s = makeSign(texto, color);
+  s.scale.set(.16, .16, .16);
+  s.position.set(x, y, z);
+  scene.add(s);
+  return s;
+}
+function armarTunelesDucto(ducto, cz) {
+  const junta = { x: ducto.oeste, z: ducto.z, y: ducto.y };
+  const boca = { x: ducto.oeste - 1.35, z: cz - JAIL.d / 2 - 2.6, y: ducto.y + .45 };
+  const xFin = ducto.oeste - 1.35, zFin = cz - JAIL.d / 2 - 54;
+  const salida = { x: xFin, z: zFin, y: 9.2 };
+  ducto.junta = junta;
+  ducto.boca = boca;
+  ducto.salida = salida;
+  ducto.zSalida = salida.z;
+  tunelDeAire({ x: ducto.este, z: ducto.z, y: ducto.y }, junta, 1.45, 1.12);
+  tunelDeAire(junta, boca, 1.45, 1.12);
+  tunelDeAire(boca, salida, 1.45, 1.12);
+  const camara = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.45, 2.5), new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: .5, metalness: .35, emissive: 0x1e293b, emissiveIntensity: .55, side: THREE.BackSide }));
+  camara.position.set(junta.x, junta.y, junta.z);
+  scene.add(camara);
+  const mala = CELDAS_PRESO.find(c => c.n === 404) || CELDAS_PRESO[0];
+  const otra = CELDAS_PRESO.find(c => c.n === 405) || CELDAS_PRESO[1] || mala;
+  if (mala) tunelDeAire(junta, { x: mala.ex, z: (mala.minZ + mala.maxZ) / 2, y: ducto.y }, 1.2, 1.02);
+  if (otra && otra !== mala) tunelDeAire(junta, { x: otra.ex, z: (otra.minZ + otra.maxZ) / 2, y: ducto.y }, 1.05, .95);
+  cartelDucto('SALIDA', 0xbbf7d0, boca.x, boca.y + .15, boca.z + 1.1);
+  if (mala) cartelDucto('CELDA', 0xfecaca, (junta.x + mala.ex) / 2, ducto.y + .2, (junta.z + (mala.minZ + mala.maxZ) / 2) / 2);
+  const reja = hacerRejaDucto(salida.x, salida.y, salida.z);
+  reja.scale.set(1.35, 1.35, 1.35);
+  ducto.rejaSalida = reja;
+  const luz = new THREE.PointLight(0xdbeafe, 0, 9, 1.35);
+  scene.add(luz);
+  ducto.luz = luz;
+  for (let i = 0; i < 5; i++) {
+    const a = new THREE.Mesh(new THREE.SphereGeometry(.08, 6, 5), new THREE.MeshBasicMaterial({ color: 0xf8fafc, transparent: true, opacity: .4, depthWrite: false }));
+    a.userData = { x: salida.x, y: salida.y - .2, z: salida.z - .3, fase: i * .2, sale: false };
+    scene.add(a);
+    rutinaCarcel.aire.push(a);
+  }
+}
 function armarAlmuerzoCarcel(cfg) {
   const { cx, cz, pFondo, celdaZ, celdaD, anchoCelda, pw, pt } = cfg;
   const barsZ = celdaZ + celdaD / 2;
@@ -6579,7 +6816,9 @@ function armarAlmuerzoCarcel(cfg) {
     edifCaja(m.x, .46, m.z, 1.8, .1, .9, 0x8a6b4a, 'carcel', false);
     for (const lado of [-.55, .55]) {
       const p = makePrisoner(8 + mi * 2 + (lado > 0 ? 1 : 0));
-      sentarPersona(p, m.x + lado, .95, m.z, lado > 0 ? Math.PI : 0);
+      const hacia = lado > 0 ? Math.PI : 0;
+      ponerSillaDeSopa(m.x + lado, m.z, hacia);
+      sentarPersona(p, m.x + lado, .5, m.z, hacia);
       ponerTenedorEnMano(p, metal);
       scene.add(p);
       rutinaCarcel.comensales.push(p);
@@ -6605,10 +6844,7 @@ function armarAlmuerzoCarcel(cfg) {
     jailFolk.push(p);
   });
   const zDucto = pFondo - pt / 2 - .55;
-  const zSalida = cz - JAIL.d / 2 - 3;
-  const ducto = { z: zDucto, oeste: oeste + .45, este: este - .45, zSalida, y: 2.15 };
-  edifCaja((ducto.oeste + ducto.este) / 2, ducto.y, zDucto, ducto.este - ducto.oeste, .82, .68, 0x64748b, 'carcel', false);
-  edifCaja(ducto.oeste, ducto.y, (zDucto + zSalida) / 2, .68, .82, Math.abs(zSalida - zDucto), 0x64748b, 'carcel', false);
+  const ducto = { z: zDucto, oeste: oeste + .45, este: este - .45, y: 2.15 };
   for (const c of CELDAS_PRESO) {
     const rejaDucto = hacerRejaDucto(c.ex, 2.2, fondoZ + .1);
     c.grate = { x: c.ex, y: 2.2, z: fondoZ + .1, mesh: rejaDucto };
@@ -6620,21 +6856,7 @@ function armarAlmuerzoCarcel(cfg) {
       rutinaCarcel.aire.push(a);
     }
   }
-  const mala = CELDAS_PRESO.find(c => c.n === 404);
-  if (mala) {
-    const bx = mala.ex, bz = (mala.minZ + mala.maxZ) / 2;
-    const len = Math.hypot(bx - ducto.oeste, bz - zDucto);
-    const tubo = new THREE.Mesh(smoothBox(.58, .7, Math.max(.4, len)), mat(0x64748b));
-    tubo.position.set((ducto.oeste + bx) / 2, ducto.y, (zDucto + bz) / 2);
-    tubo.rotation.y = Math.atan2(bx - ducto.oeste, bz - zDucto);
-    scene.add(tubo);
-  }
-  for (let i = 0; i < 4; i++) {
-    const a = new THREE.Mesh(new THREE.SphereGeometry(.09, 6, 5), new THREE.MeshBasicMaterial({ color: 0xf8fafc, transparent: true, opacity: .45, depthWrite: false }));
-    a.userData = { x: ducto.oeste, y: .35, z: zSalida + .4, fase: i * .25, sale: false };
-    scene.add(a);
-    rutinaCarcel.aire.push(a);
-  }
+  armarTunelesDucto(ducto, cz);
   rutinaCarcel.fila = fila;
   rutinaCarcel.mesa = mesa;
   rutinaCarcel.mostrador = mostrador;
@@ -7026,31 +7248,78 @@ function proyectarEnTramo(p, a, b) {
   const x = a.x + abx * t, z = a.z + abz * t;
   return { x, z, t, d: Math.hypot(x - p.x, z - p.z) };
 }
+function lerp3(a, b, t) {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t };
+}
+function empezarSubidaAlDucto() {
+  if (!condena || condena.subiendo || condena.enDucto || !condena.rejaAbierta) return;
+  condena.subiendo = { t: 0, dur: 2.7 };
+  condena.pose = null;
+  condena.lavando = false;
+  condena.camLavado = false;
+  soltarCuchara();
+  mostrarCamaCelda(true);
+  toast('🛏️ Te trepas a la cama de abajo, pasas a la de arriba y entras al ducto.');
+}
+function avanzarSubida(dt) {
+  const s = condena.subiendo;
+  if (!s) return;
+  if (!s.desde) s.desde = { x: player.position.x, y: 0, z: player.position.z };
+  s.t += dt;
+  const c = condena.celda, d = rutinaCarcel.ducto;
+  const baja = { x: c.cama.x + .15, y: .98, z: c.cama.z + .85 };
+  const alta = { x: c.cama.x + .1, y: 2.28, z: c.cama.z + .35 };
+  const boca = { x: c.ex, y: d.y - .85, z: d.z };
+  const u = Math.min(1, s.t / s.dur);
+  const suave = (k) => { const e = THREE.MathUtils.clamp(k, 0, 1); return e * e * (3 - 2 * e); };
+  let p, pose;
+  if (u < .36) { p = lerp3(s.desde, baja, suave(u / .36)); pose = 'salto'; }
+  else if (u < .7) { p = lerp3(baja, alta, suave((u - .36) / .34)); pose = 'trepa'; }
+  else { p = lerp3(alta, boca, suave((u - .7) / .3)); pose = 'entra'; }
+  s.pies = p;
+  s.pose = pose;
+  player.position.set(p.x, p.y + 1.15, p.z);
+  yaw = Math.atan2(-(c.ex - p.x), -(d.z - p.z));
+  pitch = pose === 'trepa' ? .45 : .12;
+  vy = 0;
+  grounded = true;
+  if (u >= 1) { condena.subiendo = null; entrarAlDucto(); }
+}
 function entrarAlDucto() {
   if (!condena || condena.enDucto || !condena.rejaAbierta) return;
   const d = rutinaCarcel.ducto;
   const mala = condena.celda.n === 404 ? rutinaCarcel.celda405 : rutinaCarcel.celda404;
+  const centroMala = { x: mala.ex, z: (mala.minZ + mala.maxZ) / 2, y: d.y };
   condena.enDucto = true;
   condena.pose = null;
   condena.lavando = false;
   condena.camLavado = false;
   condena.atornillando = false;
+  condena.enRejaSalida = false;
   soltarCuchara();
   condena.tramos = [
-    { id: 'recto', a: { x: d.este, z: d.z }, b: { x: d.oeste, z: d.z } },
-    { id: 'libre', a: { x: d.oeste, z: d.z }, b: { x: d.oeste, z: d.zSalida } },
-    { id: 'mala', a: { x: d.oeste, z: d.z }, b: { x: mala.ex, z: (mala.minZ + mala.maxZ) / 2 }, celda: mala },
+    { id: 'recto', a: { x: d.este, z: d.z, y: d.y }, b: d.junta },
+    { id: 'libre', a: d.junta, b: d.boca },
+    { id: 'largo', a: d.boca, b: d.salida },
+    { id: 'mala', a: d.junta, b: centroMala, celda: mala },
   ];
   player.position.set(THREE.MathUtils.clamp(condena.celda.ex, d.oeste, d.este), d.y, d.z);
-  yaw = Math.PI / 2;
-  pitch = 0;
+  yaw = Math.atan2(-(d.junta.x - player.position.x), -(d.junta.z - player.position.z));
+  pitch = .08;
   vy = 0;
   grounded = true;
-  toast('🧎 Agachado en el ducto. Sigue recto: un recodo sale del penal y el otro cae en otra celda.');
+  if (d.luz) d.luz.intensity = 1.8;
+  toast('🌬️ Estás dentro del conducto de metal. Sigue recto hasta los dos caminos.');
+}
+function alturaEnTramo(seg, t) {
+  const ay = seg.a.y != null ? seg.a.y : rutinaCarcel.ducto.y;
+  const by = seg.b.y != null ? seg.b.y : ay;
+  return ay + (by - ay) * t;
 }
 function moverEnDucto(dt) {
   mirarConFlechas(dt);
   const d = rutinaCarcel.ducto;
+  if (d.luz) { d.luz.intensity = 1.8; d.luz.position.copy(player.position); }
   let ax = 0, az = 0;
   if (keys['KeyW']) az += 1;
   if (keys['KeyS']) az -= 1;
@@ -7061,27 +7330,40 @@ function moverEnDucto(dt) {
   const mag = Math.hypot(ax, az);
   if (mag > 1) { ax /= mag; az /= mag; }
   const deseo = { x: player.position.x, z: player.position.z };
-  deseo.x += (-Math.sin(yaw) * az + Math.cos(yaw) * ax) * 3.2 * dt;
-  deseo.z += (-Math.cos(yaw) * az - Math.sin(yaw) * ax) * 3.2 * dt;
+  const paso = 3.5 * dt;
+  deseo.x += (-Math.sin(yaw) * az + Math.cos(yaw) * ax) * paso;
+  deseo.z += (-Math.cos(yaw) * az - Math.sin(yaw) * ax) * paso;
   let best = null;
   for (const seg of condena.tramos) {
     const q = proyectarEnTramo(deseo, seg.a, seg.b);
     if (!best || q.d < best.d) best = Object.assign({ seg }, q);
   }
-  if (best && best.d <= .72) {
-    player.position.x = best.x;
-    player.position.z = best.z;
-    if (best.seg.id === 'libre' && best.t > .97) { fugarDeLaCarcel(); return; }
+  if (best && best.d <= .85) {
+    let t = best.t;
+    if (best.seg.id === 'largo' && t > .985) t = .985;
+    const a = best.seg.a, b = best.seg.b;
+    player.position.x = a.x + (b.x - a.x) * t;
+    player.position.z = a.z + (b.z - a.z) * t;
+    player.position.y = alturaEnTramo(best.seg, t);
+    condena.enRejaSalida = best.seg.id === 'largo' && t > .9;
+    if (!condena.avisoCruce && (best.seg.id === 'libre' || best.seg.id === 'mala') && best.t < .2) {
+      condena.avisoCruce = true;
+      toast('🔀 Eliges un lado. SALIDA sigue recto un largo rato hasta otra reja. CELDA cae en otra celda.');
+    }
     if (best.seg.id === 'mala' && best.t > .9) { caerEnOtraCelda(best.seg.celda); return; }
   }
-  player.position.y = d.y;
   vy = 0;
   grounded = true;
+}
+function apagarLuzDucto() {
+  const d = rutinaCarcel.ducto;
+  if (d && d.luz) d.luz.intensity = 0;
 }
 function caerEnOtraCelda(otra) {
   if (!otra) otra = rutinaCarcel.celda404;
   condena.enDucto = false;
   condena.tramos = null;
+  apagarLuzDucto();
   condena.celda = otra;
   condena.pose = null;
   if (otra.reja) otra.reja.top = 4.2;
@@ -7098,11 +7380,9 @@ function caerEnOtraCelda(otra) {
   if (playerAvatar) posarDePie(playerAvatar);
   toast('⛓️ El recodo malo termina en la celda ' + otra.n + '. La reja está cerrada.');
 }
-function fugarDeLaCarcel() {
-  const d = rutinaCarcel.ducto;
-  const x = d.oeste, z = d.zSalida;
-  if (condena.celda && condena.celda.preso) condena.celda.preso.userData.jailQuieto = false;
-  if (condena.celda && condena.celda.reja) condena.celda.reja.top = 4.2;
+function soltarCondenaPorFuga() {
+  if (condena && condena.celda && condena.celda.preso) condena.celda.preso.userData.jailQuieto = false;
+  if (condena && condena.celda && condena.celda.reja) condena.celda.reja.top = 4.2;
   rutinaCarcel.guardias.forEach(g => {
     g.userData.escolta = false;
     g.userData.jailQuieto = false;
@@ -7113,19 +7393,137 @@ function fugarDeLaCarcel() {
   soltarManosLavado();
   mostrarCamaCelda(false);
   cerrarDuctoVisual();
-  if (playerAvatar) { playerAvatar.rotation.order = 'XYZ'; posarDePie(playerAvatar); }
+  apagarLuzDucto();
   condena = null;
-  player.position.set(x, PLAYER_EYE, z);
-  vy = 0;
-  grounded = true;
   state.fugaCarcel = true;
   state.wanted = 300;
   state.wantedLevel = 4;
-  state.policeDelay = 0;
+  state.policeDelay = 6;
   state.bankChase = false;
   state.jailPorBanco = false;
   quitarCarteles();
+}
+function fugarDeLaCarcel() {
+  const d = rutinaCarcel.ducto;
+  const x = d.salida ? d.salida.x : d.oeste;
+  const z = d.salida ? d.salida.z : d.z;
+  soltarCondenaPorFuga();
+  player.position.set(x, PLAYER_EYE, z);
+  vy = 0;
+  grounded = true;
+  if (playerAvatar) { playerAvatar.rotation.order = 'XYZ'; posarDePie(playerAvatar); }
   toast('🏃 Saliste por el ducto. La policía te persigue cinco minutos. Si aguantas, quedas libre.');
+}
+function patearRejaSalida() {
+  if (!condena || !condena.enRejaSalida || caidaDucto) return;
+  const d = rutinaCarcel.ducto;
+  const s = d.salida;
+  if (d.rejaSalida) romperGrupo(d.rejaSalida);
+  const x = s.x, z = s.z - 1.15, y = s.y;
+  toast('🦶 Le pegas una patada a la reja. Estás atrás del penal y el suelo queda muy abajo.');
+  beep(90, .12, .07);
+  cameraShake = Math.max(cameraShake, .5);
+  soltarCondenaPorFuga();
+  caidaDucto = { fase: 'patada', t: 0, x, y, z, y0: y };
+  player.position.set(x, y, z);
+  yaw = Math.PI;
+  pitch = .55;
+  vy = 0;
+  grounded = false;
+}
+function posarTumbadoDucto(k) {
+  if (!playerAvatar) return;
+  const pies = player.position.y - PLAYER_EYE;
+  playerAvatar.visible = true;
+  playerAvatar.position.set(player.position.x + .2, pies + .28, player.position.z + .05);
+  playerAvatar.rotation.order = 'YXZ';
+  playerAvatar.rotation.set(-1.42, .85, .28 + k * .04);
+  const l = playerAvatar.userData.limbs;
+  if (!l) return;
+  l.armL.rotation.set(-.2, .3, .8);
+  l.armR.rotation.set(-.35, -.2, -.7);
+  l.legL.rotation.set(.15, 0, .2);
+  l.legR.rotation.set(.4, 0, -.15);
+  ponerJunta(l.armL, -.3, 0);
+  ponerJunta(l.armR, -.45, 0);
+  ponerJunta(l.legL, .2, 0);
+  ponerJunta(l.legR, .35, 0);
+}
+function updateCaidaDucto(dt) {
+  const c = caidaDucto;
+  if (!c) return false;
+  if (c.fase === 'patada') {
+    c.t += dt;
+    player.position.set(c.x, c.y, c.z);
+    vy = 0;
+    grounded = false;
+    if (playerAvatar) {
+      playerAvatar.visible = true;
+      playerAvatar.position.set(c.x, c.y - 1.05, c.z);
+      playerAvatar.rotation.set(.9, Math.PI, 0);
+      const l = playerAvatar.userData.limbs;
+      const k = Math.sin(Math.min(1, c.t / .45) * Math.PI);
+      if (l) {
+        l.legR.rotation.set(-1.55 * k, 0, -.05);
+        l.legL.rotation.set(.2, 0, .05);
+        l.armL.rotation.set(-.5, .15, .3);
+        l.armR.rotation.set(-.4, -.1, -.25);
+        ponerJunta(l.legR, .15, 0);
+        ponerJunta(l.legL, .25, 0);
+      }
+    }
+    if (c.t >= .48) { c.fase = 'vuelo'; c.t = 0; vy = .3; }
+    return true;
+  }
+  if (c.fase === 'vuelo') {
+    vy -= 25 * dt;
+    player.position.y += vy * dt;
+    const piso = mountainHeightAt(player.position.x, player.position.z) + PLAYER_EYE;
+    fijarParpados(.22);
+    if (player.position.y <= piso || c.t > 4) {
+      player.position.y = piso;
+      vy = 0;
+      grounded = true;
+      const altura = Math.max(0, c.y0 - piso);
+      const dmg = Math.round(THREE.MathUtils.clamp(altura * 4.2, 22, 48));
+      damagePlayer(dmg, player.position, true);
+      if (!state.creative && state.hp < 18) state.hp = 18;
+      floatText(player.position.clone().setY(player.position.y + .4), '-' + dmg, '#ef4444', 18);
+      c.fase = 'suelo';
+      c.t = 0;
+      fijarParpados(.48);
+      posarTumbadoDucto(0);
+      cameraShake = Math.max(cameraShake, .7);
+      toast('💥 El golpe contra el suelo te tira. Dos segundos en el piso, con los ojos entrecerrados.');
+    }
+    c.t += dt;
+    return true;
+  }
+  if (c.fase === 'suelo') {
+    c.t += dt;
+    vy = 0;
+    grounded = true;
+    fijarParpados(.46 + Math.sin(c.t * 5) * .04);
+    posarTumbadoDucto(0);
+    if (c.t >= 2) {
+      c.fase = 'pie';
+      c.t = 0;
+      toast('🚶 Te pones de pie y abres los ojos. La policía ya te busca.');
+    }
+    return true;
+  }
+  c.t += dt;
+  const k = Math.min(1, c.t / .7);
+  fijarParpados(.46 * (1 - k));
+  if (playerAvatar) {
+    playerAvatar.visible = cameraMode !== 0 || k < .95;
+    playerAvatar.rotation.order = 'YXZ';
+    playerAvatar.rotation.set(-1.2 * (1 - k), .2 * (1 - k), .4 * (1 - k));
+    playerAvatar.position.set(player.position.x, player.position.y - PLAYER_EYE, player.position.z);
+    if (k > .85) posarDePie(playerAvatar);
+  }
+  if (k >= 1) { caidaDucto = null; fijarParpados(0); }
+  return true;
 }
 function abrirDuctoConCuchara() {
   if (!condena || condena.rejaAbierta) return;
@@ -7233,11 +7631,11 @@ function becomeWanted(sec, stars) {
   state.policeDelay = 0;   // salen enseguida: si esperan, la búsqueda se acaba antes de que lleguen
 }
 function updatePolice(dt) {
-  if (state.planet === 'platus') { if (police.length) clearPolice(); state.wanted = 0; state.wantedLevel = 0; return; }   // en Platus NO hay policía
-  if (trasladoPolicial) return;   // el agarre y el patrulla los mueve el traslado, sin quitarte el control antes de tiempo
+  if (state.planet === 'platus') { if (police.length) clearPolice(); state.wanted = 0; state.wantedLevel = 0; state.fugaDinamita = false; limpiarTanquesFuga(); syncMusicaPersecucion(); return; }   // en Platus NO hay policía
+  if (trasladoPolicial) { syncMusicaPersecucion(); return; }   // el agarre y el patrulla los mueve el traslado, sin quitarte el control antes de tiempo
   if (state.wanted > 0) {
-    state.wanted -= dt * (state.gadgets && state.gadgets.capa && !state.fugaCarcel ? 1.8 : 1);
-    if (state.policeDelay > 0) { state.policeDelay -= dt; return; }   // aún no llegan: aprovecha para huir
+    state.wanted -= dt * (state.gadgets && state.gadgets.capa && !state.fugaCarcel && !state.fugaDinamita ? 1.8 : 1);
+    if (state.policeDelay > 0) { state.policeDelay -= dt; syncMusicaPersecucion(); return; }   // aún no llegan: aprovecha para huir
     const driving = state.driving;              // si conduces, la policía te persigue EN AUTO
     const lvl = Math.max(1, state.wantedLevel || 1);
     const desired = Math.min(6, lvl + (driving ? 1 : 0));
@@ -7252,15 +7650,16 @@ function updatePolice(dt) {
       if (i >= 0) police.splice(i, 1);
     }
     const escondido = playerInSmoke();   // metido en el humo: te pierden de vista
-    if (escondido && !state.fugaCarcel) {
+    if (escondido && !state.fugaCarcel && !state.fugaDinamita) {
       state.wanted = Math.max(0, state.wanted - dt * 2.5);   // además se les pasa más rápido
       if (!state.smokeHintShown) { state.smokeHintShown = true; toast('💨 Dentro del humo la policía NO te ve · quédate quieto'); }
     } else state.smokeHintShown = false;
     let agarrando = false;
     for (const p of police) {
       if (p.userData.muerto) continue;
-      setPoliceCar(p, driving);
-      const speed = (driving ? 22 : 7) + lvl * (driving ? 1.2 : 0.4);
+      setPoliceCar(p, state.fugaDinamita || driving);
+      let speed = (driving ? 22 : 7) + lvl * (driving ? 1.2 : 0.4);
+      if (state.fugaDinamita) speed = 12;
       const catchD = driving ? 3.4 : 1.9;
       const d = dist2D(p.position, player.position);
       if (escondido) {   // no te ven: se quedan dando vueltas donde te vieron por última vez
@@ -7273,11 +7672,14 @@ function updatePolice(dt) {
       }
       p.userData.lostAt = null;
       p.userData.shotCd = (p.userData.shotCd || 0) - dt;
-      if (state.fuegoPolicial && !p.userData.car && d <= ALCANCE_POLICIA && d > .35 && p.userData.shotCd <= 0) {
+      if (state.fugaDinamita && p.userData.car && d <= 22 && d > 1.2 && p.userData.shotCd <= 0) {
+        p.userData.shotCd = .28;
+        dispararMetralleta(p);
+      } else if (state.fuegoPolicial && !p.userData.car && d <= ALCANCE_POLICIA && d > .35 && p.userData.shotCd <= 0) {
         p.userData.shotCd = .9;
         dispararPolicia(p);
       }
-      if (d <= catchD && !rutaPoliciaBanco(p)) {
+      if (!state.fugaDinamita && !caidaDucto && d <= catchD && !rutaPoliciaBanco(p)) {
         if (playerAirborne()) { airCombatMiss('police'); continue; }   // volando: te persiguen abajo, no te esposan
         agarrando = true;
       }
@@ -7300,17 +7702,24 @@ function updatePolice(dt) {
       } else { p.rotation.y = face; swingLimbs(p, dt); }
     }
     updateTanque(dt);
+    updateTanquesFuga(dt);
     if (agarrando) {
       state.arrestoT = (state.arrestoT || 0) + dt;
       if (state.arrestoT >= 1.15) { empezarTraslado(); return; }
     } else state.arrestoT = 0;
-  } else if (police.length || state.wantedLevel || state.tanque) {
+  } else if (police.length || state.wantedLevel || state.tanque || (state.tanques && state.tanques.length) || state.fugaDinamita) {
     const libre = !!state.fugaCarcel;
+    const dinamita = !!state.fugaDinamita;
     clearPolice(); state.wantedLevel = 0;
     state.fuegoPolicial = false;
     if (state.tanque) { scene.remove(state.tanque); state.tanque = null; }
-    if (libre) { state.fugaCarcel = false; toast('🕊️ Aguantaste los cinco minutos. Sigues libre.'); }
+    limpiarTanquesFuga();
+    state.fugaDinamita = false;
+    state.fugaCarcel = false;
+    if (dinamita) toast('🕊️ Aguantaste los diez minutos. Los tanques y las patrullas se fueron.');
+    else if (libre) toast('🕊️ Aguantaste los cinco minutos. Sigues libre.');
   }
+  syncMusicaPersecucion();
 }
 const ALCANCE_POLICIA = 3;
 const manchasSangre = [];
@@ -7334,6 +7743,18 @@ function dispararPolicia(p) {
   damagePlayer(24, p.position);
   puntoDeSangre(player.position, 0xb91c1c);
   beep(170, .05, .04);
+}
+function dispararMetralleta(p) {
+  const desde = p.position.clone(); desde.y = 1.5;
+  const falla = Math.random() < .38;
+  const blanco = player.position.clone();
+  if (falla) { blanco.x += (Math.random() - .5) * 8; blanco.z += (Math.random() - .5) * 8; blanco.y += .4; }
+  spawnTracer(desde, blanco);
+  beep(210, .03, .035);
+  if (falla) return;
+  state.heridaPolicia = true;
+  damagePlayer(6, p.position);
+  puntoDeSangre(player.position, 0xb91c1c);
 }
 function herirAgente(p, dmg) {
   if (!p || p.userData.muerto) return;
@@ -7359,6 +7780,7 @@ function gunRaycastAgente(from, dir, range) {
   let best = null, bestT = range, bestPoint = null;
   const lista = police.slice();
   if (state.tanque && !state.tanque.userData.muerto) lista.push(state.tanque);
+  for (const t of state.tanques || []) if (t && !t.userData.muerto) lista.push(t);
   for (const person of lista) {
     if (!person.visible || person.userData.muerto) continue;
     const relx = person.position.x - from.x, rely = (person.position.y + 1) - from.y, relz = person.position.z - from.z;
@@ -7429,6 +7851,67 @@ function updateTanque(dt) {
     beep(90, .12, .07);
   }
 }
+function limpiarTanquesFuga() {
+  for (const t of state.tanques || []) if (t) scene.remove(t);
+  state.tanques = [];
+}
+function updateTanquesFuga(dt) {
+  if (!state.fugaDinamita || state.wanted <= 0 || state.planet === 'platus') return;
+  if (!state.tanques) state.tanques = [];
+  while (state.tanques.length < 2) {
+    const t = hacerTanque();
+    const ang = yaw + Math.PI + (state.tanques.length ? .55 : -.55);
+    const x = player.position.x + Math.sin(ang) * 36;
+    const z = player.position.z + Math.cos(ang) * 36;
+    t.position.set(x, mountainHeightAt(x, z), z);
+    t.userData.fuga = true;
+    t.userData.shotCd = .8 + Math.random();
+    scene.add(t);
+    state.tanques.push(t);
+  }
+  for (const t of state.tanques) {
+    if (!t) continue;
+    if (t.userData.muerto) {
+      t.userData.respawn = (t.userData.respawn == null ? 16 : t.userData.respawn) - dt;
+      if (t.userData.respawn <= 0) {
+        const ang = yaw + Math.PI + (Math.random() - .5);
+        const x = player.position.x + Math.sin(ang) * 52;
+        const z = player.position.z + Math.cos(ang) * 52;
+        t.position.set(x, mountainHeightAt(x, z), z);
+        t.rotation.z = 0;
+        t.userData.muerto = false;
+        t.userData.hp = 160;
+        t.userData.respawn = null;
+        t.userData.shotCd = 1;
+      }
+      continue;
+    }
+    const dx = player.position.x - t.position.x, dz = player.position.z - t.position.z;
+    const len = Math.hypot(dx, dz) || 1;
+    if (len > 8) {
+      const nx = t.position.x + dx / len * 6 * dt, nz = t.position.z + dz / len * 6 * dt;
+      t.position.x = nx; t.position.z = nz;
+      t.position.y = mountainHeightAt(nx, nz);
+    }
+    t.rotation.y = Math.atan2(dx, dz);
+    t.userData.shotCd -= dt;
+    if (len <= 48 && len > 7 && t.userData.shotCd <= 0) {
+      t.userData.shotCd = 1.35;
+      const desde = t.position.clone(); desde.y = 1.7;
+      const falla = Math.random() < .45;
+      const blanco = player.position.clone();
+      if (falla) { blanco.x += (Math.random() - .5) * 14; blanco.z += (Math.random() - .5) * 14; }
+      spawnProyectil(desde, blanco, true);
+      beep(70, .14, .06);
+      if (!falla) {
+        state.heridaPolicia = true;
+        damagePlayer(50, t.position);
+        puntoDeSangre(player.position, 0xb91c1c);
+        cameraShake = Math.max(cameraShake, .35);
+      }
+    }
+  }
+}
 function asegurarEsposas() {
   if (playerAvatar.userData.esposas) return playerAvatar.userData.esposas;
   const l = playerAvatar.userData.limbs;
@@ -7489,10 +7972,18 @@ function asegurarBate(p) {
   if (!p || p.userData.bate) return p && p.userData.bate;
   const mano = p.userData.limbs && p.userData.limbs.armR && p.userData.limbs.armR.userData.extremo;
   if (!mano) return null;
-  const bate = new THREE.Mesh(new THREE.CylinderGeometry(.04, .07, .9, 6), mat(0x92400e));
-  bate.position.set(0, .38, .04); bate.rotation.x = .35; mano.add(bate);
-  p.userData.bate = bate;
-  return bate;
+  const g = new THREE.Group();
+  const mango = new THREE.Mesh(new THREE.CylinderGeometry(.038, .042, .42, 6), mat(0x78350f));
+  mango.position.y = .18; g.add(mango);
+  const barril = new THREE.Mesh(new THREE.CylinderGeometry(.1, .055, .78, 8), mat(0xf59e0b));
+  barril.position.y = .68; g.add(barril);
+  const punta = new THREE.Mesh(new THREE.SphereGeometry(.1, 8, 6), mat(0xd97706));
+  punta.position.y = 1.05; g.add(punta);
+  g.position.set(.04, .02, .2);
+  g.rotation.x = 1.25;
+  mano.add(g);
+  p.userData.bate = g;
+  return g;
 }
 function bajarDelAutoPropio() {
   state.driving = false;
@@ -7524,6 +8015,7 @@ function cancelarEsposas() {
   trasladoPolicial = null;
   state.arrestoT = 0;
   verEsposas(false);
+  fijarParpados(0);
   ocultarManosEsposadas();
   if (!tr) return;
   for (const p of tr.cops) {
@@ -7541,10 +8033,20 @@ function colocarPoliciasEsposando(tr) {
   const n = Math.max(1, vivos.length);
   vivos.forEach((p, i) => {
     p.visible = true;
-    const ang = yaw + Math.PI + (i - (n - 1) / 2) * .75;
-    const radio = tr.suelo ? .9 : 1.2;
-    const x = player.position.x + Math.sin(ang) * radio;
-    const z = player.position.z + Math.cos(ang) * radio;
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    const rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    let x, z;
+    if (tr.conBates) {
+      const lado = (i - (n - 1) / 2) * 1.15;
+      const dist = 2.35 + (i % 2) * .28;
+      x = player.position.x + fx * dist + rx * lado;
+      z = player.position.z + fz * dist + rz * lado;
+    } else {
+      const ang = yaw + Math.PI + (i - (n - 1) / 2) * .75;
+      const radio = tr.suelo ? .9 : 1.2;
+      x = player.position.x + Math.sin(ang) * radio;
+      z = player.position.z + Math.cos(ang) * radio;
+    }
     p.position.set(x, mountainHeightAt(x, z), z);
     p.rotation.set(tr.suelo ? .7 : .2, Math.atan2(player.position.x - x, player.position.z - z), 0);
     const l = p.userData.limbs;
@@ -7564,30 +8066,38 @@ function colocarPoliciasEsposando(tr) {
 }
 function pegarConBates(tr, dt) {
   const vivos = tr.cops.filter(p => p && !p.userData.muerto);
-  if (vivos.length < 3 || !state.thiefMode) return;
+  if (vivos.length < 2) return;
   if (!tr.conBates) {
     tr.conBates = true;
     vivos.forEach(asegurarBate);
-    toast('🏏 Son hartos. Te resististe a las esposas y te pegan con bates.');
+    toast('🏏 Te pegan con bates. Se ve el palo y el golpe.');
   }
   vivos.forEach((p, i) => {
     const l = p.userData.limbs;
+    const golpe = Math.sin(tr.t * 8 + i * .6);
     if (l) {
-      const golpe = Math.sin(tr.t * 9 + i);
-      l.armR.rotation.set(-.35 + golpe * .9, -.15, -.35);
-      l.armL.rotation.set(-.4, .1, .2);
-      ponerJunta(l.armR, -.35 - Math.max(0, golpe) * .9, .05);
-      ponerJunta(l.armL, -.4, 0);
+      l.armR.rotation.set(-.15 - Math.max(0, golpe) * 1.7, -.25, -.2);
+      l.armL.rotation.set(-.55, .15, .35);
+      ponerJunta(l.armR, -.2 - Math.max(0, golpe) * 1.1, .08);
+      ponerJunta(l.armL, -.45, 0);
+    }
+    if (p.userData.bate) {
+      p.userData.bate.visible = true;
+      p.userData.bate.rotation.x = .35 + Math.max(0, golpe) * 1.45;
     }
   });
+  tr.dolorOjos = Math.max(.38, (tr.dolorOjos == null ? .7 : tr.dolorOjos) - dt * .85);
+  fijarParpados(tr.dolorOjos);
   tr.bateCd -= dt;
   if (tr.bateCd > 0) return;
-  tr.bateCd = .8;
+  tr.bateCd = .85;
+  tr.dolorOjos = 1;
+  fijarParpados(1);
   state.heridaPolicia = true;
   damagePlayer(8, player.position);
   if (state.hp < 18) state.hp = 18;
-  cameraShake = Math.max(cameraShake, .2);
-  beep(90, .08, .05);
+  cameraShake = Math.max(cameraShake, .45);
+  beep(70, .1, .06);
 }
 function updateEsposas(dt) {
   const tr = trasladoPolicial;
@@ -7654,6 +8164,7 @@ function subirAlPatrulla() {
   tr.car = car; tr.luz = car.userData.luz; tr.fase = 'auto'; tr.t = 0;
   state.jailPorBanco = !!tr.banco;
   state.fugaCarcel = false; state.bankChase = false; state.fuegoPolicial = false; state.heridaPolicia = false;
+  if (tr.conBates) { tr.abrirOjos = 1; fijarParpados(1); }
   state.wanted = 0; state.wantedLevel = 0; state.driving = false; state.arrestoT = 0;
   quitarCarteles();
   if (state.tanque) { scene.remove(state.tanque); state.tanque = null; }
@@ -7667,6 +8178,7 @@ function subirAlPatrulla() {
 function terminarTraslado() {
   const tr = trasladoPolicial;
   trasladoPolicial = null;
+  fijarParpados(0);
   ocultarManosEsposadas();
   if (camera.near < .1) { camera.near = .2; camera.updateProjectionMatrix(); }
   if (tr && tr.car) scene.remove(tr.car);
@@ -7678,6 +8190,10 @@ function updateTraslado(dt) {
   const tr = trasladoPolicial;
   if (!tr || tr.fase !== 'auto') return;
   tr.t += dt;
+  if (tr.abrirOjos > 0) {
+    tr.abrirOjos = Math.max(0, tr.abrirOjos - dt / 2.8);
+    fijarParpados(tr.abrirOjos);
+  }
   vy = 0; grounded = true;
   state.driving = false;
   creativeFlying = false;
@@ -7712,7 +8228,9 @@ function encuadrarTraslado() {
     const bajo = !!(tr.suelo && (tr.zafando || 0) < .2);
     camera.position.set(player.position.x, bajo ? .46 : player.position.y, player.position.z);
     camera.rotation.order = 'YXZ';
-    camera.rotation.set(pitch + (bajo ? .4 : 0), yaw, bajo ? Math.sin(tr.t * 5) * .12 : 0);
+    const batacazo = tr.conBates ? Math.max(0, Math.sin(tr.t * 8)) * .22 : 0;
+    const miraBate = tr.conBates ? -.22 : 0;
+    camera.rotation.set(pitch + (bajo ? .4 : 0) + miraBate + batacazo, yaw, (bajo ? Math.sin(tr.t * 5) * .12 : 0) + batacazo * .15);
     if (tr.t > .35) colocarManosEsposadas(tr, bajo); else ocultarManosEsposadas();
     return;
   }
@@ -18569,7 +19087,7 @@ const state = {
   hasJetpack: false, jetOn: false,                     // tecnología alien de Platus: jetpack (volar)
   laserGun: false, hasShield: false, shieldHp: 0, shieldMax: 60, shieldCd: 0,   // pistola láser + escudo de energía
   laserEnergy: 100, laserCooling: false, laserCoolLeft: 0, laserIdle: 0, laserWarned: false,   // barra del láser: 20 s de recarga al agotarse
-  guns: {}, gun: null, ammo: 0, clip: 0, reloadT: 0, gunMags: {}, gadgetCharges: {}, handGadget: null,   // cada arma de fuego tiene su cargador y su recarga
+  guns: {}, gun: null, ammo: 0, clip: 0, reloadT: 0, gunMags: {}, rocketAmmo: 0, gadgetCharges: {}, handGadget: null,   // cada arma de fuego tiene su cargador y su recarga
   planetSky: 0xd98c5f, planetHazard: 'cold', planetGrav: 1, planetCreature: 'yeti', inRuins: false, ruinsCleared: false,   // rasgos del planeta actual + ruinas
   contract: null,   // contrato activo del vendedor alien
   incubTime: 0, eggQueue: 0, eggKind: null, eggLine: [], petPoint: null,   // huevos alien: incubación + cola + banderita de reunión 🚩
@@ -18588,7 +19106,7 @@ const state = {
   story: {}, storyRewarded: {}, gadgets: {}, mission: null,
   thiefMode: false,
   thief: { naranjo: false, gorro: false, hacker: false, wearNaranjo: false, wearGorro: false },
-  bankVaultOpen: false, bankLooted: [], bankChase: false, bankDispatched: false, bankGrace: 0, jailPorBanco: false, fugaCarcel: false,
+  bankVaultOpen: false, bankLooted: [], bankChase: false, bankDispatched: false, bankGrace: 0, jailPorBanco: false, fugaCarcel: false, fugaDinamita: false, tanques: [],
 };
 let lastHp = 100;   // para detectar cuándo te hacen daño
 
@@ -18877,6 +19395,7 @@ const MUSIC = {
   day:    { mel: [0, 4, 7, 12, 9, 7, 4, 7, 5, 9, 12, 16, 12, 9, 7, 4], bass: [0, -12, -5, -12], base: 174.61, wave: 'sine' },
   night:  { mel: [0, 3, 7, 3, 10, 8, 7, 3, 0, -2, 1, 3, 7, 3, 1, -2], bass: [-12, -12, -9, -14], base: 130.81, wave: 'triangle' },
   platus: { mel: [0, -2, 3, 0, 7, 5, -2, 0, 3, -4, 0, -2, 5, 3, 0, -5], bass: [-12, -17, -12, -19], base: 146.83, wave: 'triangle' },
+  chase:  { mel: [0, 0, 3, 7, 10, 7, 3, 0, -2, 3, 8, 7, 3, 1, 0, -5], bass: [-12, -12, -5, -17], base: 110, wave: 'sawtooth' },
 };
 let alarmaTimer = null, alarmaStep = 0, alarmaBancoOn = false;
 function alarmaDelBancoActiva() {
@@ -18912,19 +19431,67 @@ function syncAlarmaBanco() {
   if (on) startSirena();
   else stopSirena(true);
 }
+function pistaMusical() {
+  if (musicaPersecucion) return MUSIC.chase;
+  if (state.planet === 'platus') return MUSIC.platus;
+  return state.phase === 'NIGHT' ? MUSIC.night : MUSIC.day;
+}
 function startMusic() {
   if (activeGamerSpeaker || alarmaBancoOn) return;
   if (musicTimer) { clearInterval(musicTimer); musicTimer = null; }
   if (!soundOn) return;
+  const paso = musicaPersecucion ? 210 : 400;
   musicTimer = setInterval(() => {
     if (!soundOn || !state.running || document.hidden || state.paused) return;
-    const M = state.planet === 'platus' ? MUSIC.platus : (state.phase === 'NIGHT' ? MUSIC.night : MUSIC.day);
+    const M = pistaMusical();
     if (M === MUSIC.platus && musicStep % 2) { musicStep++; return; }   // Platus: notas espaciadas (desolado)
     const i = musicStep % M.mel.length; musicStep++;
-    tone(M.base * Math.pow(2, M.mel[i] / 12), 0.34, 0.02, M.wave);                                             // melodía
-    if (i % 2 === 0) tone(M.base * Math.pow(2, M.bass[(i / 2) % M.bass.length] / 12), 0.5, 0.016, 'sine');     // bajo
-    if (state.phase === 'NIGHT' && state.hordeOn && i % 2 === 0) tone(65, .08, .012, 'square');                // pulso sutil durante la horda final
-  }, 400);
+    tone(M.base * Math.pow(2, M.mel[i] / 12), musicaPersecucion ? 0.22 : 0.34, musicaPersecucion ? 0.028 : 0.02, M.wave);
+    if (i % 2 === 0) tone(M.base * Math.pow(2, M.bass[(i / 2) % M.bass.length] / 12), 0.5, musicaPersecucion ? 0.03 : 0.016, 'sine');
+    if (musicaPersecucion && i % 2 === 0) tone(78, .07, .034, 'square');
+    if (!musicaPersecucion && state.phase === 'NIGHT' && state.hordeOn && i % 2 === 0) tone(65, .08, .012, 'square');
+  }, paso);
+}
+let musicaPersecucion = false;
+let sirenaPolicia = null;
+function startSirenaPolicia() {
+  if (sirenaPolicia || !soundOn || !ensureAudio()) return;
+  try {
+    const o1 = audioCtx.createOscillator(), o2 = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o1.type = 'sawtooth'; o2.type = 'triangle';
+    o1.frequency.value = 680; o2.frequency.value = 340;
+    g.gain.value = 0.02;
+    o1.connect(g); o2.connect(g); g.connect(audioCtx.destination);
+    o1.start(); o2.start();
+    sirenaPolicia = { o1, o2, g };
+  } catch (e) { sirenaPolicia = null; }
+}
+function updateSirenaPolicia() {
+  if (!sirenaPolicia || !audioCtx) return;
+  const t = audioCtx.currentTime, ciclo = t % 1.15;
+  const sube = ciclo < .7;
+  const k = sube ? ciclo / .7 : (1.15 - ciclo) / .45;
+  const f = 460 + k * 540;
+  sirenaPolicia.o1.frequency.setTargetAtTime(f, t, .025);
+  sirenaPolicia.o2.frequency.setTargetAtTime(f * .5, t, .04);
+  sirenaPolicia.g.gain.setTargetAtTime(0.018 + k * 0.012, t, .05);
+}
+function stopSirenaPolicia() {
+  if (!sirenaPolicia) return;
+  try { sirenaPolicia.o1.stop(); sirenaPolicia.o2.stop(); } catch (e) {}
+  sirenaPolicia = null;
+}
+function syncMusicaPersecucion() {
+  const perseguido = !!(state.running && state.wanted > 0 && state.planet !== 'platus');
+  const sonar = perseguido && soundOn && !state.paused && !document.hidden;
+  if (sonar) {
+    if (!sirenaPolicia) startSirenaPolicia();
+    updateSirenaPolicia();
+  } else if (sirenaPolicia) stopSirenaPolicia();
+  if (perseguido === musicaPersecucion) return;
+  musicaPersecucion = perseguido;
+  if (!activeGamerSpeaker && !alarmaBancoOn) startMusic();
+  if (perseguido) toast('🎶 Cambia la música: persecución, con las bocinas de la policía');
 }
 // Tema original: dembow marcado + bajo menor + fanfarria épica (sin usar una canción existente).
 const GAMER_SONG = [0, 3, 7, 10, 7, 12, 10, 7, 0, 3, 7, 15, 12, 10, 7, 3];
@@ -19090,9 +19657,10 @@ function trySeatedPlay() {
 }
 function toggleSound() {
   soundOn = !soundOn;
-  if (!soundOn) { if (engineGain) engineGain.gain.value = 0; if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } if (alarmaTimer) { clearInterval(alarmaTimer); alarmaTimer = null; } if (speakerMusicTimer) { clearInterval(speakerMusicTimer); speakerMusicTimer = null; } }
+  if (!soundOn) { if (engineGain) engineGain.gain.value = 0; if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } if (alarmaTimer) { clearInterval(alarmaTimer); alarmaTimer = null; } if (speakerMusicTimer) { clearInterval(speakerMusicTimer); speakerMusicTimer = null; } stopSirenaPolicia(); }
   else if (alarmaBancoOn) startSirena();
   else if (activeGamerSpeaker) startGamerSpeaker(activeGamerSpeaker, Number.isFinite(speakerMusicEndStep) ? Math.max(180, (speakerMusicEndStep - speakerMusicStep) * 180) : undefined, speakerMusicFinished); else startMusic();
+  if (soundOn && musicaPersecucion) startSirenaPolicia();
   const b = ui('soundBtn'); if (b) b.textContent = soundOn ? '🔊' : '🔇';
   try { localStorage.setItem('tim_sound', soundOn ? '1' : '0'); } catch (e) {}
 }
@@ -19350,7 +19918,7 @@ function equipHandWeapon(kind) {
   state.weaponName = 'Puños'; state.weaponDmg = 2; setWeaponColor(0x94a3b8);
   return true;
 }
-const GADGET_HAND = { humo: { name: 'Bomba de humo', icon: '💨', color: 0x64748b }, confeti: { name: 'Granada de confeti', icon: '🎉', color: 0xec4899 } };
+const GADGET_HAND = { humo: { name: 'Bomba de humo', icon: '💨', color: 0x64748b }, confeti: { name: 'Granada de confeti', icon: '🎉', color: 0xec4899 }, dinamita: { name: 'Dinamita', icon: '🧨', color: 0xdc2626 } };
 // Todo lo que puedes llevar en la mano, en orden: golpe → armas de fuego → láser → arco → bombas
 function handItems() {
   const list = [];
@@ -19358,7 +19926,7 @@ function handItems() {
   for (const k in GUN_SPECS) if (state.guns && state.guns[k]) list.push({ t: 'gun', key: k, name: GUN_SPECS[k].name, icon: GUN_SPECS[k].icon });
   if (state.laserGun) list.push({ t: 'laser', name: 'Pistola láser', icon: '🔫' });
   if (state.hasBow) list.push({ t: 'bow', name: 'Arco y flechas', icon: '🏹' });
-  for (const g of ['humo', 'confeti']) if (((state.gadgetCharges || {})[g] || 0) > 0) list.push({ t: 'gadget', key: g, name: GADGET_HAND[g].name, icon: GADGET_HAND[g].icon });
+  for (const g of ['humo', 'confeti', 'dinamita']) if (((state.gadgetCharges || {})[g] || 0) > 0) list.push({ t: 'gadget', key: g, name: GADGET_HAND[g].name, icon: GADGET_HAND[g].icon });
   return list;
 }
 function handItemId(it) { return it.t + (it.key ? ':' + it.key : ''); }
@@ -19405,6 +19973,7 @@ function throwHandGadget() {   // clic con una bomba en la mano: la usas y gasta
   state.gadgetCharges[key] = left - 1;
   if (key === 'humo') throwSmokeBomb();            // sale volando lejos y el humo brota donde cae
   else if (key === 'confeti') fireConfettiTube();  // tubo de fiesta: lluvia de papelitos
+  else if (key === 'dinamita') throwDynamite();
   else applyBlackMarketGadget({ gadget: key, name: GADGET_HAND[key].name });
   vmSwing = 1;
   if (state.gadgetCharges[key] <= 0) { toast('Se te acabaron · pulsa 1 para cambiar de arma'); equipHandItem(handItems()[0]); }
@@ -20414,7 +20983,7 @@ function startGame() {
   state.creative = false;   // el botón 🎨 lo vuelve a activar después de llamar startGame
   removePet(); removeAlienPet(); removeAllFloors2(); state.floor2Rot = 0; removeBase(); leaveParkRide(true); standUp(true);
   state.hasJetpack = false; state.laserGun = false; state.hasShield = false; state.shieldHp = 0; state.shieldCd = 0;
-  state.guns = {}; state.gun = null; state.ammo = 0; state.clip = 0; state.reloadT = 0; state.gunMags = {}; state.gadgetCharges = {}; state.handGadget = null;   // tecnología alien: se compra de nuevo
+  state.guns = {}; state.gun = null; state.ammo = 0; state.clip = 0; state.reloadT = 0; state.gunMags = {}; state.rocketAmmo = 0; state.gadgetCharges = {}; state.handGadget = null; state.fugaDinamita = false; limpiarTanquesFuga();   // tecnología alien: se compra de nuevo
   state.baseLevel = 0; state.baseTurrets = 0; state.baseGenerator = false;   // base espacial: se compra de nuevo
   houseTier = 0;
   newMissions();
@@ -21366,7 +21935,7 @@ function saveGame() {
       arcadeTickets: state.arcadeTickets || 0, arcadePrizes: state.arcadePrizes || {},
       pet: !!pet, petHp: pet?.userData.hp, hasFloor2: !!state.hasFloor2, floor2Rot: state.floor2Rot || 0, floors2: state.floors2 || [], unlocked: state.unlocked || {},   // desbloqueos del medio juego (floors2: TODOS los segundos pisos)
       petAlien: !!petAlien, petAlienHp: petAlien?.userData.hp, hasJetpack: !!state.hasJetpack, laserGun: !!state.laserGun, hasShield: !!state.hasShield,   // tecnología alien de Platus
-      guns: state.guns || {}, gun: state.gun || null, ammo: state.ammo || 0, clip: state.clip || 0, gunMags: exportarCargadores(), gadgetCharges: state.gadgetCharges || {}, handGadget: state.handGadget || null,   // cada arma guarda su cargador y lo que le queda de recarga
+      guns: state.guns || {}, gun: state.gun || null, ammo: state.ammo || 0, clip: state.clip || 0, gunMags: exportarCargadores(), rocketAmmo: state.rocketAmmo || 0, gadgetCharges: state.gadgetCharges || {}, handGadget: state.handGadget || null,   // cada arma guarda su cargador y lo que le queda de recarga
       creative: !!state.creative,
       hasPhone: !!state.hasPhone, skiPass: !!state.skiPass, skiGear: state.skiGear || null, skiGearWorn: !!state.skiGearWorn,
       cameraMode: cameraMode,
@@ -22249,7 +22818,7 @@ function loadGame() {
     meleeColor: d.meleeColor != null ? d.meleeColor : (d.weaponColor || 0x94a3b8),
     lastNonBow: d.lastNonBow === 'gun' ? 'gun' : 'melee',
     dadGun: !!d.dadGun, hasRocket: !!d.hasRocket, momUnlocked: !!d.momUnlocked, planet: (d.planet === 'marte' ? 'platus' : (d.planet || 'tierra')), country:COUNTRIES.some(c=>c.id===d.country)?d.country:null,
-    wanted: 0, wantedLevel: 0, policeDelay: 0, fugaCarcel: false, driving: false, inFlight: false, poison: 0, dadPoison: 0, buildMode: false, phase: d.phase === 'NIGHT' ? 'NIGHT' : 'DAY', dayTime: d.dayTime || 0, nightTime: d.nightTime || 0,
+    wanted: 0, wantedLevel: 0, policeDelay: 0, fugaCarcel: false, fugaDinamita: false, driving: false, inFlight: false, poison: 0, dadPoison: 0, buildMode: false, phase: d.phase === 'NIGHT' ? 'NIGHT' : 'DAY', dayTime: d.dayTime || 0, nightTime: d.nightTime || 0,
     hasPhone: !!d.hasPhone, skiPass: !!d.skiPass, skiGear: d.skiGear || null, skiGearWorn: d.skiGearWorn != null ? !!d.skiGearWorn : !!d.skiGear, skiing: false, skiLiftRide: null,
     streak: d.streak || 0, stamina: 100, blocking: false, dodgeCd: 0, invulnerable: 0,
     inGym: false, gymReturn: null,
@@ -22313,7 +22882,7 @@ function loadGame() {
   removePet(); if (d.pet && d.petHp !== 0) spawnPet(d.petHp);
   removeAlienPet(); if (d.petAlien && d.petAlienHp !== 0) spawnAlienPet(d.petAlienHp);
   state.hasJetpack = !!d.hasJetpack; state.laserGun = !!d.laserGun;
-  state.guns = d.guns || {}; state.gun = (d.gun && GUN_SPECS[d.gun] && state.guns[d.gun]) ? d.gun : null; state.ammo = d.ammo || 0; state.clip = d.clip || 0; state.reloadT = 0; state.gadgetCharges = d.gadgetCharges || {}; state.handGadget = d.handGadget || null;
+  state.guns = d.guns || {}; state.gun = (d.gun && GUN_SPECS[d.gun] && state.guns[d.gun]) ? d.gun : null; state.ammo = d.ammo || 0; state.clip = d.clip || 0; state.reloadT = 0; state.rocketAmmo = d.rocketAmmo || 0; state.gadgetCharges = d.gadgetCharges || {}; state.handGadget = d.handGadget || null;
   restaurarCargadores(d.gunMags);
   state.hasShield = !!d.hasShield; state.shieldHp = state.hasShield ? state.shieldMax : 0; state.shieldCd = 0;
   sanitizeWeaponPockets();   // partidas viejas: no dejar Puños si tenías espada en la mano o pistola láser comprada
@@ -22418,7 +22987,7 @@ function resetAll() {
   placed.slice().forEach(removePlaced); removeCar();
   clearWaves(); clearDirt(); clearJobs(); clearSmoke(); clearConfetti(); clearPolice(); clearPlants(); removePet(); removeAlienPet(); removeAllFloors2(); state.floor2Rot = 0; removeBase(); leaveParkRide(true); standUp(true); state.unlocked = {}; state.wanted = 0; state.wantedLevel = 0; state.policeDelay = 0;
   state.hasJetpack = false; state.laserGun = false; state.hasShield = false; state.shieldHp = 0; state.shieldCd = 0;
-  state.guns = {}; state.gun = null; state.ammo = 0; state.clip = 0; state.reloadT = 0; state.gunMags = {}; state.gadgetCharges = {}; state.handGadget = null;
+  state.guns = {}; state.gun = null; state.ammo = 0; state.clip = 0; state.reloadT = 0; state.gunMags = {}; state.rocketAmmo = 0; state.gadgetCharges = {}; state.handGadget = null; state.fugaDinamita = false; limpiarTanquesFuga();
   state.baseLevel = 0; state.baseTurrets = 0; state.baseGenerator = false;
   state.inRuins = false; if (ruinsRoom) ruinsRoom.visible = false;
   clearEggPets(); state.incubTime = 0; state.eggQueue = 0; state.eggKind = null; state.eggLine = []; clearPetPoint(); endEclipse(); removeMount(); state.inCastle = false; setCastleVisible(false); clearTitan(); state.inArena = false; setColiVisible(false); clearArenaFoes(); state.inHotel = false; if (hotelLobby) hotelLobby.visible = false;
@@ -23738,13 +24307,23 @@ function buyItem(item) {
     const once = { capa:1, gafas:1, gancho:1, radio:1 };
     if (once[item.gadget] && state.gadgets && state.gadgets[item.gadget]) { toast('Ya tienes ' + item.name); return; }
     if (!state.creative) state.money -= item.price;
-    if (GADGET_HAND[item.gadget]) {   // bomba de humo / confeti: se guardan y se llevan en la mano con 1
+    if (GADGET_HAND[item.gadget]) {   // bomba de humo / confeti / dinamita: se guardan y se llevan en la mano con 1
       if (!state.gadgetCharges) state.gadgetCharges = {};
-      state.gadgetCharges[item.gadget] = (state.gadgetCharges[item.gadget] || 0) + 1;
+      const n = item.pack || 1;
+      state.gadgetCharges[item.gadget] = (state.gadgetCharges[item.gadget] || 0) + n;
       toast(GADGET_HAND[item.gadget].icon + ' ' + item.name + ' guardada (' + state.gadgetCharges[item.gadget] + ') · pulsa 1 para llevarla en la mano');
-      storyProgress('alley', 5); saveGame(); return;
+      if (String(item.key || '').indexOf('bm_') === 0) storyProgress('alley', 5);
+      saveGame(); return;
     }
     applyBlackMarketGadget(item); saveGame(); return;
+  }
+  if (item.rocketAmmo) {
+    if (!state.guns || !state.guns.lanzacohetes) { toast('🚀 Primero el lanzacohetes, en la armería, por $10000'); return; }
+    if (!state.creative && state.money < item.price) { toast('💸 Te falta plata'); return; }
+    if (!state.creative) state.money -= item.price;
+    state.rocketAmmo = (state.rocketAmmo || 0) + item.rocketAmmo;
+    toast('🚀 +' + item.rocketAmmo + ' misil · llevas ' + state.rocketAmmo);
+    beep(520, .08, .05); saveGame(); return;
   }
   if (GUN_SPECS[item.key]) {   // ARMA DE FUEGO: se guarda en tu colección y se equipa con 1
     const g = GUN_SPECS[item.key];
@@ -23756,8 +24335,12 @@ function buyItem(item) {
     const magNueva = cargadorDe(item.key);
     magNueva.clip = GUN_CLIP; magNueva.reloadUntil = 0; state.clip = GUN_CLIP;   // cada arma trae su propio cargador
     equipHandItem({ t: 'gun', key: item.key });
-    toast(g.icon + ' ' + g.name + ' · ' + g.dmg + ' de daño' + (g.scope ? ' · con MIRA: en la cabeza x' + g.head : ' · en la cabeza x' + g.head) + ' · ' + gunAmmoText());
-    storyProgress('alley', 5); saveGame(); return;
+    if (item.key === 'lanzacohetes') state.rocketAmmo = (state.rocketAmmo || 0) + 1;
+    toast(item.key === 'lanzacohetes'
+      ? '🚀 Lanzacohetes con mira (pulsa E) · trae 1 misil · los siguientes cuestan $1000 · un impacto tumba un tanque'
+      : g.icon + ' ' + g.name + ' · ' + g.dmg + ' de daño' + (g.scope ? ' · con MIRA: en la cabeza x' + g.head : ' · en la cabeza x' + g.head) + ' · ' + gunAmmoText());
+    if (String(item.key || '').indexOf('bm_') === 0) storyProgress('alley', 5);
+    saveGame(); return;
   }
   if (fromAlley && item.dmg) {
     if (!state.creative && state.money < item.price) { toast('💸 Te falta plata'); return; }
@@ -24490,7 +25073,7 @@ function attack(multiplier = 1) {
   if (state.buildMode) return;
   if (state.handGadget) { throwHandGadget(); return; }   // llevas una bomba: el clic la usa
   if (laserEquipped() && !laserSpendShot()) return;      // el láser gasta energía de su barra
-  vmSwing = 1; beep(320, 0.05, 0.03);
+  vmSwing = 1; if (playerAvatar) playerAvatar.userData.attackAnim = .34; beep(320, 0.05, 0.03);
   if (state.inCastle) { attackCastleFoe(); return; }   // en el castillo, el golpe pega a los aliens malos
   if (state.inArena) { hitArenaFoe(); return; }        // en el coliseo, el golpe pega a los enemigos de la oleada
   const golpe = danoDeEspada();
@@ -24537,9 +25120,126 @@ function throwSmokeBomb() {
   const m = makeHandBomb(0x64748b, 1.1);
   m.position.copy(player.position).addScaledVector(dir, .9); m.position.y -= .15;
   scene.add(m);
-  thrownBombs.push({ m, vel: dir.clone().multiplyScalar(34).add(new THREE.Vector3(0, 9, 0)), life: 6 });
+  thrownBombs.push({ m, vel: dir.clone().multiplyScalar(34).add(new THREE.Vector3(0, 9, 0)), life: 6, kind: 'humo' });
   beep(300, .09, .05); vibr(30);
   toast('💨 ¡Bomba lanzada! El humo sale donde caiga');
+}
+function throwDynamite() {
+  const dir = new THREE.Vector3(); getAimDirection(dir);
+  const m = makeHandDynamite(0xdc2626, 1.2);
+  m.position.copy(player.position).addScaledVector(dir, .9); m.position.y -= .1;
+  scene.add(m);
+  thrownBombs.push({ m, vel: dir.clone().multiplyScalar(16).add(new THREE.Vector3(0, 6, 0)), life: 4, kind: 'dinamita' });
+  beep(180, .08, .05); vibr(40);
+  toast('🧨 Dinamita en el aire');
+}
+const rejasCayendo = [];
+function romperGrupo(grupo) {
+  if (!grupo || grupo.userData.rota) return false;
+  grupo.userData.rota = true;
+  const piezas = [];
+  grupo.traverse(o => { if (o.isMesh) piezas.push(o); });
+  for (const b of piezas) {
+    const wp = new THREE.Vector3(), wq = new THREE.Quaternion();
+    b.getWorldPosition(wp); b.getWorldQuaternion(wq);
+    if (b.parent) b.parent.remove(b);
+    b.position.copy(wp); b.quaternion.copy(wq);
+    scene.add(b);
+    rejasCayendo.push({
+      m: b,
+      vel: new THREE.Vector3((Math.random() - .5) * 8, 2.4 + Math.random() * 4.5, (Math.random() - .5) * 8),
+      spin: (Math.random() - .5) * 9,
+      life: 2.8,
+    });
+  }
+  return true;
+}
+function updateRejasCayendo(dt) {
+  for (let i = rejasCayendo.length - 1; i >= 0; i--) {
+    const r = rejasCayendo[i];
+    r.vel.y -= 14 * dt;
+    r.m.position.addScaledVector(r.vel, dt);
+    r.m.rotation.x += r.spin * dt;
+    r.m.rotation.z += r.spin * .6 * dt;
+    if (r.humo && r.m.material) {
+      const k = Math.max(0, r.life / .45);
+      r.m.scale.setScalar(1 + (1 - k) * 5);
+      r.m.material.opacity = k;
+    }
+    const suelo = mountainHeightAt(r.m.position.x, r.m.position.z) + .12;
+    if (r.m.position.y < suelo) {
+      r.m.position.y = suelo;
+      r.vel.y *= -.28; r.vel.x *= .55; r.vel.z *= .55;
+    }
+    r.life -= dt;
+    if (r.life <= 0) { scene.remove(r.m); rejasCayendo.splice(i, 1); }
+  }
+}
+function flashExplosion(x, y, z) {
+  const bola = new THREE.Mesh(new THREE.SphereGeometry(1.4, 12, 10), new THREE.MeshBasicMaterial({ color: 0xf97316, transparent: true, opacity: .9 }));
+  bola.position.set(x, y + .8, z);
+  scene.add(bola);
+  rejasCayendo.push({ m: bola, vel: new THREE.Vector3(0, .4, 0), spin: 0, life: .45, humo: true });
+  cameraShake = Math.max(cameraShake, .55);
+  beep(55, .32, .09);
+}
+function spawnCrater(x, z) {
+  const y = mountainHeightAt(x, z);
+  const g = new THREE.Group();
+  const hoyo = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 3.1, 1.7, 22), new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 1 }));
+  hoyo.position.y = -.7; g.add(hoyo);
+  const borde = new THREE.Mesh(new THREE.TorusGeometry(4.5, .62, 8, 20), mat(0x78716c));
+  borde.rotation.x = Math.PI / 2; borde.position.y = .12; g.add(borde);
+  g.position.set(x, y, z);
+  scene.add(g);
+  for (let i = 0; i < 8; i++) {
+    const d = new THREE.Mesh(smoothBox(.45, .28, .4), mat(0x57534e));
+    const a = Math.random() * Math.PI * 2, r = 4.8 + Math.random() * 1.4;
+    d.position.set(x + Math.cos(a) * r, y + .25, z + Math.sin(a) * r);
+    d.rotation.y = a; d.castShadow = true; scene.add(d);
+  }
+  flashExplosion(x, y, z);
+  toast('💥 Quedó un hoyo gigante en la tierra');
+}
+function empezarFugaDinamita() {
+  soltarCuchara();
+  if (typeof soltarManosLavado === 'function') soltarManosLavado();
+  if (typeof mostrarCamaCelda === 'function') mostrarCamaCelda(false);
+  if (typeof ocultarComidaJugador === 'function') ocultarComidaJugador();
+  if (playerAvatar) { playerAvatar.rotation.order = 'XYZ'; posarDePie(playerAvatar); }
+  condena = null;
+  state.fugaDinamita = true;
+  state.fugaCarcel = false;
+  state.wanted = 600;
+  state.wantedLevel = 5;
+  state.fuegoPolicial = true;
+  state.policeDelay = 0;
+  state.bankChase = false;
+  state.jailPorBanco = false;
+  if (typeof quitarCarteles === 'function') quitarCarteles();
+  toast('🧨 Las rejas saltaron. Corre: diez minutos de tanques y patrullas.');
+}
+function detonarDinamita(x, y, z) {
+  let rompio = false;
+  for (const c of (typeof CELDAS_PRESO !== 'undefined' ? CELDAS_PRESO : [])) {
+    const rz = c.rejaZ != null ? c.rejaZ : (c.maxZ || 0);
+    const cercaReja = Math.hypot(x - c.ex, z - rz) < 7;
+    const adentro = x > c.minX - 1.2 && x < c.maxX + 1.2 && z > c.minZ - 1.2 && z < rz + 1.2;
+    if (c.barras && (cercaReja || adentro)) {
+      romperGrupo(c.barras);
+      if (c.reja) c.reja.top = -8;
+      rompio = true;
+    }
+    if (c.grate && c.grate.mesh && Math.hypot(x - c.grate.x, z - c.grate.z) < 5.5) {
+      romperGrupo(c.grate.mesh);
+      rompio = true;
+    }
+  }
+  if (rompio) {
+    flashExplosion(x, y, z);
+    if (!state.fugaDinamita) empezarFugaDinamita();
+    else toast('🧨 Otra reja hecha pedazos. Se ve cómo cae y ya se puede pasar.');
+  } else spawnCrater(x, z);
 }
 function updateThrownBombs(dt) {
   for (let i = thrownBombs.length - 1; i >= 0; i--) {
@@ -24551,9 +25251,12 @@ function updateThrownBombs(dt) {
     const suelo = mountainHeightAt(b.m.position.x, b.m.position.z) + .2;
     const choca = obstacleAt(b.m.position.x, b.m.position.z, b.m.position.y, .3);
     if (b.m.position.y <= suelo || choca || b.life <= 0) {
-      const x = b.m.position.x, z = b.m.position.z;
-      spawnSmokeCloud(x, z);
-      if (dist2D(player.position, { x, z }) < 16) { state.wanted = 0; state.wantedLevel = 0; if (typeof clearPolice === 'function') clearPolice(); }
+      const x = b.m.position.x, z = b.m.position.z, y = b.m.position.y;
+      if (b.kind === 'dinamita') detonarDinamita(x, y, z);
+      else {
+        spawnSmokeCloud(x, z);
+        if (!state.fugaDinamita && dist2D(player.position, { x, z }) < 16) { state.wanted = 0; state.wantedLevel = 0; if (typeof clearPolice === 'function') clearPolice(); }
+      }
       scene.remove(b.m); thrownBombs.splice(i, 1);
     }
   }
@@ -24777,6 +25480,7 @@ function updateAim(dt) {
 }
 function gunAmmoText() {
   const g = currentGunSpec(); if (!g) return '';
+  if (g.kind === 'rocket') return g.icon + ' ' + (state.rocketAmmo || 0) + ' misiles · E mira';
   if (state.reloadT > 0) return '🔄 recargando ' + state.reloadT.toFixed(1) + 's';
   return g.icon + ' ' + (state.clip || 0) + '/' + GUN_CLIP + ' · 🧰 ' + (state.ammo || 0);
 }
@@ -24787,6 +25491,14 @@ function spawnShell(i) {   // casquillo dorado que cae y rebota en el suelo
   m.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
   scene.add(m);
   shells.push({ m, vy: 1.4 + Math.random() * .8, vx: (Math.random() - .5) * 1.6 + dir.x * .5, vz: (Math.random() - .5) * 1.6 + dir.z * .5, life: 3.2 + i * .05 });
+}
+function spawnProyectil(from, to, gordo) {
+  if (!gordo) { spawnTracer(from, to); return; }
+  const dirv = new THREE.Vector3().subVectors(to, from); const len = dirv.length() || 1;
+  const b = new THREE.Mesh(new THREE.SphereGeometry(.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0xf97316 }));
+  b.position.copy(from);
+  scene.add(b);
+  bullets.push({ m: b, dir: dirv.clone().normalize(), left: len, speed: 42, to: to.clone() });
 }
 function spawnTracer(from, to) {   // la bala que se ve volar
   const dirv = new THREE.Vector3().subVectors(to, from); const len = dirv.length() || 1;
@@ -24799,7 +25511,7 @@ function spawnTracer(from, to) {   // la bala que se ve volar
 function updateBullets(dt) {
   gunCd = Math.max(0, gunCd - dt);
   avanzarRecargas(dt);
-  if (currentGunSpec() && state.reloadT <= 0) {   // si dejas de disparar, el cargador de ESTA arma se completa solo
+  if (currentGunSpec() && currentGunSpec().kind !== 'rocket' && state.reloadT <= 0) {   // si dejas de disparar, el cargador de ESTA arma se completa solo
     gunIdle += dt;
     if (gunIdle > 3.5 && (state.clip || 0) < GUN_CLIP && (state.ammo || 0) > 0) startReload(true);
   }
@@ -24823,6 +25535,7 @@ function updateBullets(dt) {
 }
 function startReload(auto) {
   if (!firearmEquipped() || !state.gun) return false;
+  if (currentGunSpec() && currentGunSpec().kind === 'rocket') return false;
   const mag = cargadorDe(state.gun);
   if (quedaRecarga(mag) > 0) return false;
   if ((mag.clip || 0) >= GUN_CLIP) return false;
@@ -24870,7 +25583,77 @@ function gunRaycastPerson(from, dir, range) {
   }
   return best ? { person: best, head: bestHead, point: bestPoint, dist: bestT } : null;
 }
+const misiles = [];
+function hacerMisilMesh() {
+  const g = new THREE.Group();
+  const cuerpo = new THREE.Mesh(new THREE.CylinderGeometry(.28, .34, 2.1, 12), new THREE.MeshStandardMaterial({ color: 0xb91c1c, metalness: .45, roughness: .32 }));
+  cuerpo.rotation.x = Math.PI / 2; g.add(cuerpo);
+  const punta = new THREE.Mesh(new THREE.ConeGeometry(.28, .7, 12), mat(0xf8fafc));
+  punta.rotation.x = Math.PI / 2; punta.position.z = 1.35; g.add(punta);
+  const fuego = new THREE.Mesh(new THREE.ConeGeometry(.26, .9, 8), new THREE.MeshBasicMaterial({ color: 0xf97316 }));
+  fuego.rotation.x = -Math.PI / 2; fuego.position.z = -1.2; g.add(fuego);
+  const luz = new THREE.PointLight(0xff7a18, 2.4, 16);
+  luz.position.z = -1; g.add(luz);
+  return g;
+}
+function explotarMisil(pos) {
+  flashExplosion(pos.x, pos.y, pos.z);
+  cameraShake = Math.max(cameraShake, .5);
+  voxelImpact(pos.clone(), 0xf97316, 18);
+  const radio = 6;
+  const pegar = (obj, dmg) => {
+    if (!obj || obj.userData.muerto) return;
+    if (dist2D(obj.position, pos) > radio + (obj.userData.tanque ? 1.5 : 0)) return;
+    herirAgente(obj, dmg);
+  };
+  for (const p of police) pegar(p, 90);
+  if (state.tanque) pegar(state.tanque, 200);
+  for (const t of state.tanques || []) pegar(t, 200);
+  for (const e of enemies) if (e && dist2D(e.position, pos) < radio) hitEnemy(e, 90, pos);
+  toast('💥 El misil estalló');
+}
+function updateMisiles(dt) {
+  for (let i = misiles.length - 1; i >= 0; i--) {
+    const s = misiles[i];
+    s.m.position.addScaledVector(s.dir, s.speed * dt);
+    s.life -= dt;
+    s.gracia = (s.gracia || 0) - dt;
+    const suelo = mountainHeightAt(s.m.position.x, s.m.position.z) + .5;
+    let impacto = s.m.position.y <= suelo || s.life <= 0;
+    const lista = police.slice();
+    if (state.tanque) lista.push(state.tanque);
+    for (const t of state.tanques || []) lista.push(t);
+    for (const a of lista) {
+      if (!a || a.userData.muerto) continue;
+      const radio = a.userData.tanque ? 2.4 : 1.1;
+      if (dist2D(s.m.position, a.position) < radio && Math.abs(s.m.position.y - (a.position.y + 1.2)) < 2.6) impacto = true;
+    }
+    if (!impacto && s.gracia <= 0 && obstacleAt(s.m.position.x, s.m.position.z, s.m.position.y, .4)) impacto = true;
+    if (!impacto) continue;
+    explotarMisil(s.m.position.clone());
+    scene.remove(s.m);
+    misiles.splice(i, 1);
+  }
+}
+function fireRocket(spec) {
+  if (gunCd > 0) return true;
+  if ((state.rocketAmmo || 0) <= 0) { toast('🚀 Sin misiles · en la armería cada uno cuesta $1000'); beep(110, .1, .05); return true; }
+  state.rocketAmmo--;
+  gunCd = spec.rate || 1.1;
+  vmSwing = .85; cameraShake = Math.max(cameraShake, .32);
+  beep(90, .18, .07);
+  const dir = new THREE.Vector3(); getAimDirection(dir);
+  const from = player.position.clone().addScaledVector(dir, 1.3); from.y -= .05;
+  const m = hacerMisilMesh();
+  m.position.copy(from);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize());
+  scene.add(m);
+  misiles.push({ m, dir: dir.clone().normalize(), life: 3.2, speed: 34, gracia: .12 });
+  toast('🚀 Sale un misil gigante · te quedan ' + state.rocketAmmo);
+  return true;
+}
 function fireGun(spec) {
+  if (spec.kind === 'rocket') return fireRocket(spec);
   if (state.reloadT > 0) return true;                   // recargando: el gatillo no responde
   if (gunCd > 0) return true;
   if ((state.clip || 0) <= 0) { startReload(true) || beep(110, .1, .05); return true; }
@@ -25014,7 +25797,11 @@ function attackNPC() {
   if (titan && hitTitan(state.weaponDmg)) { vmSwing = 1; return; }   // golpear al TITÁN (de día también)
   if (state.planet === 'platus') { vmSwing = 1; if (!tryHitFloatingCitizen(state.weaponDmg) && !tryHitGeode() && !tryMineCrystal()) tryMineCoal(); return; }   // en Platus: ciudadanos, geodas, cristales o carbón
   if (tryMineIslandOre()) { vmSwing=1; beep(310,.06,.035); return; }
-  golpeAUnaPersona();
+  if (!golpeAUnaPersona()) {
+    vmSwing = 1;
+    if (playerAvatar) playerAvatar.userData.attackAnim = .34;
+    beep(320, 0.05, 0.03);
+  }
 }
 
 // ===================================================================
@@ -25743,6 +26530,10 @@ function frenarCondena(dt) {
   state.skiing = false;
   state.driving = false;
   if (rutinaDeLadron() && !condena.almuerzo && !condena.enDucto && condena.left <= 240 && condena.left > 0) abrirFilaAlmuerzo();
+  if (condena.subiendo) {
+    avanzarSubida(dt);
+    return true;
+  }
   if (condena.enDucto) {
     moverEnDucto(dt);
     return true;
@@ -25777,7 +26568,7 @@ function frenarCondena(dt) {
     }
   }
   if (condena.rejaAbierta && cercaDeLaRejaDucto() && (keys['ControlLeft'] || keys['ControlRight'] || touch.crouch)) {
-    entrarAlDucto();
+    empezarSubidaAlDucto();
     return true;
   }
   if (condena.pose === 'sopa' && !condena.comio && condena.almuerzo === 'sentado') {
@@ -25924,9 +26715,11 @@ function promptCondena() {
   const seg = Math.max(0, Math.ceil(condena.left));
   const reloj = condena.banco ? (Math.floor(seg / 60) + ':' + String(seg % 60).padStart(2, '0')) : (seg + ' s');
   if (condena.hambreMuerte && !(condena.almuerzo === 'sentado' || condena.almuerzo === 'aviso' || condena.almuerzo === 'fila' || condena.almuerzo === 'plato')) return { key: 'Q', touch: '🍖', text: 'Te moriste de hambre · come para salir de la celda ' + c.n };
-  if (condena.enDucto) return { key: 'WASD', touch: '🌬️', text: 'Ducto · recto y dos recodos · ' + reloj };
+  if (condena.subiendo) return { key: '🛏️', touch: '🛏️', text: 'Te subes a la cama para alcanzar el ducto' };
+  if (condena.enDucto && condena.enRejaSalida) return { key: 'E', touch: '🦶', force: true, text: 'Patear la reja del ducto' };
+  if (condena.enDucto) return { key: 'WASD', touch: '🌬️', text: 'Conducto de metal · elige un lado y sigue recto · ' + reloj };
   if (condena.atornillando || (rutinaDeLadron() && condena.almuerzo === 'listo' && condena.cuchara && !condena.rejaAbierta && cercaDeLaRejaDucto())) return { key: 'E', touch: '🥄', force: true, text: 'Desatornillar' };
-  if (rutinaDeLadron() && condena.rejaAbierta && cercaDeLaRejaDucto()) return { key: 'E', touch: '🧎', force: true, text: 'Agacharse' };
+  if (rutinaDeLadron() && condena.rejaAbierta && cercaDeLaRejaDucto()) return { key: 'E', touch: '🛏️', force: true, text: 'Subirte a la cama y meterte al ducto' };
   if (rutinaDeLadron() && condena.almuerzo === 'listo' && !condena.cuchara && cercaDeLaRejaDucto()) return { key: '🔒', touch: '🥄', text: 'Te falta la cuchara del almuerzo' };
   if (condena.almuerzo === 'aviso') return { key: 'E', touch: '🍲', force: true, text: enLaFila() ? 'Hacer la fila hacia la señora' : 'Ve a la fila del almuerzo · no recorras el pasillo' };
   if (condena.almuerzo === 'fila') return { key: 'E', touch: '🍽️', force: true, text: frenteDeLaFila() ? 'Que te sirva el plato verde' : 'Sigue la fila hasta la señora' };
@@ -25947,9 +26740,11 @@ function promptCondena() {
 }
 function tryCelda() {
   if (!condena) return false;
-  if (condena.enDucto || condena.almuerzo === 'escolta') return true;
+  if (condena.subiendo) return true;
+  if (condena.enDucto) { if (condena.enRejaSalida) patearRejaSalida(); return true; }
+  if (condena.almuerzo === 'escolta') return true;
   if (condena.atornillando) return true;
-  if (rutinaDeLadron() && condena.rejaAbierta && cercaDeLaRejaDucto()) { entrarAlDucto(); return true; }
+  if (rutinaDeLadron() && condena.rejaAbierta && cercaDeLaRejaDucto()) { empezarSubidaAlDucto(); return true; }
   if (rutinaDeLadron() && condena.almuerzo === 'listo' && condena.cuchara && !condena.rejaAbierta && cercaDeLaRejaDucto()) {
     abrirDuctoConCuchara();
     return true;
@@ -26437,7 +27232,9 @@ function loop() {
       }
     }
     updateSmoke(dt);                       // nubes de las bombas de humo
-    updateThrownBombs(dt);                 // bombas de humo en el aire
+    updateThrownBombs(dt);                 // bombas de humo y dinamita en el aire
+    updateRejasCayendo(dt);                // rejas que la dinamita tira al suelo
+    updateMisiles(dt);                     // misiles del lanzacohetes
     updateConfetti(dt);                    // papelitos del tubo de confeti
     updateMoles(dt);                       // topos: activos de día y de noche
     updatePoison(dt);                      // veneno de la hormiga (día y noche)
@@ -27005,6 +27802,7 @@ function updateMovement(dt) {
     return;
   }
   if (state.cinematic) return;   // durante la cinemática del cohete el personaje se mueve solo
+  if (caidaDucto) { updateCaidaDucto(dt); return; }
   if (trasladoPolicial && trasladoPolicial.fase === 'auto') { updateTraslado(dt); return; }
   if (frenarCondena(dt)) return;
   if (state.sailing) { camera.rotation.y = yaw; camera.rotation.x = pitch; return; }
@@ -28093,6 +28891,7 @@ function posarManosGym() {
   if (viewmodel.userData.manoLavado) viewmodel.userData.manoLavado.visible = false;
 }
 function updateViewmodel(dt) {
+  if (playerAvatar && playerAvatar.userData.attackAnim > 0) playerAvatar.userData.attackAnim = Math.max(0, playerAvatar.userData.attackAnim - dt);
   if (gymSesion && state.inGym) { posarManosGym(); return; }
   if (condena && condena.pose === 'sopa') {
     viewmodel.visible = cameraMode === 0;
@@ -28151,8 +28950,14 @@ function updateViewmodel(dt) {
     viewmodel.rotation.set(0.35, 0.5, -1.25);                        // el arma se pone DE LADO para cargarla
   } else {
     const kick = kind === 'gun' ? sw * .55 : 0;                      // retroceso corto del disparo
-    viewmodel.position.set(0.45, -0.55 + bob, -0.9 + kick * .12);
-    viewmodel.rotation.set(-sw * (kind === 'shovel' ? 2.25 : kind === 'bow' ? 1.1 : kind === 'gun' ? .45 : 1.8), 0, sw * (kind === 'sword' ? -.42 : kind === 'bow' ? -.28 : -.16));
+    const piel = !!(playerSkinOn && viewmodel.userData.manosPiel);
+    if (piel && kind !== 'gun' && kind !== 'shovel' && kind !== 'bow') {
+      viewmodel.position.set(0.45, -0.55 + bob + sw * .08, -0.9 - sw * .38);
+      viewmodel.rotation.set(-sw * .4, sw * .12, -sw * .15);
+    } else {
+      viewmodel.position.set(0.45, -0.55 + bob, -0.9 + kick * .12);
+      viewmodel.rotation.set(-sw * (kind === 'shovel' ? 2.25 : kind === 'bow' ? 1.1 : kind === 'gun' ? .45 : 1.8), 0, sw * (kind === 'sword' ? -.42 : kind === 'bow' ? -.28 : -.16));
+    }
   }
 }
 function solapaCaja(x, z, o, r) {
@@ -28686,7 +29491,7 @@ function renderHUD() {
     else obj = '⏩ Pulsa N: empieza la noche YA (+$100 por madrugar) · 🏆 casa dorada en la ciudad';
   } else if (state.phase === 'NIGHT') obj = (state.hordeOn ? '🚨 ¡HORDA FINAL! ' : (state.bossNight ? '⚔️ NOCHE JEFE (paga x3) · ' : '🗡️ ¡Defiende! ')) + 'Quedan ' + fmt(currentNightLength() - state.nightTime);
   if (state.bankChase && !state.bankDispatched) obj = '🚨 Alarma del banco · sal del edificio para que empiecen los 3 minutos · si te quedas, entran en ' + Math.max(0, Math.ceil(state.bankGrace)) + 's';
-  if (state.wanted > 0) obj = '🚨 BUSCADO ' + '⭐'.repeat(state.wantedLevel || 1) + ' — ¡huye de la policía! ' + (state.driving ? '(te persiguen en auto)' : '(corre con Shift)') + ' ' + Math.ceil(state.wanted) + 's';
+  if (state.wanted > 0) obj = (state.fugaDinamita ? '🚨 FUGA · tanques y patrullas · ' : '🚨 BUSCADO ' + '⭐'.repeat(state.wantedLevel || 1) + ' — ¡huye de la policía! ' + (state.driving ? '(te persiguen en auto)' : '(corre con Shift)') + ' ') + Math.ceil(state.wanted) + 's';
   setTextIfChanged(ui('objective'), obj);
   renderRoadmap();
 }
