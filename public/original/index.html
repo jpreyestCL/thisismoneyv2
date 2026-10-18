@@ -2818,9 +2818,10 @@ function asegurarManosPiel() {
     m.rotation.set(poso.rx, poso.ry, poso.rz);
     return m;
   };
-  // La derecha queda en el puño, junto al arma. La izquierda al otro lado, a la misma altura.
-  const der = plano({ x: 0.02, y: -0.02, z: -0.32, rx: 0.42, ry: -0.22, rz: -0.38 });
-  const izq = plano({ x: -0.36, y: -0.5, z: -1.08, rx: 0.42, ry: 0.22, rz: 0.38 });
+  // Vista normal: una a cada lado, delante del pecho. La muñeca apunta hacia abajo,
+  // como si el brazo saliera de ti, y el dibujo se ve entero de frente.
+  const der = plano({ x: -0.16, y: 0.32, z: 0.2, rx: -0.28, ry: -0.42, rz: 0.95 });
+  const izq = plano({ x: -0.32, y: -0.22, z: -0.7, rx: -0.28, ry: 0.42, rz: -0.95 });
   viewmodel.add(der);
   camera.add(izq);
   viewmodel.userData.manosPiel = { der, izq };
@@ -2845,9 +2846,9 @@ function montarManosPiel(huesos) {
     const img = tex && tex.image;
     const w = Math.max(1, img && img.width || 1), h = Math.max(1, img && img.height || 1);
     const aspecto = w / h;
-    let alto = 0.4, ancho = alto * aspecto;
-    if (ancho > 0.5) { ancho = 0.5; alto = ancho / aspecto; }
-    if (alto > 0.48) { alto = 0.48; ancho = alto * aspecto; }
+    let alto = 0.26, ancho = alto * aspecto;
+    if (ancho > 0.3) { ancho = 0.3; alto = ancho / aspecto; }
+    if (alto > 0.3) { alto = 0.3; ancho = alto * aspecto; }
     mesh.scale.set(ancho, alto, 1);
   };
   poner(manos.der, texturaDelHueso(huesos.armR));
